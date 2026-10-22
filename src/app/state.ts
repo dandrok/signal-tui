@@ -2,13 +2,21 @@ import type { Conversation, ConversationId, Message } from "../domain/types";
 
 export type Focus = "conversations" | "composer";
 
+/** Notices are typed so a transient send confirmation is never confused with an error. */
+export type NoticeKind = "queued" | "info";
+
+export interface Notice {
+	readonly kind: NoticeKind;
+	readonly text: string;
+}
+
 export interface AppState {
 	readonly conversations: readonly Conversation[];
 	readonly messagesByConversation: Readonly<Record<ConversationId, readonly Message[]>>;
 	readonly selectedIndex: number;
 	readonly focus: Focus;
 	readonly draft: string;
-	readonly notice: string | null;
+	readonly notice: Notice | null;
 }
 
 export type Action =
@@ -22,7 +30,7 @@ export type Action =
 	| { readonly type: "focus"; readonly focus: Focus }
 	| { readonly type: "draft-changed"; readonly value: string }
 	| { readonly type: "draft-submitted" }
-	| { readonly type: "notice"; readonly notice: string | null };
+	| { readonly type: "notice"; readonly notice: Notice | null };
 
 export const emptyState: AppState = {
 	conversations: [],
@@ -59,19 +67,27 @@ export function reduce(state: AppState, action: Action): AppState {
 		}
 		case "focus":
 			return state.focus === action.focus ? state : { ...state, focus: action.focus };
-		case "draft-changed":
-			return state.draft === action.value && state.notice === null
+		case "draft-changed": {
+			// Only the transient send confirmation is cleared; other notices survive typing.
+			const nextNotice = state.notice?.kind === "queued" ? null : state.notice;
+			return state.draft === action.value && state.notice === nextNotice
 				? state
-				: { ...state, draft: action.value, notice: null };
+				: { ...state, draft: action.value, notice: nextNotice };
+		}
 		case "draft-submitted": {
 			const body = state.draft.trim();
 			if (body.length === 0) {
 				return state;
 			}
-			return { ...state, draft: "", notice: `queued: ${body}` };
+			return { ...state, draft: "", notice: { kind: "queued", text: `queued: ${body}` } };
 		}
-		case "notice":
-			return state.notice === action.notice ? state : { ...state, notice: action.notice };
+		case "notice": {
+			const current = state.notice;
+			const next = action.notice;
+			const unchanged =
+				current === next || (current?.kind === next?.kind && current?.text === next?.text);
+			return unchanged ? state : { ...state, notice: next };
+		}
 		default:
 			return state;
 	}
