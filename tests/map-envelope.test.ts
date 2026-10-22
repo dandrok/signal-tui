@@ -78,7 +78,7 @@ describe("mapEnvelope", () => {
 	});
 
 	test("returns nothing for envelopes without a data message", () => {
-		const mapped = mapEnvelope(envelope({ typingMessage: { type: "STARTED" } }));
+		const mapped = mapEnvelope(envelope({ typingMessage: { action: "STARTED", timestamp: 1 } }));
 		expect(mapped).toEqual({ message: null, conversation: null });
 	});
 
