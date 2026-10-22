@@ -51,8 +51,15 @@ describe("formatUnread", () => {
 });
 
 describe("formatClock", () => {
-	test("renders a two-digit 24h clock", () => {
-		expect(formatClock(Date.parse("2026-10-22T09:05:00Z"))).toMatch(/^\d{2}:\d{2}$/);
+	test("renders a two-digit 24h clock in local time", () => {
+		// Constructed from local components so the expectation is timezone-independent.
+		const localNineOhFive = new Date(2026, 9, 22, 9, 5, 0, 0).getTime();
+		expect(formatClock(localNineOhFive)).toBe("09:05");
+	});
+
+	test("zero-pads both halves", () => {
+		const localMidnight = new Date(2026, 9, 22, 0, 0, 0, 0).getTime();
+		expect(formatClock(localMidnight)).toBe("00:00");
 	});
 });
 

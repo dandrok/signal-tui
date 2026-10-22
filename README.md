@@ -59,9 +59,9 @@ cr review --deep        # full PR-policy review of your local changes
 cr review --agent       # NDJSON findings, if you want them machine-readable
 ```
 
-On GitHub, CodeRabbit's app reviews every PR automatically; `.coderabbit.yaml` carries the
-repo rules (layer boundaries, "tests must assert behaviour", lockfile excluded). Ask for a
-whole-repo pass with `@coderabbitai full review` in a PR comment.
+On GitHub, CodeRabbit's app automatically reviews non-draft PRs targeting `main`; `.coderabbit.yaml`
+carries the repo rules (layer boundaries, "tests must assert behaviour", lockfile excluded). Ask
+for a full PR review from scratch with `@coderabbitai full review` in a PR comment.
 
 ## Roadmap
 
