@@ -1,4 +1,4 @@
-import {describe, expect, test} from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
 	describeAuthor,
 	describeBody,
@@ -6,8 +6,8 @@ import {
 	formatUnread,
 	truncate,
 } from "../src/domain/format";
-import type {Message} from "../src/domain/types";
-import {normaliseSize} from "../src/ui/hooks/useTerminalSize";
+import type { Message } from "../src/domain/types";
+import { normaliseSize } from "../src/ui/hooks/useTerminalSize";
 
 const message = (overrides: Partial<Message> = {}): Message => ({
 	id: "m-1",
@@ -58,11 +58,11 @@ describe("formatClock", () => {
 
 describe("describeAuthor / describeBody", () => {
 	test("marks outgoing messages as You", () => {
-		expect(describeAuthor(message({isOutgoing: true}))).toBe("You");
+		expect(describeAuthor(message({ isOutgoing: true }))).toBe("You");
 	});
 
 	test("prefers deletion over authorship", () => {
-		const deleted = message({isDeleted: true, isOutgoing: true});
+		const deleted = message({ isDeleted: true, isOutgoing: true });
 		expect(describeAuthor(deleted)).toBe("deleted");
 		expect(describeBody(deleted)).toBe("message deleted");
 	});
@@ -75,14 +75,14 @@ describe("describeAuthor / describeBody", () => {
 
 describe("normaliseSize", () => {
 	test("falls back when the terminal reports nothing", () => {
-		expect(normaliseSize({})).toEqual({columns: 80, rows: 24});
+		expect(normaliseSize({})).toEqual({ columns: 80, rows: 24 });
 	});
 
 	test("clamps to usable minimums", () => {
-		expect(normaliseSize({columns: 10, rows: 5})).toEqual({columns: 40, rows: 12});
+		expect(normaliseSize({ columns: 10, rows: 5 })).toEqual({ columns: 40, rows: 12 });
 	});
 
 	test("floors fractional sizes", () => {
-		expect(normaliseSize({columns: 100.7, rows: 30.2})).toEqual({columns: 100, rows: 30});
+		expect(normaliseSize({ columns: 100.7, rows: 30.2 })).toEqual({ columns: 100, rows: 30 });
 	});
 });
