@@ -1,17 +1,13 @@
 #!/bin/sh
-# Heavier local gate: types + test suite before anything leaves the machine.
+# Full local gate: types, lint, tests.
+# This hook must never pass silently — a silent skip once let unformatted code
+# reach CI, where it failed the build.
 set -e
 
 if ! command -v bun >/dev/null 2>&1; then
-	echo "pre-push: bun not found — skipping (install bun: https://bun.sh)" >&2
-	exit 0
+	echo "pre-push: bun is not on PATH, so nothing was checked." >&2
+	echo "          install bun (https://bun.sh) or bypass deliberately: git push --no-verify" >&2
+	exit 1
 fi
 
-echo "▸ typecheck"
-bun run typecheck
-
-echo "▸ lint"
-bun run lint
-
-echo "▸ tests"
-bun test
+bun run verify
