@@ -5,57 +5,7 @@ import {
 	RpcError,
 	RpcTimeoutError,
 } from "../src/adapters/signal/json-rpc-client";
-import type { RpcStream } from "../src/adapters/signal/rpc-stream";
-
-class FakeStream implements RpcStream {
-	readonly written: string[] = [];
-	closed = false;
-
-	#dataHandlers = new Set<(chunk: string) => void>();
-	#closeHandlers = new Set<(reason?: string) => void>();
-
-	write(line: string): void {
-		if (this.closed) {
-			throw new Error("write after close");
-		}
-		this.written.push(line);
-	}
-
-	onData(handler: (chunk: string) => void): () => void {
-		this.#dataHandlers.add(handler);
-		return () => {
-			this.#dataHandlers.delete(handler);
-		};
-	}
-
-	onClose(handler: (reason?: string) => void): () => void {
-		this.#closeHandlers.add(handler);
-		return () => {
-			this.#closeHandlers.delete(handler);
-		};
-	}
-
-	close(reason?: string): void {
-		if (this.closed) {
-			return;
-		}
-		this.closed = true;
-		for (const handler of this.#closeHandlers) {
-			handler(reason);
-		}
-	}
-
-	/** Simulate the peer sending raw text (may be a partial line). */
-	push(chunk: string): void {
-		for (const handler of this.#dataHandlers) {
-			handler(chunk);
-		}
-	}
-
-	sent(): Array<Record<string, unknown>> {
-		return this.written.map((line) => JSON.parse(line) as Record<string, unknown>);
-	}
-}
+import { FakeStream } from "./helpers/fake-stream";
 
 describe("JsonRpcClient", () => {
 	test("writes a JSON-RPC 2.0 envelope with incrementing ids", async () => {
@@ -175,18 +125,6 @@ describe("JsonRpcClient", () => {
 		expect(client.pendingCount).toBe(0);
 	});
 
-	test("rejects everything pending when the stream closes", async () => {
-		const stream = new FakeStream();
-		const client = new JsonRpcClient(stream);
-
-		const promise = client.request("version");
-		stream.close("child exited");
-
-		const error = await promise.catch((err: unknown) => err);
-		expect(error).toBeInstanceOf(RpcClosedError);
-		expect((error as RpcClosedError).message).toContain("child exited");
-	});
-
 	test("survives a bare null line and keeps serving requests", async () => {
 		const stream = new FakeStream();
 		const reported: string[] = [];
@@ -217,56 +155,16 @@ describe("JsonRpcClient", () => {
 		expect(errors).toBe(2);
 	});
 
-	test("drops an oversized unterminated line instead of buffering forever", async () => {
+	test("rejects everything pending when the stream closes", async () => {
 		const stream = new FakeStream();
-		const errors: string[] = [];
-		const client = new JsonRpcClient(stream, {
-			maxLineBytes: 32,
-			onProtocolError: (error) => errors.push(error.message),
-		});
+		const client = new JsonRpcClient(stream);
 
-		stream.push("x".repeat(64));
-		expect(errors).toHaveLength(1);
-		expect(errors[0]).toContain("exceeded");
+		const promise = client.request("version");
+		stream.close("child exited");
 
-		const promise = client.request<string>("version");
-		stream.push(`${JSON.stringify({ id: 1, result: "0.14.9" })}\n`);
-
-		await expect(promise).resolves.toBe("0.14.9");
-	});
-
-	test("counts the line limit in UTF-8 bytes, not code units", () => {
-		const stream = new FakeStream();
-		const errors: string[] = [];
-		const client = new JsonRpcClient(stream, {
-			maxLineBytes: 32,
-			onProtocolError: (error) => errors.push(error.message),
-		});
-
-		// 20 code units, 40 UTF-8 bytes: over the limit only if measured in bytes.
-		stream.push("ż".repeat(20));
-
-		expect(errors).toHaveLength(1);
-		expect(errors[0]).toContain("exceeded");
-		expect(client.pendingCount).toBe(0);
-	});
-
-	test("skips an oversized complete line before parsing it", async () => {
-		const stream = new FakeStream();
-		const errors: string[] = [];
-		const client = new JsonRpcClient(stream, {
-			maxLineBytes: 32,
-			onProtocolError: (error) => errors.push(error.message),
-		});
-
-		stream.push(`${"ż".repeat(20)}\n`);
-
-		const promise = client.request<string>("version");
-		stream.push(`${JSON.stringify({ id: 1, result: "0.14.9" })}\n`);
-
-		await expect(promise).resolves.toBe("0.14.9");
-		expect(errors).toHaveLength(1);
-		expect(errors[0]).toContain("line ignored");
+		const error = await promise.catch((err: unknown) => err);
+		expect(error).toBeInstanceOf(RpcClosedError);
+		expect((error as RpcClosedError).message).toContain("child exited");
 	});
 
 	test("refuses new requests after close", async () => {

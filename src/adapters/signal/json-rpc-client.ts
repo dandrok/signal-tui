@@ -77,6 +77,7 @@ export class JsonRpcClient {
 	#pending = new Map<number, PendingRequest>();
 	#nextId = 1;
 	#buffer = "";
+	#discarding = false;
 	#closed = false;
 	#notificationHandler: NotificationHandler | null = null;
 
@@ -147,13 +148,41 @@ export class JsonRpcClient {
 
 	#ingest(chunk: string): void {
 		this.#buffer += chunk;
+
+		// After dropping an oversized line we must ignore everything up to the next
+		// newline; otherwise the tail of that line would be parsed as a fresh line.
+		if (this.#discarding) {
+			const delimiter = this.#buffer.indexOf("\n");
+			if (delimiter < 0) {
+				this.#buffer = "";
+				return;
+			}
+			this.#buffer = this.#buffer.slice(delimiter + 1);
+			this.#discarding = false;
+		}
+
 		let newlineIndex = this.#buffer.indexOf("\n");
 		while (newlineIndex >= 0) {
-			const line = this.#buffer.slice(0, newlineIndex).trim();
+			// Measure the raw line: the cap applies to what the peer sent, not to
+			// whatever survives trimming.
+			const rawLine = this.#buffer.slice(0, newlineIndex);
 			this.#buffer = this.#buffer.slice(newlineIndex + 1);
-			if (line.length > 0) {
-				this.#dispatchLine(line);
+
+			const rawBytes = Buffer.byteLength(rawLine, "utf8");
+			if (rawBytes > this.#maxLineBytes) {
+				this.#onProtocolError(
+					new Error(
+						`inbound line exceeded ${this.#maxLineBytes} bytes (${rawBytes}); line ignored`,
+					),
+					rawLine.slice(0, 200),
+				);
+			} else {
+				const line = rawLine.trim();
+				if (line.length > 0) {
+					this.#dispatchLine(line);
+				}
 			}
+
 			newlineIndex = this.#buffer.indexOf("\n");
 		}
 
@@ -162,9 +191,10 @@ export class JsonRpcClient {
 		const bufferedBytes = Buffer.byteLength(this.#buffer, "utf8");
 		if (bufferedBytes > this.#maxLineBytes) {
 			this.#buffer = "";
+			this.#discarding = true;
 			this.#onProtocolError(
 				new Error(
-					`inbound line exceeded ${this.#maxLineBytes} bytes (${bufferedBytes} buffered); buffer dropped`,
+					`inbound line exceeded ${this.#maxLineBytes} bytes (${bufferedBytes} buffered); discarding until newline`,
 				),
 				"",
 			);
@@ -172,17 +202,7 @@ export class JsonRpcClient {
 	}
 
 	#dispatchLine(line: string): void {
-		// Enforce the limit *before* parsing, so an oversized complete line never
-		// reaches JSON.parse.
-		const lineBytes = Buffer.byteLength(line, "utf8");
-		if (lineBytes > this.#maxLineBytes) {
-			this.#onProtocolError(
-				new Error(`inbound line exceeded ${this.#maxLineBytes} bytes (${lineBytes}); line ignored`),
-				line.slice(0, 200),
-			);
-			return;
-		}
-
+		// The caller has already enforced the byte cap on this line.
 		try {
 			this.#handleLine(line);
 		} catch (error) {
