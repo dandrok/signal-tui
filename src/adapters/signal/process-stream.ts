@@ -74,7 +74,12 @@ export function createProcessStream(options: ProcessStreamOptions): RpcStream {
 		}
 		closed = true;
 		for (const handler of closeHandlers) {
-			handler(reason);
+			try {
+				handler(reason);
+			} catch {
+				// A close handler must not abort close notification for the others,
+				// nor reject the detached process-completion chain.
+			}
 		}
 		closeHandlers.clear();
 		dataHandlers.clear();

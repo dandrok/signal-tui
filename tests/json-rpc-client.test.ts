@@ -169,8 +169,10 @@ describe("JsonRpcClient", () => {
 
 	test("a throwing onProtocolError hook cannot strand later lines", async () => {
 		const stream = new FakeStream();
+		const reported: string[] = [];
 		const client = new JsonRpcClient(stream, {
-			onProtocolError: () => {
+			onProtocolError: (_error, line) => {
+				reported.push(line);
 				throw new Error("hook boom");
 			},
 		});
@@ -181,6 +183,7 @@ describe("JsonRpcClient", () => {
 		stream.push(`not json\n${JSON.stringify({ id: 1, result: "0.14.9" })}\n`);
 
 		await expect(promise).resolves.toBe("0.14.9");
+		expect(reported).toEqual(["not json"]);
 	});
 
 	test("refuses new requests after close", async () => {
