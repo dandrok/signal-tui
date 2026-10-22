@@ -1,0 +1,86 @@
+import type { Conversation, Message } from "../../domain/types";
+
+const base = Date.parse("2026-10-22T10:00:00Z");
+const minutes = (count: number): number => base + count * 60_000;
+
+export const demoConversations: readonly Conversation[] = [
+	{ id: "c-signal-devs", name: "Signal devs", unreadCount: 2, lastActivityAt: minutes(42) },
+	{ id: "c-alice", name: "Alice", unreadCount: 0, lastActivityAt: minutes(31) },
+	{ id: "c-family", name: "Family", unreadCount: 7, lastActivityAt: minutes(12) },
+	{ id: "c-note-to-self", name: "Note to self", unreadCount: 0, lastActivityAt: minutes(4) },
+];
+
+export const demoMessages: readonly Message[] = [
+	{
+		id: "m-1",
+		conversationId: "c-signal-devs",
+		author: "Adam",
+		body: "pushed the fix, ptal",
+		sentAt: minutes(1),
+		isOutgoing: false,
+		isDeleted: false,
+	},
+	{
+		id: "m-2",
+		conversationId: "c-signal-devs",
+		author: "You",
+		body: "on it, testing now",
+		sentAt: minutes(2),
+		isOutgoing: true,
+		isDeleted: false,
+	},
+	{
+		id: "m-3",
+		conversationId: "c-signal-devs",
+		author: "Marta",
+		body: "attachments path also needs the 4 MiB limit",
+		sentAt: minutes(3),
+		isOutgoing: false,
+		isDeleted: false,
+	},
+	{
+		id: "m-4",
+		conversationId: "c-alice",
+		author: "Alice",
+		body: "can we ship before friday?",
+		sentAt: minutes(5),
+		isOutgoing: false,
+		isDeleted: false,
+	},
+	{
+		id: "m-5",
+		conversationId: "c-alice",
+		author: "You",
+		body: "depends on the audio routing test",
+		sentAt: minutes(6),
+		isOutgoing: true,
+		isDeleted: false,
+	},
+	{
+		id: "m-6",
+		conversationId: "c-family",
+		author: "Mum",
+		body: "dinner at 7?",
+		sentAt: minutes(7),
+		isOutgoing: false,
+		isDeleted: false,
+	},
+	{
+		id: "m-7",
+		conversationId: "c-family",
+		author: "You",
+		body: "works for me",
+		sentAt: minutes(8),
+		isOutgoing: true,
+		isDeleted: true,
+	},
+	{
+		id: "m-8",
+		conversationId: "c-note-to-self",
+		author: "You",
+		body: "FTS5 index before v0.1",
+		sentAt: minutes(9),
+		isOutgoing: true,
+		isDeleted: false,
+	},
+];
