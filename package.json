@@ -30,6 +30,7 @@
 	"publishConfig": {
 		"access": "public"
 	},
+	"license": "MIT",
 	"scripts": {
 		"start": "bun run src/cli.tsx",
 		"dev": "bun run src/cli.tsx",

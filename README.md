@@ -75,3 +75,9 @@ for a full PR review from scratch with `@coderabbitai full review` in a PR comme
 | 5 | npm release with trusted publishing |
 
 Notes and design decisions live in the Obsidian vault (`BUILD/signal-tui/`).
+
+## License
+
+MIT — see [LICENSE](./LICENSE). Third-party JSON schemas used for type generation are fetched at
+build time from [signal-cli](https://github.com/AsamK/signal-cli) (GPL-3.0) and are not vendored
+into this repository.
