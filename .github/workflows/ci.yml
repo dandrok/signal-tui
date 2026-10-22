@@ -31,3 +31,6 @@ jobs:
 
       - name: Test
         run: bun test
+
+      - name: Package contents guard
+        run: bun pm pack --dry-run
