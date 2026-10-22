@@ -170,7 +170,7 @@ export class JsonRpcClient {
 
 			const rawBytes = Buffer.byteLength(rawLine, "utf8");
 			if (rawBytes > this.#maxLineBytes) {
-				this.#onProtocolError(
+				this.#reportProtocolError(
 					new Error(
 						`inbound line exceeded ${this.#maxLineBytes} bytes (${rawBytes}); line ignored`,
 					),
@@ -192,12 +192,24 @@ export class JsonRpcClient {
 		if (bufferedBytes > this.#maxLineBytes) {
 			this.#buffer = "";
 			this.#discarding = true;
-			this.#onProtocolError(
+			this.#reportProtocolError(
 				new Error(
 					`inbound line exceeded ${this.#maxLineBytes} bytes (${bufferedBytes} buffered); discarding until newline`,
 				),
 				"",
 			);
+		}
+	}
+
+	/**
+	 * A reporting hook is caller-supplied code. If it throws, that must not abort
+	 * `#ingest` and strand the remaining lines in the same chunk.
+	 */
+	#reportProtocolError(error: Error, line: string): void {
+		try {
+			this.#onProtocolError(error, line);
+		} catch {
+			// Swallowed on purpose: reporting must never interrupt line processing.
 		}
 	}
 
@@ -207,7 +219,7 @@ export class JsonRpcClient {
 			this.#handleLine(line);
 		} catch (error) {
 			// A throwing notification handler must not kill the read loop.
-			this.#onProtocolError(error instanceof Error ? error : new Error(String(error)), line);
+			this.#reportProtocolError(error instanceof Error ? error : new Error(String(error)), line);
 		}
 	}
 
@@ -216,12 +228,12 @@ export class JsonRpcClient {
 		try {
 			parsed = JSON.parse(line);
 		} catch (error) {
-			this.#onProtocolError(error instanceof Error ? error : new Error("invalid JSON"), line);
+			this.#reportProtocolError(error instanceof Error ? error : new Error("invalid JSON"), line);
 			return;
 		}
 
 		if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-			this.#onProtocolError(new Error("JSON-RPC message must be an object"), line);
+			this.#reportProtocolError(new Error("JSON-RPC message must be an object"), line);
 			return;
 		}
 
@@ -237,7 +249,7 @@ export class JsonRpcClient {
 			return;
 		}
 
-		this.#onProtocolError(new Error("unrecognised JSON-RPC message shape"), line);
+		this.#reportProtocolError(new Error("unrecognised JSON-RPC message shape"), line);
 	}
 
 	#settleResponse(message: WireMessage): void {

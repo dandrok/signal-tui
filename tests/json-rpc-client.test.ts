@@ -167,6 +167,22 @@ describe("JsonRpcClient", () => {
 		expect((error as RpcClosedError).message).toContain("child exited");
 	});
 
+	test("a throwing onProtocolError hook cannot strand later lines", async () => {
+		const stream = new FakeStream();
+		const client = new JsonRpcClient(stream, {
+			onProtocolError: () => {
+				throw new Error("hook boom");
+			},
+		});
+
+		const promise = client.request<string>("version");
+		// Garbage and the real response in the same chunk: the throwing hook must
+		// not abort processing of the second line.
+		stream.push(`not json\n${JSON.stringify({ id: 1, result: "0.14.9" })}\n`);
+
+		await expect(promise).resolves.toBe("0.14.9");
+	});
+
 	test("refuses new requests after close", async () => {
 		const stream = new FakeStream();
 		const client = new JsonRpcClient(stream);
