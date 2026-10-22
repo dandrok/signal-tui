@@ -30,8 +30,10 @@ export type NotificationHandler = (method: string, params: unknown) => void;
 
 export interface JsonRpcClientOptions {
 	readonly defaultTimeoutMs?: number;
-	/** Called for unparseable or unrecognised inbound lines instead of throwing. */
+	/** Called for unparseable, oversized or unrecognised inbound lines instead of throwing. */
 	readonly onProtocolError?: (error: Error, line: string) => void;
+	/** Inbound line limit; a peer that never sends a newline cannot grow the buffer forever. */
+	readonly maxLineBytes?: number;
 }
 
 interface PendingRequest {
@@ -56,16 +58,21 @@ interface WireMessage {
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_LINE_BYTES = 8 * 1024 * 1024;
 
 /**
  * Minimal JSON-RPC 2.0 client over a line-delimited stream: request/response
  * correlation by id, per-request timeouts, notification dispatch, and no
  * dependency on a child process.
+ *
+ * One malformed or hostile line must never stop the read loop, so every inbound
+ * line is handled inside a try/catch and reported through `onProtocolError`.
  */
 export class JsonRpcClient {
 	readonly #stream: RpcStream;
 	readonly #defaultTimeoutMs: number;
 	readonly #onProtocolError: (error: Error, line: string) => void;
+	readonly #maxLineBytes: number;
 
 	#pending = new Map<number, PendingRequest>();
 	#nextId = 1;
@@ -77,6 +84,7 @@ export class JsonRpcClient {
 		this.#stream = stream;
 		this.#defaultTimeoutMs = options.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
 		this.#onProtocolError = options.onProtocolError ?? (() => {});
+		this.#maxLineBytes = options.maxLineBytes ?? DEFAULT_MAX_LINE_BYTES;
 
 		stream.onData((chunk) => this.#ingest(chunk));
 		stream.onClose((reason) => this.#failAll(new RpcClosedError(reason)));
@@ -144,20 +152,47 @@ export class JsonRpcClient {
 			const line = this.#buffer.slice(0, newlineIndex).trim();
 			this.#buffer = this.#buffer.slice(newlineIndex + 1);
 			if (line.length > 0) {
-				this.#handleLine(line);
+				this.#handleLineSafely(line);
 			}
 			newlineIndex = this.#buffer.indexOf("\n");
+		}
+
+		if (this.#buffer.length > this.#maxLineBytes) {
+			const dropped = this.#buffer.length;
+			this.#buffer = "";
+			this.#onProtocolError(
+				new Error(
+					`inbound line exceeded ${this.#maxLineBytes} bytes (${dropped} buffered); buffer dropped`,
+				),
+				"",
+			);
+		}
+	}
+
+	#handleLineSafely(line: string): void {
+		try {
+			this.#handleLine(line);
+		} catch (error) {
+			// A throwing notification handler must not kill the read loop.
+			this.#onProtocolError(error instanceof Error ? error : new Error(String(error)), line);
 		}
 	}
 
 	#handleLine(line: string): void {
-		let message: WireMessage;
+		let parsed: unknown;
 		try {
-			message = JSON.parse(line) as WireMessage;
+			parsed = JSON.parse(line);
 		} catch (error) {
 			this.#onProtocolError(error instanceof Error ? error : new Error("invalid JSON"), line);
 			return;
 		}
+
+		if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+			this.#onProtocolError(new Error("JSON-RPC message must be an object"), line);
+			return;
+		}
+
+		const message = parsed as WireMessage;
 
 		if (typeof message.id === "number") {
 			this.#settleResponse(message);

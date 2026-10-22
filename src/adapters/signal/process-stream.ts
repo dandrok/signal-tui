@@ -14,11 +14,16 @@ export interface ProcessStreamOptions {
  * Deliberately thin: all protocol logic lives in `JsonRpcClient`, which is
  * tested against an in-memory stream. This adapter is exercised end-to-end by
  * the integration test that runs a real `signal-cli` binary.
+ *
+ * Two ordering rules matter here:
+ *  - one `TextDecoder` per pipe, because a decoder carries partial multi-byte
+ *    state and mixing stdout with stderr corrupts UTF-8;
+ *  - `close` is emitted only after the process exited *and* both pipes drained,
+ *    otherwise the final response line would be dropped.
  */
 export function createProcessStream(options: ProcessStreamOptions): RpcStream {
 	const dataHandlers = new Set<(chunk: string) => void>();
 	const closeHandlers = new Set<(reason?: string) => void>();
-	const decoder = new TextDecoder();
 	const stderrLimit = options.stderrLimitBytes ?? 4096;
 
 	const env: Record<string, string> = {};
@@ -40,9 +45,19 @@ export function createProcessStream(options: ProcessStreamOptions): RpcStream {
 	let stderr = "";
 	let closed = false;
 
+	const appendStderr = (text: string): void => {
+		stderr = `${stderr}${text}`.slice(-stderrLimit);
+	};
+
 	const emitData = (chunk: string): void => {
 		for (const handler of dataHandlers) {
-			handler(chunk);
+			try {
+				handler(chunk);
+			} catch (error) {
+				appendStderr(
+					`\n[data handler threw] ${error instanceof Error ? error.message : String(error)}`,
+				);
+			}
 		}
 	};
 
@@ -58,12 +73,20 @@ export function createProcessStream(options: ProcessStreamOptions): RpcStream {
 		dataHandlers.clear();
 	};
 
-	const pump = async (stream: ReadableStream<Uint8Array>, onText: (text: string) => void) => {
+	const pump = async (
+		stream: ReadableStream<Uint8Array>,
+		onText: (text: string) => void,
+	): Promise<void> => {
+		const decoder = new TextDecoder();
 		const reader = stream.getReader();
 		try {
 			while (true) {
 				const { done, value } = await reader.read();
 				if (done) {
+					const tail = decoder.decode();
+					if (tail.length > 0) {
+						onText(tail);
+					}
 					return;
 				}
 				if (value !== undefined) {
@@ -75,13 +98,15 @@ export function createProcessStream(options: ProcessStreamOptions): RpcStream {
 		}
 	};
 
-	void pump(child.stdout, emitData);
-	void pump(child.stderr, (text) => {
-		stderr = `${stderr}${text}`.slice(-stderrLimit);
-	});
-	void child.exited.then((code) => {
-		emitClose(stderr.trim() || `process exited with code ${code}`);
-	});
+	const drained = Promise.all([pump(child.stdout, emitData), pump(child.stderr, appendStderr)]);
+
+	void Promise.all([child.exited, drained])
+		.then(([code]) => {
+			emitClose(stderr.trim() || `process exited with code ${code}`);
+		})
+		.catch((error: unknown) => {
+			emitClose(error instanceof Error ? error.message : String(error));
+		});
 
 	return {
 		write(line: string): void {

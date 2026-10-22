@@ -187,6 +187,54 @@ describe("JsonRpcClient", () => {
 		expect((error as RpcClosedError).message).toContain("child exited");
 	});
 
+	test("survives a bare null line and keeps serving requests", async () => {
+		const stream = new FakeStream();
+		const reported: string[] = [];
+		const client = new JsonRpcClient(stream, {
+			onProtocolError: (_error, line) => reported.push(line),
+		});
+
+		stream.push("null\n");
+
+		const promise = client.request<string>("version");
+		stream.push(`${JSON.stringify({ id: 1, result: "0.14.9" })}\n`);
+
+		await expect(promise).resolves.toBe("0.14.9");
+		expect(reported).toEqual(["null"]);
+	});
+
+	test("reports a throwing notification handler and keeps reading", () => {
+		const stream = new FakeStream();
+		let errors = 0;
+		const client = new JsonRpcClient(stream, { onProtocolError: () => errors++ });
+		client.onNotification(() => {
+			throw new Error("handler boom");
+		});
+
+		stream.push(`${JSON.stringify({ method: "callEvent", params: {} })}\n`);
+		stream.push(`${JSON.stringify({ method: "callEvent", params: {} })}\n`);
+
+		expect(errors).toBe(2);
+	});
+
+	test("drops an oversized unterminated line instead of buffering forever", async () => {
+		const stream = new FakeStream();
+		const errors: string[] = [];
+		const client = new JsonRpcClient(stream, {
+			maxLineBytes: 32,
+			onProtocolError: (error) => errors.push(error.message),
+		});
+
+		stream.push("x".repeat(64));
+		expect(errors).toHaveLength(1);
+		expect(errors[0]).toContain("exceeded");
+
+		const promise = client.request<string>("version");
+		stream.push(`${JSON.stringify({ id: 1, result: "0.14.9" })}\n`);
+
+		await expect(promise).resolves.toBe("0.14.9");
+	});
+
 	test("refuses new requests after close", async () => {
 		const stream = new FakeStream();
 		const client = new JsonRpcClient(stream);
