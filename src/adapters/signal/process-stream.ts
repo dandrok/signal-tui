@@ -46,7 +46,14 @@ export function createProcessStream(options: ProcessStreamOptions): RpcStream {
 	let closed = false;
 
 	const appendStderr = (text: string): void => {
-		stderr = `${stderr}${text}`.slice(-stderrLimit);
+		// stderrLimitBytes is a *byte* limit: encode once, keep the trailing byte
+		// window, and skip leading continuation bytes so we never split a code point.
+		const bytes = Buffer.from(`${stderr}${text}`, "utf8");
+		let start = Math.max(0, bytes.length - stderrLimit);
+		while (start < bytes.length && ((bytes[start] ?? 0) & 0xc0) === 0x80) {
+			start++;
+		}
+		stderr = bytes.subarray(start).toString("utf8");
 	};
 
 	const emitData = (chunk: string): void => {

@@ -235,6 +235,39 @@ describe("JsonRpcClient", () => {
 		await expect(promise).resolves.toBe("0.14.9");
 	});
 
+	test("counts the line limit in UTF-8 bytes, not code units", () => {
+		const stream = new FakeStream();
+		const errors: string[] = [];
+		const client = new JsonRpcClient(stream, {
+			maxLineBytes: 32,
+			onProtocolError: (error) => errors.push(error.message),
+		});
+
+		// 20 code units, 40 UTF-8 bytes: over the limit only if measured in bytes.
+		stream.push("ż".repeat(20));
+
+		expect(errors).toHaveLength(1);
+		expect(errors[0]).toContain("exceeded");
+	});
+
+	test("skips an oversized complete line before parsing it", async () => {
+		const stream = new FakeStream();
+		const errors: string[] = [];
+		const client = new JsonRpcClient(stream, {
+			maxLineBytes: 32,
+			onProtocolError: (error) => errors.push(error.message),
+		});
+
+		stream.push(`${"ż".repeat(20)}\n`);
+
+		const promise = client.request<string>("version");
+		stream.push(`${JSON.stringify({ id: 1, result: "0.14.9" })}\n`);
+
+		await expect(promise).resolves.toBe("0.14.9");
+		expect(errors).toHaveLength(1);
+		expect(errors[0]).toContain("line ignored");
+	});
+
 	test("refuses new requests after close", async () => {
 		const stream = new FakeStream();
 		const client = new JsonRpcClient(stream);

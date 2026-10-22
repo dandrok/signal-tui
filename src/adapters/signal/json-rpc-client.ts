@@ -152,24 +152,37 @@ export class JsonRpcClient {
 			const line = this.#buffer.slice(0, newlineIndex).trim();
 			this.#buffer = this.#buffer.slice(newlineIndex + 1);
 			if (line.length > 0) {
-				this.#handleLineSafely(line);
+				this.#dispatchLine(line);
 			}
 			newlineIndex = this.#buffer.indexOf("\n");
 		}
 
-		if (this.#buffer.length > this.#maxLineBytes) {
-			const dropped = this.#buffer.length;
+		// The limit is in UTF-8 bytes: CJK text is 3 bytes per UTF-16 code unit, so
+		// counting `length` would admit roughly 3x the configured budget.
+		const bufferedBytes = Buffer.byteLength(this.#buffer, "utf8");
+		if (bufferedBytes > this.#maxLineBytes) {
 			this.#buffer = "";
 			this.#onProtocolError(
 				new Error(
-					`inbound line exceeded ${this.#maxLineBytes} bytes (${dropped} buffered); buffer dropped`,
+					`inbound line exceeded ${this.#maxLineBytes} bytes (${bufferedBytes} buffered); buffer dropped`,
 				),
 				"",
 			);
 		}
 	}
 
-	#handleLineSafely(line: string): void {
+	#dispatchLine(line: string): void {
+		// Enforce the limit *before* parsing, so an oversized complete line never
+		// reaches JSON.parse.
+		const lineBytes = Buffer.byteLength(line, "utf8");
+		if (lineBytes > this.#maxLineBytes) {
+			this.#onProtocolError(
+				new Error(`inbound line exceeded ${this.#maxLineBytes} bytes (${lineBytes}); line ignored`),
+				line.slice(0, 200),
+			);
+			return;
+		}
+
 		try {
 			this.#handleLine(line);
 		} catch (error) {
