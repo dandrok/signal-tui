@@ -1,0 +1,44 @@
+language: en
+
+reviews:
+  profile: chill
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  request_changes_workflow: false
+
+  path_filters:
+    - "!bun.lock"
+    - "!**/*.snap"
+
+  path_instructions:
+    - path: "src/domain/**"
+      instructions: >-
+        This layer must stay pure: no IO, no framework imports (ink/react),
+        no adapter or app imports. Flag any violation, and flag helpers that
+        depend on local timezone or global mutable state.
+    - path: "src/ui/**"
+      instructions: >-
+        ink components only. Flag direct adapter/db imports, missing React hook
+        dependencies, unconditional state updates during render, and any
+        per-frame work that is not O(visible rows).
+    - path: "src/adapters/**"
+      instructions: >-
+        All IO lives here. Flag unbounded reads, missing error handling,
+        SQL built by string concatenation instead of parameters, and any
+        synchronous work that blocks the render loop.
+    - path: "tests/**"
+      instructions: >-
+        Tests must assert behaviour, not implementation details. Flag sleeps
+        without a retry/tick helper, and any test that would pass with the
+        feature deleted.
+
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+
+chat:
+  auto_reply: true
