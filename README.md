@@ -7,7 +7,7 @@ network, no linking, no crypto yet.
 
 ## Requirements
 
-- [Bun](https://bun.sh/docs/installation) **1.4+** — required at runtime, not just for development
+- [Bun](https://bun.sh/docs/installation) **1.4.4+** — required at runtime, not just for development
 
 ## Quick start
 
@@ -47,6 +47,21 @@ src/
 
 Import boundaries are enforced in `biome.json` via `noRestrictedImports` — CI fails if
 `domain` reaches for `ink` or `ui` imports an adapter.
+
+## Code review
+
+Two layers, both free on public repos:
+
+```sh
+# local, before pushing (CodeRabbit CLI)
+cr auth status          # or: cr auth login
+cr review --deep        # review your tracked local changes
+cr review --agent       # NDJSON findings, if you want them machine-readable
+```
+
+On GitHub, CodeRabbit's app automatically reviews non-draft PRs targeting `main`; `.coderabbit.yaml`
+carries the repo rules (layer boundaries, "tests must assert behaviour", lockfile excluded). Ask
+for a full PR review from scratch with `@coderabbitai full review` in a PR comment.
 
 ## Roadmap
 

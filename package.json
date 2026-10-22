@@ -12,8 +12,21 @@
 		"LICENSE"
 	],
 	"engines": {
-		"bun": ">=1.4.0"
+		"bun": ">=1.4.4"
 	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/dandrok/signal-tui.git"
+	},
+	"keywords": [
+		"signal",
+		"tui",
+		"terminal",
+		"ink",
+		"bun",
+		"messenger"
+	],
+	"author": "Patryk Stusik",
 	"publishConfig": {
 		"access": "public"
 	},

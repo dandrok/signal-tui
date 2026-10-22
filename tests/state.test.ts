@@ -39,17 +39,36 @@ describe("reduce", () => {
 		expect(selectedMessages(onAlice).map((message) => message.id)).toEqual(["m-4", "m-5"]);
 	});
 
-	test("submitting a draft clears it and sets a notice", () => {
+	test("submitting a draft clears it and sets a queued notice", () => {
 		let state = reduce(loaded(), { type: "focus", focus: "composer" });
 		state = reduce(state, { type: "draft-changed", value: "  hello  " });
 		state = reduce(state, { type: "draft-submitted" });
 		expect(state.draft).toBe("");
-		expect(state.notice).toBe("queued: hello");
+		expect(state.notice).toEqual({ kind: "queued", text: "queued: hello" });
 	});
 
 	test("submitting an empty draft changes nothing", () => {
 		const state = reduce(loaded(), { type: "draft-changed", value: "   " });
 		expect(reduce(state, { type: "draft-submitted" })).toBe(state);
+	});
+
+	test("typing after a send clears the queued notice", () => {
+		let state = reduce(loaded(), { type: "focus", focus: "composer" });
+		state = reduce(state, { type: "draft-changed", value: "hi" });
+		state = reduce(state, { type: "draft-submitted" });
+		expect(state.notice?.kind).toBe("queued");
+
+		state = reduce(state, { type: "draft-changed", value: "h" });
+		expect(state.notice).toBeNull();
+	});
+
+	test("typing keeps an unrelated notice", () => {
+		let state = reduce(loaded(), {
+			type: "notice",
+			notice: { kind: "info", text: "reconnecting" },
+		});
+		state = reduce(state, { type: "draft-changed", value: "hi" });
+		expect(state.notice).toEqual({ kind: "info", text: "reconnecting" });
 	});
 
 	test("setting the same focus returns the same object", () => {
