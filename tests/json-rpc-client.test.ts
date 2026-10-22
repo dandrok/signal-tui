@@ -248,6 +248,7 @@ describe("JsonRpcClient", () => {
 
 		expect(errors).toHaveLength(1);
 		expect(errors[0]).toContain("exceeded");
+		expect(client.pendingCount).toBe(0);
 	});
 
 	test("skips an oversized complete line before parsing it", async () => {
