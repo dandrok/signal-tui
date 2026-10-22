@@ -52,6 +52,16 @@ describe("reduce", () => {
 		expect(reduce(state, { type: "draft-submitted" })).toBe(state);
 	});
 
+	test("typing after a send clears the notice", () => {
+		let state = reduce(loaded(), { type: "focus", focus: "composer" });
+		state = reduce(state, { type: "draft-changed", value: "hi" });
+		state = reduce(state, { type: "draft-submitted" });
+		expect(state.notice).toBe("queued: hi");
+
+		state = reduce(state, { type: "draft-changed", value: "h" });
+		expect(state.notice).toBeNull();
+	});
+
 	test("setting the same focus returns the same object", () => {
 		const state = loaded();
 		expect(reduce(state, { type: "focus", focus: "conversations" })).toBe(state);
