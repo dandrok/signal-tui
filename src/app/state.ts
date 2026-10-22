@@ -60,7 +60,9 @@ export function reduce(state: AppState, action: Action): AppState {
 		case "focus":
 			return state.focus === action.focus ? state : { ...state, focus: action.focus };
 		case "draft-changed":
-			return state.draft === action.value ? state : { ...state, draft: action.value };
+			return state.draft === action.value && state.notice === null
+				? state
+				: { ...state, draft: action.value, notice: null };
 		case "draft-submitted": {
 			const body = state.draft.trim();
 			if (body.length === 0) {
