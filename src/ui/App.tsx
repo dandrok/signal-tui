@@ -79,7 +79,7 @@ export function App({ state, dispatch }: AppProps) {
 
 			<Box paddingX={1}>
 				<Text dimColor>{isComposing ? COMPOSER_HINTS : NORMAL_HINTS}</Text>
-				{state.notice ? <Text color="green"> · {state.notice}</Text> : null}
+				{state.notice ? <Text color="green"> · {state.notice.text}</Text> : null}
 			</Box>
 
 			<Box paddingX={1}>
