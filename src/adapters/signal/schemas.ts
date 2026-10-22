@@ -51,6 +51,17 @@ export const reactionSchema = z.looseObject({
 	isRemove: z.boolean().nullish(),
 });
 
+/**
+ * Quoted attachments are a different record upstream
+ * (`JsonQuotedAttachment(contentType, filename, thumbnail)`): no `isVoiceNote`,
+ * and an optional `thumbnail` that is a full attachment.
+ */
+export const quotedAttachmentSchema = z.looseObject({
+	contentType: z.string(),
+	filename: z.string().nullish(),
+	thumbnail: z.lazy(() => attachmentSchema).nullish(),
+});
+
 export const quoteSchema = z.looseObject({
 	id: z.number().int(),
 	author: z.string().nullish(),
@@ -58,7 +69,7 @@ export const quoteSchema = z.looseObject({
 	authorUuid: z.string().nullish(),
 	text: z.string().nullish(),
 	mentions: z.array(mentionSchema).nullish(),
-	attachments: z.array(attachmentSchema).nullish(),
+	attachments: z.array(quotedAttachmentSchema).nullish(),
 });
 
 export const remoteDeleteSchema = z.looseObject({
@@ -135,6 +146,7 @@ export const receiveEnvelopeSchema = z.looseObject({
 });
 
 export type Attachment = z.infer<typeof attachmentSchema>;
+export type QuotedAttachment = z.infer<typeof quotedAttachmentSchema>;
 export type Quote = z.infer<typeof quoteSchema>;
 export type Mention = z.infer<typeof mentionSchema>;
 export type Reaction = z.infer<typeof reactionSchema>;

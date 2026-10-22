@@ -62,6 +62,39 @@ describe("dataMessageSchema", () => {
 		expect(dataMessageSchema.safeParse(payload).success).toBe(true);
 	});
 
+	test("accepts a quoted attachment, which carries no isVoiceNote", () => {
+		const payload = {
+			timestamp: 1,
+			quote: {
+				id: 2,
+				text: "see this",
+				attachments: [
+					{
+						contentType: "image/png",
+						filename: "shot.png",
+						thumbnail: { contentType: "image/png", isVoiceNote: false },
+					},
+				],
+			},
+		};
+		expect(dataMessageSchema.safeParse(payload).success).toBe(true);
+	});
+
+	test("nullish fields reject the wrong type, not just accept null", () => {
+		// A field silently dropped from the schema would make these pass; they must fail.
+		expect(dataMessageSchema.safeParse({ timestamp: 1, message: 42 }).success).toBe(false);
+		expect(
+			typingMessageSchema.safeParse({ action: "STARTED", timestamp: 1, groupId: 42 }).success,
+		).toBe(false);
+		expect(envelopeSchema.safeParse({ timestamp: 1, sourceNumber: 42 }).success).toBe(false);
+		expect(
+			dataMessageSchema.safeParse({
+				timestamp: 1,
+				attachments: [{ contentType: "image/png", isVoiceNote: false, filename: 42 }],
+			}).success,
+		).toBe(false);
+	});
+
 	test("rejects a wrong attachment field type", () => {
 		const broken = {
 			...dataMessageFixture,
