@@ -3,5 +3,6 @@ dist/
 *.db
 *.db-wal
 *.db-shm
+*.tgz
 .DS_Store
 *.log
