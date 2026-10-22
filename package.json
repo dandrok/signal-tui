@@ -21,10 +21,10 @@
 		"start": "bun run src/cli.tsx",
 		"dev": "bun run src/cli.tsx",
 		"test": "bun test",
-		"typecheck": "tsc --noEmit",
+		"typecheck": "bun check",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
-		"check": "bun run typecheck && bun run lint && bun test",
+		"verify": "bun run typecheck && bun run lint && bun test",
 		"setup": "bun run scripts/setup-hooks.ts"
 	},
 	"dependencies": {

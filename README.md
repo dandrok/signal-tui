@@ -25,9 +25,9 @@ Keys: `j`/`k` move · `i` or `Enter` compose · `Esc` back · `q` quit.
 |---|---|
 | `bun start` | run the TUI |
 | `bun test` | unit + ink render tests |
-| `bun run typecheck` | `tsc --noEmit` (TypeScript 7, strict) |
+| `bun run typecheck` | `bun check` — Bun's native multi-core TypeScript check |
 | `bun run lint` | Biome: lint, format, import layering |
-| `bun run check` | all three, the same gate CI runs |
+| `bun run verify` | all three, the same gate CI runs |
 | `bun run setup` | `git config core.hooksPath .githooks` |
 
 ## Architecture

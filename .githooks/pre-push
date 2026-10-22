@@ -10,5 +10,8 @@ fi
 echo "▸ typecheck"
 bun run typecheck
 
+echo "▸ lint"
+bun run lint
+
 echo "▸ tests"
 bun test
