@@ -7,7 +7,7 @@ network, no linking, no crypto yet.
 
 ## Requirements
 
-- [Bun](https://bun.sh/docs/installation) **1.4+** — required at runtime, not just for development
+- [Bun](https://bun.sh/docs/installation) **1.4.4+** — required at runtime, not just for development
 
 ## Quick start
 
@@ -55,7 +55,7 @@ Two layers, both free on public repos:
 ```sh
 # local, before pushing (CodeRabbit CLI)
 cr auth status          # or: cr auth login
-cr review --deep        # full PR-policy review of your local changes
+cr review --deep        # review your tracked local changes
 cr review --agent       # NDJSON findings, if you want them machine-readable
 ```
 
