@@ -1,10 +1,16 @@
 #!/bin/sh
-# Fast local gate: lint and format only the staged files. Full checks run on push.
+# Fast local gate: lint + format the staged files only.
+# Full checks run in pre-push and in CI.
 set -e
 
-if ! command -v bunx >/dev/null 2>&1; then
-	echo "pre-commit: bunx not found — skipping (install bun: https://bun.sh)" >&2
+if [ -x ./node_modules/.bin/biome ]; then
+	BIOME=./node_modules/.bin/biome
+elif command -v bunx >/dev/null 2>&1; then
+	BIOME="bunx biome"
+else
+	echo "pre-commit: biome is not installed, so staged files are NOT checked." >&2
+	echo "            run 'bun install' to enable this hook." >&2
 	exit 0
 fi
 
-bunx biome check --staged --no-errors-on-unmatched
+$BIOME check --staged --no-errors-on-unmatched
