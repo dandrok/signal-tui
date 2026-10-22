@@ -48,6 +48,21 @@ src/
 Import boundaries are enforced in `biome.json` via `noRestrictedImports` — CI fails if
 `domain` reaches for `ink` or `ui` imports an adapter.
 
+## Code review
+
+Two layers, both free on public repos:
+
+```sh
+# local, before pushing (CodeRabbit CLI)
+cr auth status          # or: cr auth login
+cr review --deep        # full PR-policy review of your local changes
+cr review --agent       # NDJSON findings, if you want them machine-readable
+```
+
+On GitHub, CodeRabbit's app reviews every PR automatically; `.coderabbit.yaml` carries the
+repo rules (layer boundaries, "tests must assert behaviour", lockfile excluded). Ask for a
+whole-repo pass with `@coderabbitai full review` in a PR comment.
+
 ## Roadmap
 
 | Phase | Scope |
