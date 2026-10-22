@@ -1,0 +1,14 @@
+#!/bin/sh
+# Heavier local gate: types + test suite before anything leaves the machine.
+set -e
+
+if ! command -v bun >/dev/null 2>&1; then
+	echo "pre-push: bun not found — skipping (install bun: https://bun.sh)" >&2
+	exit 0
+fi
+
+echo "▸ typecheck"
+bun run typecheck
+
+echo "▸ tests"
+bun test

@@ -1,0 +1,42 @@
+{
+	"name": "signal-tui",
+	"version": "0.0.0",
+	"description": "A terminal Signal client — ink + bun, local-first with full-text search",
+	"type": "module",
+	"bin": {
+		"signal-tui": "src/cli.tsx"
+	},
+	"files": [
+		"src",
+		"README.md",
+		"LICENSE"
+	],
+	"engines": {
+		"bun": ">=1.4.0"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"start": "bun run src/cli.tsx",
+		"dev": "bun run src/cli.tsx",
+		"test": "bun test",
+		"typecheck": "tsc --noEmit",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"check": "bun run typecheck && bun run lint && bun test",
+		"setup": "bun run scripts/setup-hooks.ts"
+	},
+	"dependencies": {
+		"ink": "^8.0.0",
+		"react": "^19.3.1",
+		"zod": "^4.6.7"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.6.2",
+		"@types/bun": "latest",
+		"@types/react": "^19.3.0",
+		"ink-testing-library": "^4.0.0",
+		"typescript": "^7.0.2"
+	}
+}

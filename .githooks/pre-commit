@@ -1,0 +1,10 @@
+#!/bin/sh
+# Fast local gate: lint and format only the staged files. Full checks run on push.
+set -e
+
+if ! command -v bunx >/dev/null 2>&1; then
+	echo "pre-commit: bunx not found — skipping (install bun: https://bun.sh)" >&2
+	exit 0
+fi
+
+bunx biome check --staged --no-errors-on-unmatched
