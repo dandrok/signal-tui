@@ -130,7 +130,9 @@ function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
 		conversation: {
 			id: target.id,
 			name: target.name,
-			unreadCount: 1,
+			// The count is owned by the store: the session increments it per incoming
+			// message, so mapping must not guess a total.
+			unreadCount: 0,
 			lastActivityAt: data.timestamp,
 		},
 		conversationKind: target.kind,

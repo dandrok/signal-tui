@@ -84,6 +84,16 @@ export function Root({ store, session }: RootProps) {
 		};
 	}, [store, version]);
 
+	// The conversation on screen is read: clear its badge on open, and keep it
+	// clear while messages arrive (`version` changes on every update).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `version` triggers the re-run, it is not read here.
+	useEffect(() => {
+		if (conversationId === undefined || session === undefined) {
+			return;
+		}
+		void session.markRead(conversationId);
+	}, [session, conversationId, version]);
+
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `version` is a reload trigger, not a value read by the effect.
 	useEffect(() => {
 		if (conversationId === undefined) {

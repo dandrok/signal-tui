@@ -49,6 +49,14 @@ class RecordingStore implements MessageStore {
 		this.#record(`deleted:${messageId}`);
 	}
 
+	async incrementUnread(conversationId: string, by: number): Promise<void> {
+		this.#record(`unread+${by}:${conversationId}`);
+	}
+
+	async markConversationRead(conversationId: string): Promise<void> {
+		this.#record(`read:${conversationId}`);
+	}
+
 	#record(op: string): void {
 		if (this.failOn !== null && op.startsWith(this.failOn)) {
 			throw new Error(`store refused ${op}`);
@@ -114,7 +122,7 @@ describe("createSession", () => {
 		backend.emit({ kind: "message", message: message() });
 		await session.flush();
 
-		expect(store.ops).toEqual(["message:m1"]);
+		expect(store.ops).toEqual(["message:m1", "unread+1:uuid-alice"]);
 		expect(changes).toBe(1);
 	});
 
@@ -127,7 +135,7 @@ describe("createSession", () => {
 		backend.emit({ kind: "message", message: message() });
 		await session.flush();
 
-		expect(store.ops).toEqual(["conversation:uuid-alice", "message:m1"]);
+		expect(store.ops).toEqual(["conversation:uuid-alice", "message:m1", "unread+1:uuid-alice"]);
 	});
 
 	test("marks a deleted message", async () => {
@@ -187,7 +195,7 @@ describe("createSession", () => {
 		await session.start();
 		await session.flush();
 
-		expect(store.ops).toEqual(["message:m1"]);
+		expect(store.ops).toEqual(["message:m1", "unread+1:uuid-alice"]);
 	});
 
 	test("sends through the backend", async () => {
@@ -214,6 +222,7 @@ describe("createSession", () => {
 		expect(backend.sent).toEqual([{ conversationId: "uuid-alice", body: "hello" }]);
 		expect(store.ops).toHaveLength(2);
 		expect(store.ops[0]).toBe("conversation:uuid-alice");
+		expect(store.ops).not.toContain("unread+1:uuid-alice");
 		// the server timestamp, not a local clock reading: deletes refer to it
 		expect(store.ops[1]).toBe("message:uuid-alice:1760000000500");
 		expect(changes).toBe(1);
@@ -230,6 +239,35 @@ describe("createSession", () => {
 		await expect(session.send("uuid-alice", "hello")).rejects.toThrow("network down");
 
 		expect(store.ops).toEqual([]);
+	});
+
+	test("does not increment unread for your own message", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		const session = createSession({ store, backend });
+
+		backend.emit({
+			kind: "message",
+			message: { ...message("m2"), isOutgoing: true, author: "You" },
+		});
+		await session.flush();
+
+		expect(store.ops).toEqual(["message:m2"]);
+	});
+
+	test("markRead clears the conversation and notifies", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		const session = createSession({ store, backend });
+		let changes = 0;
+		session.onChange(() => {
+			changes++;
+		});
+
+		await session.markRead("uuid-alice");
+
+		expect(store.ops).toEqual(["read:uuid-alice"]);
+		expect(changes).toBe(1);
 	});
 
 	test("stop unsubscribes before stopping the backend", async () => {

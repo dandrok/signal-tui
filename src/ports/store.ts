@@ -16,7 +16,12 @@ export interface MessageReader {
  * conversation must exist before the message is saved.
  */
 export interface MessageWriter {
+	/** Updates metadata (name, activity). Never changes the unread count. */
 	upsertConversation(conversation: Conversation): Promise<void>;
+	/** Adds to the unread count; incoming messages only. */
+	incrementUnread(conversationId: ConversationId, by: number): Promise<void>;
+	/** Clears the unread count, e.g. when the conversation is opened. */
+	markConversationRead(conversationId: ConversationId): Promise<void>;
 	saveMessage(message: Message): Promise<void>;
 	/** Marks a message as deleted; a no-op when the message is not cached. */
 	markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void>;

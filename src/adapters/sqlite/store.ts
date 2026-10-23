@@ -182,7 +182,6 @@ export class SqliteMessageStore implements MessageStore {
 				 VALUES (?1, ?2, ?3, ?4)
 				 ON CONFLICT(id) DO UPDATE SET
 					name = CASE WHEN TRIM(excluded.name) = '' THEN conversations.name ELSE excluded.name END,
-					unread_count = MAX(conversations.unread_count, excluded.unread_count),
 					last_activity_at = MAX(conversations.last_activity_at, excluded.last_activity_at)`,
 			)
 			.run(
@@ -191,6 +190,20 @@ export class SqliteMessageStore implements MessageStore {
 				conversation.unreadCount,
 				conversation.lastActivityAt,
 			);
+	}
+
+	async incrementUnread(conversationId: ConversationId, by: number): Promise<void> {
+		this.#db
+			.query<null, [number, string]>(
+				"UPDATE conversations SET unread_count = unread_count + ?1 WHERE id = ?2",
+			)
+			.run(by, conversationId);
+	}
+
+	async markConversationRead(conversationId: ConversationId): Promise<void> {
+		this.#db
+			.query<null, [string]>("UPDATE conversations SET unread_count = 0 WHERE id = ?1")
+			.run(conversationId);
 	}
 
 	async saveMessage(message: Message): Promise<void> {

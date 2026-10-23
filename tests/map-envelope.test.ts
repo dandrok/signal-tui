@@ -90,7 +90,8 @@ describe("mapEnvelope", () => {
 		expect(mapped.conversation).toEqual({
 			id: "b5b0c3d2-0000-4000-8000-000000000000",
 			name: "Alice",
-			unreadCount: 1,
+			// the store owns the count; mapping never guesses a total
+			unreadCount: 0,
 			lastActivityAt: 1_760_000_000_000,
 		});
 		expect(mapped.conversationKind).toBe("direct");

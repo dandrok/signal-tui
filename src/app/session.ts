@@ -20,6 +20,8 @@ export interface Session {
 	start(): Promise<void>;
 	stop(): Promise<void>;
 	send(conversationId: ConversationId, body: string): Promise<void>;
+	/** Clears the unread count for a conversation the user is looking at. */
+	markRead(conversationId: ConversationId): Promise<void>;
 	/** Resolves once every queued write has been applied. */
 	flush(): Promise<void>;
 	onChange(listener: () => void): () => void;
@@ -51,6 +53,9 @@ export function createSession({ store, backend }: SessionDeps): Session {
 				break;
 			case "message":
 				await store.saveMessage(event.message);
+				if (!event.message.isOutgoing) {
+					await store.incrementUnread(event.message.conversationId, 1);
+				}
 				break;
 			case "message-deleted":
 				await store.markMessageDeleted(event.conversationId, event.messageId);
@@ -72,6 +77,13 @@ export function createSession({ store, backend }: SessionDeps): Session {
 			unsubscribe();
 			await queue.catch(() => undefined);
 			await backend.stop();
+		},
+		async markRead(conversationId: ConversationId): Promise<void> {
+			// Queued so it runs after any pending increment: opening a conversation
+			// while a message lands must end at zero, not one.
+			queue = queue.then(() => store.markConversationRead(conversationId)).catch(record);
+			await queue;
+			notify();
 		},
 		async send(conversationId: ConversationId, body: string): Promise<void> {
 			const { timestamp } = await backend.sendMessage(conversationId, body);

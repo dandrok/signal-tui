@@ -42,13 +42,34 @@ export class InMemoryStore implements MessageStore {
 		// An empty name means "unknown" (a sync transcript has only the destination
 		// id): never let it erase a name learned from an incoming message.
 		const name = conversation.name.trim().length > 0 ? conversation.name : existing.name;
-		// Unread only grows: an outgoing transcript reports 0, and that must not mark
-		// someone else's messages as read.
-		const unreadCount = Math.max(existing.unreadCount, conversation.unreadCount);
 		// A late-arriving transcript must not move a conversation backwards in the
-		// list; same rule as the SQLite upsert.
+		// list; same rule as the SQLite upsert. The unread count is owned by
+		// incrementUnread/markConversationRead, so metadata updates leave it alone.
 		const lastActivityAt = Math.max(existing.lastActivityAt, conversation.lastActivityAt);
-		this.#conversations[index] = { ...conversation, name, unreadCount, lastActivityAt };
+		this.#conversations[index] = {
+			...conversation,
+			name,
+			lastActivityAt,
+			unreadCount: existing.unreadCount,
+		};
+	}
+
+	async incrementUnread(conversationId: ConversationId, by: number): Promise<void> {
+		const index = this.#conversations.findIndex((entry) => entry.id === conversationId);
+		const existing = this.#conversations[index];
+		if (existing === undefined) {
+			return;
+		}
+		this.#conversations[index] = { ...existing, unreadCount: existing.unreadCount + by };
+	}
+
+	async markConversationRead(conversationId: ConversationId): Promise<void> {
+		const index = this.#conversations.findIndex((entry) => entry.id === conversationId);
+		const existing = this.#conversations[index];
+		if (existing === undefined || existing.unreadCount === 0) {
+			return;
+		}
+		this.#conversations[index] = { ...existing, unreadCount: 0 };
 	}
 
 	async saveMessage(message: Message): Promise<void> {

@@ -141,14 +141,35 @@ describe("SqliteMessageStore", () => {
 		expect(updated?.lastActivityAt).toBe(5_000);
 	});
 
-	test("never lowers an unread count on upsert", async () => {
+	test("counts unread messages and clears them when read", async () => {
 		const store = open();
-		await store.upsertConversation(conversation({ unreadCount: 3 }));
+		await store.upsertConversation(conversation());
 
-		// An outgoing transcript reports 0; that must not mark the others as read.
-		await store.upsertConversation(conversation({ unreadCount: 0 }));
+		await store.incrementUnread("uuid-alice", 1);
+		await store.incrementUnread("uuid-alice", 1);
+		expect((await store.listConversations())[0]?.unreadCount).toBe(2);
 
-		expect((await store.listConversations())[0]?.unreadCount).toBe(3);
+		await store.markConversationRead("uuid-alice");
+		expect((await store.listConversations())[0]?.unreadCount).toBe(0);
+	});
+
+	test("leaves the unread count alone when metadata is updated", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+		await store.incrementUnread("uuid-alice", 3);
+
+		// An outgoing transcript carries a fresh name and activity, but unread 0.
+		await store.upsertConversation(conversation({ name: "Alice Smith", lastActivityAt: 9_000 }));
+
+		const [stored] = await store.listConversations();
+		expect(stored?.unreadCount).toBe(3);
+		expect(stored?.name).toBe("Alice Smith");
+	});
+
+	test("incrementing an unknown conversation is a no-op", async () => {
+		const store = open();
+		await store.incrementUnread("nobody", 1);
+		expect(await store.listConversations()).toEqual([]);
 	});
 
 	test("treats a whitespace-only name as unknown", async () => {
