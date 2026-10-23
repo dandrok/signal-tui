@@ -1,4 +1,4 @@
-import type { Conversation, ConversationId, Message } from "../domain/types";
+import type { Conversation, ConversationId, Message, MessageId } from "../domain/types";
 
 /**
  * Read model for the local cache. Implementations: memory (tests/demo) and
@@ -18,6 +18,8 @@ export interface MessageReader {
 export interface MessageWriter {
 	upsertConversation(conversation: Conversation): Promise<void>;
 	saveMessage(message: Message): Promise<void>;
+	/** Marks a message as deleted; a no-op when the message is not cached. */
+	markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void>;
 }
 
 export interface MessageStore extends MessageReader, MessageWriter {}

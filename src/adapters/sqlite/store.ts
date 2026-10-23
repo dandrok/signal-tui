@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import type { Conversation, ConversationId, Message } from "../../domain/types";
+import type { Conversation, ConversationId, Message, MessageId } from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
 import { migrations } from "./migrations";
 
@@ -199,10 +199,18 @@ export class SqliteMessageStore implements MessageStore {
 			);
 	}
 
+	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {
+		this.#db
+			.query<null, [string, string]>(
+				`UPDATE messages SET is_deleted = 1, body = ''
+				 WHERE id = ?1 AND conversation_id = ?2`,
+			)
+			.run(messageId, conversationId);
+	}
+
 	close(): void {
 		this.#db.close();
 	}
-
 	#migrate(): void {
 		const current = this.schemaVersion;
 		for (const migration of migrations) {

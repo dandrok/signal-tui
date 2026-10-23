@@ -127,6 +127,28 @@ describe("SqliteMessageStore", () => {
 		await expect(store.saveMessage(message({ conversationId: "ghost" }))).rejects.toThrow();
 	});
 
+	test("marks a message deleted and clears its body", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+		await store.saveMessage(message({ body: "oops" }));
+
+		await store.markMessageDeleted("uuid-alice", "m1");
+
+		const [saved] = await store.listMessages("uuid-alice");
+		expect(saved?.isDeleted).toBe(true);
+		expect(saved?.body).toBe("");
+		expect(await store.search("oops")).toEqual([]);
+	});
+
+	test("ignores a delete for a message it does not have", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+
+		await store.markMessageDeleted("uuid-alice", "missing");
+
+		expect(await store.listMessages("uuid-alice")).toEqual([]);
+	});
+
 	test("started at schema version 1", async () => {
 		expect(open().schemaVersion).toBe(1);
 	});
