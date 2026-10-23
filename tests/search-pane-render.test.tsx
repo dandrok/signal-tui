@@ -43,7 +43,12 @@ describe("SearchPane", () => {
 			/>,
 		);
 
-		expect(lastFrame() ?? "").not.toContain("other result");
+		const frame = lastFrame() ?? "";
+		// Absence alone would also hold for a pane that renders nothing at all.
+		expect(frame).toContain("hit 0");
+		expect(frame).toContain("hit 1");
+		expect(frame).toContain("hit 2");
+		expect(frame).not.toContain("other result");
 		unmount();
 	});
 
