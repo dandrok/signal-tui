@@ -53,6 +53,7 @@ describe("signal-cli adapter over a real child process", () => {
 				sentAt: 1_760_000_000_000,
 				isOutgoing: false,
 				isDeleted: false,
+				attachments: [],
 			});
 			// your own message arrives as a sync transcript, not as incoming text
 			expect(messages[1]).toEqual({
@@ -63,6 +64,7 @@ describe("signal-cli adapter over a real child process", () => {
 				sentAt: 1_760_000_000_001,
 				isOutgoing: true,
 				isDeleted: false,
+				attachments: [],
 			});
 			// the peer also pushes a "typing" notification that must be ignored
 			expect(kinds).toEqual(["conversation-updated", "message", "conversation-updated", "message"]);

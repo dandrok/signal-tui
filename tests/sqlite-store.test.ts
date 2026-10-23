@@ -74,6 +74,8 @@ describe("SqliteMessageStore", () => {
 			author: "Alice",
 			body: "pushed the fix",
 			sentAt: 1_000,
+			// Reads always carry the field, so callers never branch on its presence.
+			attachments: [],
 			isOutgoing: true,
 			isDeleted: true,
 		});
@@ -222,8 +224,8 @@ describe("SqliteMessageStore", () => {
 		expect(await store.listMessages("uuid-alice")).toEqual([]);
 	});
 
-	test("started at schema version 1", async () => {
-		expect(open().schemaVersion).toBe(1);
+	test("started at the current schema version", async () => {
+		expect(open().schemaVersion).toBe(2);
 	});
 
 	test.skipIf(process.platform !== "linux")(

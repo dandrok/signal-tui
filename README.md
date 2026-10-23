@@ -87,9 +87,13 @@ directory, and `--db` refuses a directory other users can write to.
 
 ## Not there yet
 
-Search UI (the FTS5 index exists and is tested), attachments beyond a `[attachment]`
-placeholder, applying edits, scrollback past the last 50 messages, typing indicators,
-desktop notifications, history from before you linked.
+Applying edits, scrollback past the last 50 messages, opening an attachment from the
+TUI (`xdg-open`), typing indicators, desktop notifications, and history from before
+you linked.
+
+Files are shown by name and size, with the caption when the sender wrote one. The
+file itself is not downloaded by this app: `signal-cli` stores attachments under
+`~/.local/share/signal-cli/attachments`.
 
 ## Scripts
 

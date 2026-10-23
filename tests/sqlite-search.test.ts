@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { SqliteMessageStore, toFtsQuery } from "../src/adapters/sqlite/store";
+import { toFtsQuery } from "../src/adapters/sqlite/fts";
+import { SqliteMessageStore } from "../src/adapters/sqlite/store";
 import type { Conversation, Message } from "../src/domain/types";
 
 const conversation = (id: string): Conversation => ({

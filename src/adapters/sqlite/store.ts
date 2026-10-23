@@ -1,8 +1,10 @@
 import { Database } from "bun:sqlite";
-import { chmodSync, statSync } from "node:fs";
 import type { Conversation, ConversationId, Message, MessageId } from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
+import { deleteAttachments, loadAttachments, replaceAttachments } from "./attachments";
+import { toFtsQuery } from "./fts";
 import { migrations } from "./migrations";
+import { restrictCachePermissions } from "./private-cache";
 
 const DEFAULT_MESSAGE_LIMIT = 50;
 const DEFAULT_SEARCH_LIMIT = 20;
@@ -45,24 +47,6 @@ export function toConversation(row: ConversationRow): Conversation {
 	};
 }
 
-/**
- * Turns free text into a safe FTS5 query: each word becomes a quoted prefix
- * term, so `AND`, `NOT`, `NEAR(`, `*` and unbalanced quotes from a user (or a
- * message body) can never reach the query parser.
- */
-export function toFtsQuery(input: string): string | null {
-	const tokens = input
-		.toLowerCase()
-		.split(/[^\p{L}\p{N}_]+/u)
-		.filter((token) => token.length > 0);
-
-	if (tokens.length === 0) {
-		return null;
-	}
-
-	return tokens.map((token) => `"${token.replaceAll('"', '""')}"*`).join(" ");
-}
-
 export interface SqliteStoreOptions {
 	/** File path, or ":memory:" for tests. */
 	readonly path: string;
@@ -92,22 +76,7 @@ export class SqliteMessageStore implements MessageStore {
 			this.#db.exec("PRAGMA foreign_keys = ON;");
 			if (options.path !== ":memory:") {
 				this.#db.exec("PRAGMA journal_mode = WAL;");
-				// Message bodies are plaintext: keep the cache private to this user.
-				// SQLite copies the database file's mode onto its -wal and -shm files,
-				// so setting it here covers those too.
-				try {
-					chmodSync(options.path, 0o600);
-				} catch (error) {
-					// Refuse to run with a readable cache: bodies are plaintext. Only
-					// fail when the mode is actually exposed, so filesystems where the
-					// mode is already restrictive (or meaningless) still work.
-					const mode = statSync(options.path).mode & 0o077;
-					if (mode !== 0) {
-						throw new Error(
-							`cannot restrict cache permissions (${options.path}): ${error instanceof Error ? error.message : String(error)}`,
-						);
-					}
-				}
+				restrictCachePermissions(options.path);
 			}
 			this.#migrate();
 		} catch (error) {
@@ -154,7 +123,7 @@ export class SqliteMessageStore implements MessageStore {
 				 ) ORDER BY sent_at ASC, id ASC`,
 			)
 			.all(conversationId, limit);
-		return rows.map(toMessage);
+		return this.#withAttachments(rows.map(toMessage));
 	}
 
 	async listAllMessages(conversationId: ConversationId): Promise<readonly Message[]> {
@@ -166,7 +135,7 @@ export class SqliteMessageStore implements MessageStore {
 				 ORDER BY sent_at ASC, id ASC`,
 			)
 			.all(conversationId);
-		return rows.map(toMessage);
+		return this.#withAttachments(rows.map(toMessage));
 	}
 
 	async search(query: string, limit = this.#searchLimit): Promise<readonly Message[]> {
@@ -185,7 +154,7 @@ export class SqliteMessageStore implements MessageStore {
 				 LIMIT ?2`,
 			)
 			.all(ftsQuery, limit);
-		return rows.map(toMessage);
+		return this.#withAttachments(rows.map(toMessage));
 	}
 
 	async upsertConversation(conversation: Conversation): Promise<void> {
@@ -237,39 +206,67 @@ export class SqliteMessageStore implements MessageStore {
 		];
 
 		// One write on the common path: a message seen once is inserted, and only a
-		// replay or an edit falls through to the update.
-		const inserted = this.#db
-			.query<null, SaveParams>(
-				`INSERT INTO messages (id, conversation_id, author, body, sent_at, is_outgoing, is_deleted)
-				 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-				 ON CONFLICT(id) DO NOTHING`,
-			)
-			.run(...params).changes;
-
-		if (inserted === 0) {
-			this.#db
+		// replay or an edit falls through to the update. The transaction keeps the
+		// message and its attachment rows from ever disagreeing.
+		const inserted = this.#db.transaction(() => {
+			const changes = this.#db
 				.query<null, SaveParams>(
-					`UPDATE messages SET author = ?3, body = ?4, sent_at = ?5, is_outgoing = ?6, is_deleted = ?7
-					 WHERE id = ?1 AND conversation_id = ?2`,
+					`INSERT INTO messages (id, conversation_id, author, body, sent_at, is_outgoing, is_deleted)
+					 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+					 ON CONFLICT(id) DO NOTHING`,
 				)
-				.run(...params);
-		}
+				.run(...params).changes;
+
+			if (changes === 0) {
+				this.#db
+					.query<null, SaveParams>(
+						`UPDATE messages SET author = ?3, body = ?4, sent_at = ?5, is_outgoing = ?6, is_deleted = ?7
+						 WHERE id = ?1 AND conversation_id = ?2`,
+					)
+					.run(...params);
+			}
+
+			replaceAttachments(this.#db, message);
+			return changes;
+		})();
 
 		return { inserted: inserted > 0 };
 	}
 
 	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {
-		this.#db
-			.query<null, [string, string]>(
-				`UPDATE messages SET is_deleted = 1, body = ''
-				 WHERE id = ?1 AND conversation_id = ?2`,
-			)
-			.run(messageId, conversationId);
+		this.#db.transaction(() => {
+			this.#db
+				.query<null, [string, string]>(
+					`UPDATE messages SET is_deleted = 1, body = ''
+					 WHERE id = ?1 AND conversation_id = ?2`,
+				)
+				.run(messageId, conversationId);
+			// The files on disk are signal-cli's, but the references are ours and a
+			// deleted message should not keep pointing at them.
+			deleteAttachments(this.#db, messageId);
+		})();
 	}
 
 	close(): void {
 		this.#db.close();
 	}
+
+	#withAttachments(messages: readonly Message[]): readonly Message[] {
+		if (messages.length === 0) {
+			return messages;
+		}
+		const byMessage = loadAttachments(
+			this.#db,
+			messages.map((message) => message.id),
+		);
+		// Always an array on the way out, even when empty: a caller reading a message
+		// should not have to distinguish "no files" from "field absent".
+		return messages.map((message) => ({
+			...message,
+			attachments: byMessage.get(message.id) ?? [],
+		}));
+	}
+
 	#migrate(): void {
 		const current = this.schemaVersion;
 		for (const migration of migrations) {

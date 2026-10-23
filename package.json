@@ -1,6 +1,6 @@
 {
 	"name": "signal-tui",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"description": "A terminal Signal client \u2014 ink + bun, local-first with full-text search",
 	"type": "module",
 	"bin": {
