@@ -10,6 +10,15 @@ export interface Notice {
 	readonly text: string;
 }
 
+/** Search is a mode, not a pane: while it is open the keyboard belongs to it. */
+export interface SearchState {
+	readonly query: string;
+	readonly results: readonly Message[];
+	readonly selectedIndex: number;
+	/** True once a query has been run, so "no results" is distinguishable. */
+	readonly ran: boolean;
+}
+
 export interface AppState {
 	readonly conversations: readonly Conversation[];
 	readonly messagesByConversation: Readonly<Record<ConversationId, readonly Message[]>>;
@@ -17,6 +26,7 @@ export interface AppState {
 	readonly focus: Focus;
 	readonly draft: string;
 	readonly notice: Notice | null;
+	readonly search: SearchState | null;
 }
 
 export type Action =
@@ -30,7 +40,13 @@ export type Action =
 	| { readonly type: "focus"; readonly focus: Focus }
 	| { readonly type: "draft-changed"; readonly value: string }
 	| { readonly type: "draft-submitted" }
-	| { readonly type: "notice"; readonly notice: Notice | null };
+	| { readonly type: "notice"; readonly notice: Notice | null }
+	| { readonly type: "search-opened" }
+	| { readonly type: "search-closed" }
+	| { readonly type: "search-changed"; readonly query: string }
+	| { readonly type: "search-results"; readonly results: readonly Message[] }
+	| { readonly type: "search-moved"; readonly delta: number }
+	| { readonly type: "search-selected" };
 
 export const emptyState: AppState = {
 	conversations: [],
@@ -39,6 +55,7 @@ export const emptyState: AppState = {
 	focus: "conversations",
 	draft: "",
 	notice: null,
+	search: null,
 };
 
 /** Pure reducer: every state transition is testable without a terminal. */
@@ -81,6 +98,64 @@ export function reduce(state: AppState, action: Action): AppState {
 			}
 			return { ...state, draft: "", notice: { kind: "queued", text: `queued: ${body}` } };
 		}
+		case "search-opened":
+			return {
+				...state,
+				focus: "conversations",
+				search: { query: "", results: [], selectedIndex: 0, ran: false },
+			};
+		case "search-closed":
+			return state.search === null ? state : { ...state, search: null };
+		case "search-changed": {
+			if (state.search === null) {
+				return state;
+			}
+			return {
+				...state,
+				// A new query invalidates the old results: showing them would suggest
+				// they belong to what is being typed.
+				search: { query: action.query, results: [], selectedIndex: 0, ran: false },
+			};
+		}
+		case "search-results": {
+			if (state.search === null) {
+				return state;
+			}
+			const last = Math.max(0, action.results.length - 1);
+			return {
+				...state,
+				search: {
+					...state.search,
+					results: action.results,
+					selectedIndex: Math.min(state.search.selectedIndex, last),
+					ran: true,
+				},
+			};
+		}
+		case "search-moved": {
+			if (state.search === null || state.search.results.length === 0) {
+				return state;
+			}
+			const last = state.search.results.length - 1;
+			const next = Math.min(last, Math.max(0, state.search.selectedIndex + action.delta));
+			return next === state.search.selectedIndex
+				? state
+				: { ...state, search: { ...state.search, selectedIndex: next } };
+		}
+		case "search-selected": {
+			const hit =
+				state.search === null ? undefined : state.search.results[state.search.selectedIndex];
+			if (hit === undefined) {
+				return state;
+			}
+			const index = state.conversations.findIndex((entry) => entry.id === hit.conversationId);
+			return {
+				...state,
+				search: null,
+				selectedIndex: index === -1 ? state.selectedIndex : index,
+				focus: "conversations",
+			};
+		}
 		case "notice": {
 			const current = state.notice;
 			const next = action.notice;
@@ -91,6 +166,10 @@ export function reduce(state: AppState, action: Action): AppState {
 		default:
 			return state;
 	}
+}
+
+export function selectedSearchResult(state: AppState): Message | undefined {
+	return state.search?.results[state.search.selectedIndex];
 }
 
 export function selectedConversation(state: AppState): Conversation | undefined {

@@ -4,13 +4,14 @@ import { selectedConversation, selectedMessages } from "../app/state";
 import { ConversationList } from "./ConversationList";
 import { useTerminalSize } from "./hooks/useTerminalSize";
 import { MessagePane } from "./MessagePane";
+import { SearchPane } from "./SearchPane";
 
 export interface AppProps {
 	readonly state: AppState;
 	readonly dispatch: (action: Action) => void;
 }
 
-const NORMAL_HINTS = "j/k move · i or ⏎ compose · q quit";
+const NORMAL_HINTS = "j/k move · i or ⏎ compose · / search · q quit";
 const COMPOSER_HINTS = "⏎ send · esc back";
 
 export function App({ state, dispatch }: AppProps) {
@@ -19,11 +20,39 @@ export function App({ state, dispatch }: AppProps) {
 
 	const conversation = selectedConversation(state);
 	const messages = selectedMessages(state);
-	const isComposing = state.focus === "composer";
+	const isComposing = state.focus === "composer" && state.search === null;
+	const isSearching = state.search !== null;
 
 	useInput((input, key) => {
 		if (key.ctrl && input === "c") {
 			exit();
+			return;
+		}
+
+		if (isSearching) {
+			if (key.escape) {
+				dispatch({ type: "search-closed" });
+				return;
+			}
+			if (key.return) {
+				dispatch({ type: "search-selected" });
+				return;
+			}
+			if (key.upArrow) {
+				dispatch({ type: "search-moved", delta: -1 });
+				return;
+			}
+			if (key.downArrow) {
+				dispatch({ type: "search-moved", delta: 1 });
+				return;
+			}
+			if (key.backspace || key.delete) {
+				dispatch({ type: "search-changed", query: (state.search?.query ?? "").slice(0, -1) });
+				return;
+			}
+			if (input.length > 0) {
+				dispatch({ type: "search-changed", query: (state.search?.query ?? "") + input });
+			}
 			return;
 		}
 
@@ -56,7 +85,11 @@ export function App({ state, dispatch }: AppProps) {
 			dispatch({ type: "move-selection", delta: -1 });
 			return;
 		}
-		if (input === "i" || input === "/" || key.return) {
+		if (input === "/") {
+			dispatch({ type: "search-opened" });
+			return;
+		}
+		if (input === "i" || key.return) {
 			dispatch({ type: "focus", focus: "composer" });
 		}
 	});
@@ -67,15 +100,19 @@ export function App({ state, dispatch }: AppProps) {
 
 	return (
 		<Box flexDirection="column" width={columns} height={rows}>
-			<Box flexDirection="row" height={bodyHeight}>
-				<ConversationList
-					conversations={state.conversations}
-					selectedIndex={state.selectedIndex}
-					width={listWidth}
-					height={bodyHeight}
-				/>
-				<MessagePane conversation={conversation} messages={messages} height={bodyHeight} />
-			</Box>
+			{state.search !== null ? (
+				<SearchPane search={state.search} width={columns} height={rows - 1} />
+			) : (
+				<Box flexDirection="row" height={bodyHeight}>
+					<ConversationList
+						conversations={state.conversations}
+						selectedIndex={state.selectedIndex}
+						width={listWidth}
+						height={bodyHeight}
+					/>
+					<MessagePane conversation={conversation} messages={messages} height={bodyHeight} />
+				</Box>
+			)}
 
 			<Box paddingX={1}>
 				<Text dimColor>{isComposing ? COMPOSER_HINTS : NORMAL_HINTS}</Text>

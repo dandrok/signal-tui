@@ -70,3 +70,34 @@ describe("App", () => {
 		expect(frame).toContain("draft one");
 	});
 });
+
+describe("search pane", () => {
+	test("opens with / and shows what is typed", async () => {
+		const { stdin, lastFrame, unmount } = render(<Harness initial={seededState()} />);
+		await tick();
+
+		stdin.write("/");
+		await tick();
+		stdin.write("dinner");
+		await tick();
+
+		const frame = lastFrame() ?? "";
+		expect(frame).toContain("Search");
+		expect(frame).toContain("dinner");
+		unmount();
+	});
+
+	test("escape returns to the conversation list", async () => {
+		const { stdin, lastFrame, unmount } = render(<Harness initial={seededState()} />);
+		await tick();
+
+		stdin.write("/");
+		await tick();
+		expect(lastFrame() ?? "").toContain("Search");
+
+		stdin.write("\u001B");
+		await tick();
+		expect(lastFrame() ?? "").not.toContain("Search  ");
+		unmount();
+	});
+});
