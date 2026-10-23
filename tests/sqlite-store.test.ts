@@ -112,6 +112,16 @@ describe("SqliteMessageStore", () => {
 		expect(await store.listMessages("uuid-alice", 0)).toEqual([]);
 	});
 
+	test("preserves the later activity time", async () => {
+		const store = open();
+		await store.upsertConversation(conversation({ lastActivityAt: 5_000 }));
+
+		// A late-arriving transcript carries an older timestamp.
+		await store.upsertConversation(conversation({ lastActivityAt: 1_000 }));
+
+		expect((await store.listConversations())[0]?.lastActivityAt).toBe(5_000);
+	});
+
 	test("orders conversations by last activity", async () => {
 		const store = open();
 		await store.upsertConversation(conversation({ id: "a", name: "Old", lastActivityAt: 10 }));

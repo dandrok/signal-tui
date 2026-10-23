@@ -45,7 +45,10 @@ export class InMemoryStore implements MessageStore {
 		// Unread only grows: an outgoing transcript reports 0, and that must not mark
 		// someone else's messages as read.
 		const unreadCount = Math.max(existing.unreadCount, conversation.unreadCount);
-		this.#conversations[index] = { ...conversation, name, unreadCount };
+		// A late-arriving transcript must not move a conversation backwards in the
+		// list; same rule as the SQLite upsert.
+		const lastActivityAt = Math.max(existing.lastActivityAt, conversation.lastActivityAt);
+		this.#conversations[index] = { ...conversation, name, unreadCount, lastActivityAt };
 	}
 
 	async saveMessage(message: Message): Promise<void> {
