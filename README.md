@@ -2,22 +2,42 @@
 
 A terminal Signal client. Ink + Bun, local-first, with full-text search over your history.
 
-**Status: `0.0.x` — skeleton.** Phase 0 renders a real TUI over an in-memory store. No
-network, no linking, no crypto yet.
+**Status: `0.0.x` — usable, early.** The TUI runs in demo mode on built-in data, or in
+live mode against a linked Signal account. Message content, keys and history stay on
+your machine; the TUI itself never talks to the network — it drives `signal-cli` over
+JSON-RPC on stdio.
 
 ## Requirements
 
 - [Bun](https://bun.sh/docs/installation) **1.4.4+** — required at runtime, not just for development
+- [signal-cli](https://github.com/AsamK/signal-cli) **0.14+** — only for live mode; the
+  GraalVM native build needs no Java
+- `qrencode` — only for `bun run link`, to draw the linking QR as an image
 
 ## Quick start
 
 ```sh
 bun install
 bun run setup   # enables the tracked git hooks (.githooks)
-bun start
+bun start       # demo mode, no account needed
 ```
 
 Keys: `j`/`k` move · `i` or `Enter` compose · `Esc` back · `q` quit.
+
+### Live mode
+
+```sh
+bun run link                                  # QR image → scan with Signal → Linked devices
+signal-cli listAccounts                       # prints your number
+bun run src/cli.tsx --account +48123456789    # cache: ~/.local/share/signal-tui/cache.db
+```
+
+`bun run link` exists because `signal-cli link` draws its QR with Unicode block
+characters, which many terminal fonts render as `?` — the phone then sees nothing.
+The helper takes the link URI and renders a PNG instead.
+
+The cache stores message bodies in plaintext, so it is created `0600` inside a `0700`
+directory; `--db` refuses a directory other users can write to.
 
 ## Scripts
 
