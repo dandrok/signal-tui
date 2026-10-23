@@ -62,7 +62,7 @@ describe("signal-cli adapter over a real child process", () => {
 				.trim()
 				.split("\n")
 				.map((line) => JSON.parse(line) as unknown);
-			expect(sent).toEqual({ account: ACCOUNT, recipient: ["uuid-alice"], message: "hi back" });
+			expect(sent).toEqual({ recipient: ["uuid-alice"], message: "hi back" });
 			expect(backend.protocolErrors).toEqual([]);
 		} finally {
 			try {

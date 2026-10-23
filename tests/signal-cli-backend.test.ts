@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { RpcCaller } from "../src/adapters/signal/signal-cli-backend";
-import { SignalCliBackend, unwrapNotification } from "../src/adapters/signal/signal-cli-backend";
+import {
+	defaultCommand,
+	SignalCliBackend,
+	unwrapNotification,
+} from "../src/adapters/signal/signal-cli-backend";
 import type { BackendEvent } from "../src/ports/backend";
 
 class FakeRpc implements RpcCaller {
@@ -75,6 +79,19 @@ const setup = () => {
 	return { rpc, backend, events };
 };
 
+describe("defaultCommand", () => {
+	test("puts the subcommand option after the command name", () => {
+		// --receive-mode is parsed by the jsonRpc subparser, not the global one.
+		expect(defaultCommand("+48123456789")).toEqual([
+			"signal-cli",
+			"-a",
+			"+48123456789",
+			"jsonRpc",
+			"--receive-mode=manual",
+		]);
+	});
+});
+
 describe("unwrapNotification", () => {
 	test("unwraps the subscription response of manual receive mode", () => {
 		expect(unwrapNotification(subscriptionParams())).toEqual({
@@ -99,7 +116,7 @@ describe("SignalCliBackend", () => {
 
 		await backend.start();
 
-		expect(rpc.requests).toEqual([{ method: "subscribeReceive", params: { account: ACCOUNT } }]);
+		expect(rpc.requests).toEqual([{ method: "subscribeReceive" }]);
 		expect(rpc.hasListener).toBe(true);
 	});
 
@@ -200,7 +217,7 @@ describe("SignalCliBackend", () => {
 
 		expect(rpc.requests.at(-1)).toEqual({
 			method: "send",
-			params: { account: ACCOUNT, recipient: ["uuid-alice"], message: "hello" },
+			params: { recipient: ["uuid-alice"], message: "hello" },
 		});
 	});
 
@@ -223,7 +240,7 @@ describe("SignalCliBackend", () => {
 
 		expect(rpc.requests.at(-1)).toEqual({
 			method: "send",
-			params: { account: ACCOUNT, groupId: "group-1", message: "hello group" },
+			params: { groupId: "group-1", message: "hello group" },
 		});
 	});
 
@@ -234,7 +251,7 @@ describe("SignalCliBackend", () => {
 		await backend.stop();
 
 		expect(rpc.sent("unsubscribeReceive")).toEqual([
-			{ method: "unsubscribeReceive", params: { account: ACCOUNT, subscription: 0 } },
+			{ method: "unsubscribeReceive", params: { subscription: 0 } },
 		]);
 		expect(rpc.hasListener).toBe(false);
 		expect(rpc.closedWith).toBe("backend stopped");

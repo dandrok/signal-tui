@@ -74,9 +74,7 @@ export class SignalCliBackend implements SignalBackend {
 		});
 
 		try {
-			const subscription = await this.#client.request<unknown>("subscribeReceive", {
-				account: this.#account,
-			});
+			const subscription = await this.#client.request<unknown>("subscribeReceive");
 			this.#subscription = typeof subscription === "number" ? subscription : null;
 			this.#unsubscribe = unsubscribe;
 		} catch (error) {
@@ -96,7 +94,7 @@ export class SignalCliBackend implements SignalBackend {
 			const subscription = this.#subscription;
 			this.#subscription = null;
 			try {
-				await this.#client.request("unsubscribeReceive", { account: this.#account, subscription });
+				await this.#client.request("unsubscribeReceive", { subscription });
 			} catch {
 				// Best effort: the child may already be gone.
 			}
@@ -106,9 +104,10 @@ export class SignalCliBackend implements SignalBackend {
 	}
 
 	async sendMessage(conversationId: ConversationId, body: string): Promise<void> {
+		// Single-account mode: params carry no `account`, exactly as documented.
 		const params = this.#groupIds.has(conversationId)
-			? { account: this.#account, groupId: conversationId, message: body }
-			: { account: this.#account, recipient: [conversationId], message: body };
+			? { groupId: conversationId, message: body }
+			: { recipient: [conversationId], message: body };
 		await this.#client.request("send", params);
 	}
 
@@ -168,9 +167,18 @@ export class SignalCliBackend implements SignalBackend {
 }
 
 export interface SpawnBackendOptions extends SignalCliBackendOptions {
-	/** Defaults to manual receive mode, so no message is delivered before `start()`. */
+	/** Defaults to {@link defaultCommand}: manual receive mode, so nothing is
+	 * delivered before `start()` installs its handler. */
 	readonly command?: readonly string[];
 	readonly defaultTimeoutMs?: number;
+}
+
+/**
+ * `--receive-mode` belongs to the `jsonRpc` subcommand's own parser, not to the
+ * global options, so it must come after the command name.
+ */
+export function defaultCommand(account: string): readonly string[] {
+	return ["signal-cli", "-a", account, "jsonRpc", "--receive-mode=manual"];
 }
 
 /**
@@ -181,13 +189,7 @@ export function spawnSignalCliBackend(options: SpawnBackendOptions): {
 	readonly backend: SignalCliBackend;
 	readonly client: JsonRpcClient;
 } {
-	const command = options.command ?? [
-		"signal-cli",
-		"-a",
-		options.account,
-		"--receive-mode=manual",
-		"jsonRpc",
-	];
+	const command = options.command ?? defaultCommand(options.account);
 	const stream = createProcessStream({ command });
 	const client = new JsonRpcClient(stream, {
 		defaultTimeoutMs: options.defaultTimeoutMs ?? 30_000,
