@@ -12,6 +12,9 @@ export const conversation = (id = "uuid-alice"): Conversation => ({
 /** Realistic conversation key: receipts resolve recipients as numbers or UUIDs. */
 export const DIRECT_ID = "4b1c9f1e-0000-4000-8000-000000000000";
 
+/** Group ids are base64 and are not accepted as a receipt recipient. */
+export const GROUP_ID = "dGhpcyBpcyBhIGdyb3VwIGlkPQ==";
+
 export const message = (id = "m1"): Message => ({
 	id,
 	conversationId: "uuid-alice",
@@ -33,6 +36,10 @@ export class RecordingStore implements MessageStore {
 	readonly messages = new Map<string, Message[]>();
 
 	async listMessages(conversationId: string): Promise<readonly Message[]> {
+		return this.messages.get(conversationId) ?? [];
+	}
+
+	async listAllMessages(conversationId: string): Promise<readonly Message[]> {
 		return this.messages.get(conversationId) ?? [];
 	}
 

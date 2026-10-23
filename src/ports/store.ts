@@ -8,6 +8,11 @@ import type { Conversation, ConversationId, Message, MessageId } from "../domain
 export interface MessageReader {
 	listConversations(): Promise<readonly Conversation[]>;
 	listMessages(conversationId: ConversationId, limit?: number): Promise<readonly Message[]>;
+	/**
+	 * Every cached message in a conversation, oldest first. Needed where a page is
+	 * not enough — e.g. acknowledging a backlog with read receipts.
+	 */
+	listAllMessages(conversationId: ConversationId): Promise<readonly Message[]>;
 	search(query: string, limit?: number): Promise<readonly Message[]>;
 }
 

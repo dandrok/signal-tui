@@ -157,6 +157,18 @@ export class SqliteMessageStore implements MessageStore {
 		return rows.map(toMessage);
 	}
 
+	async listAllMessages(conversationId: ConversationId): Promise<readonly Message[]> {
+		const rows = this.#db
+			.query<MessageRow, [string]>(
+				`SELECT id, conversation_id, author, body, sent_at, is_outgoing, is_deleted
+				 FROM messages
+				 WHERE conversation_id = ?1
+				 ORDER BY sent_at ASC, id ASC`,
+			)
+			.all(conversationId);
+		return rows.map(toMessage);
+	}
+
 	async search(query: string, limit = this.#searchLimit): Promise<readonly Message[]> {
 		const ftsQuery = toFtsQuery(query);
 		if (ftsQuery === null || limit <= 0) {

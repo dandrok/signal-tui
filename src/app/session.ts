@@ -4,9 +4,6 @@ import type { BackendEvent, SignalBackend } from "../ports/backend";
 import type { MessageStore } from "../ports/store";
 
 const MAX_ERRORS = 20;
-/** How many messages one receipt covers; older ones are already read. */
-const RECEIPT_LIMIT = 100;
-
 /**
  * `sendReceipt` resolves its recipient as a phone number or a UUID, so a group
  * conversation cannot be passed through unchanged. Groups are skipped until the
@@ -87,7 +84,9 @@ export function createSession({ store, backend }: SessionDeps): Session {
 			return;
 		}
 		try {
-			const messages = await store.listMessages(conversationId, RECEIPT_LIMIT);
+			// Not a page: marking read clears the state, so anything left out of a page
+			// here would never be acknowledged.
+			const messages = await store.listAllMessages(conversationId);
 			const timestamps = messages
 				.filter((entry) => !entry.isOutgoing && !entry.isDeleted)
 				.map((entry) => entry.sentAt);

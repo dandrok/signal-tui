@@ -22,6 +22,10 @@ export class InMemoryStore implements MessageStore {
 			.slice(-limit);
 	}
 
+	async listAllMessages(conversationId: ConversationId): Promise<readonly Message[]> {
+		return this.#messages.filter((entry) => entry.conversationId === conversationId);
+	}
+
 	async search(query: string, limit = 20): Promise<readonly Message[]> {
 		const needle = query.trim().toLowerCase();
 		if (needle.length === 0) {
