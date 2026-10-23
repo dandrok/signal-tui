@@ -1,113 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createSession } from "../src/app/session";
-import type { Conversation, Message } from "../src/domain/types";
-import type { BackendEvent, SignalBackend } from "../src/ports/backend";
-import type { MessageStore } from "../src/ports/store";
-
-const conversation = (id = "uuid-alice"): Conversation => ({
-	id,
-	name: "Alice",
-	unreadCount: 1,
-	lastActivityAt: 10,
-});
-
-const message = (id = "m1"): Message => ({
-	id,
-	conversationId: "uuid-alice",
-	author: "Alice",
-	body: "hi",
-	sentAt: 10,
-	isOutgoing: false,
-	isDeleted: false,
-});
-
-class RecordingStore implements MessageStore {
-	readonly ops: string[] = [];
-	failOn: string | null = null;
-
-	async listConversations(): Promise<readonly Conversation[]> {
-		return [];
-	}
-
-	async listMessages(): Promise<readonly Message[]> {
-		return [];
-	}
-
-	async search(): Promise<readonly Message[]> {
-		return [];
-	}
-
-	async upsertConversation(entry: Conversation): Promise<void> {
-		this.#record(`conversation:${entry.id}`);
-	}
-
-	async saveMessage(entry: Message): Promise<void> {
-		this.#record(`message:${entry.id}`);
-	}
-
-	async markMessageDeleted(_conversationId: string, messageId: string): Promise<void> {
-		this.#record(`deleted:${messageId}`);
-	}
-
-	async incrementUnread(conversationId: string, by: number): Promise<void> {
-		this.#record(`unread+${by}:${conversationId}`);
-	}
-
-	async markConversationRead(conversationId: string): Promise<void> {
-		this.#record(`read:${conversationId}`);
-	}
-
-	#record(op: string): void {
-		if (this.failOn !== null && op.startsWith(this.failOn)) {
-			throw new Error(`store refused ${op}`);
-		}
-		this.ops.push(op);
-	}
-}
-
-class FakeBackend implements SignalBackend {
-	started = 0;
-	stopped = 0;
-	readonly sent: Array<{ conversationId: string; body: string }> = [];
-	failStart = false;
-	#listeners = new Set<(event: BackendEvent) => void>();
-
-	async start(): Promise<void> {
-		this.started++;
-		if (this.failStart) {
-			throw new Error("subscribe failed");
-		}
-	}
-
-	async stop(): Promise<void> {
-		this.stopped++;
-	}
-
-	async sendMessage(
-		conversationId: string,
-		body: string,
-	): Promise<{ timestamp: number | undefined }> {
-		this.sent.push({ conversationId, body });
-		return { timestamp: 1_760_000_000_500 };
-	}
-
-	subscribe(listener: (event: BackendEvent) => void): () => void {
-		this.#listeners.add(listener);
-		return () => {
-			this.#listeners.delete(listener);
-		};
-	}
-
-	emit(event: BackendEvent): void {
-		for (const listener of this.#listeners) {
-			listener(event);
-		}
-	}
-
-	get listenerCount(): number {
-		return this.#listeners.size;
-	}
-}
+import { conversation, FakeBackend, message, RecordingStore } from "./helpers/session-fakes";
 
 describe("createSession", () => {
 	test("persists a received message and notifies listeners", async () => {
@@ -241,6 +134,34 @@ describe("createSession", () => {
 		expect(store.ops).toEqual([]);
 	});
 
+	test("marks read and notifies when something was actually unread", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		const session = createSession({ store, backend });
+		let changes = 0;
+		session.onChange(() => {
+			changes++;
+		});
+		store.unread.set("uuid-alice", 2);
+
+		await session.markRead("uuid-alice");
+
+		expect(changes).toBe(1);
+	});
+
+	test("a replayed message does not count twice", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		const session = createSession({ store, backend });
+
+		backend.emit({ kind: "message", message: message("m1") });
+		await session.flush();
+		backend.emit({ kind: "message", message: message("m1") });
+		await session.flush();
+
+		expect(store.ops).toEqual(["message:m1", "unread+1:uuid-alice", "message:m1"]);
+	});
+
 	test("does not increment unread for your own message", async () => {
 		const store = new RecordingStore();
 		const backend = new FakeBackend();
@@ -267,7 +188,8 @@ describe("createSession", () => {
 		await session.markRead("uuid-alice");
 
 		expect(store.ops).toEqual(["read:uuid-alice"]);
-		expect(changes).toBe(1);
+		// nothing was unread, so no change: notifying here is what looped the UI
+		expect(changes).toBe(0);
 	});
 
 	test("stop unsubscribes before stopping the backend", async () => {

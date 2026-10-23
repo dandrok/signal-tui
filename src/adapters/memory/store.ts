@@ -63,22 +63,24 @@ export class InMemoryStore implements MessageStore {
 		this.#conversations[index] = { ...existing, unreadCount: existing.unreadCount + by };
 	}
 
-	async markConversationRead(conversationId: ConversationId): Promise<void> {
+	async markConversationRead(conversationId: ConversationId): Promise<boolean> {
 		const index = this.#conversations.findIndex((entry) => entry.id === conversationId);
 		const existing = this.#conversations[index];
 		if (existing === undefined || existing.unreadCount === 0) {
-			return;
+			return false;
 		}
 		this.#conversations[index] = { ...existing, unreadCount: 0 };
+		return true;
 	}
 
-	async saveMessage(message: Message): Promise<void> {
+	async saveMessage(message: Message): Promise<{ readonly inserted: boolean }> {
 		const index = this.#messages.findIndex((existing) => existing.id === message.id);
 		if (index === -1) {
 			this.#messages.push(message);
-			return;
+			return { inserted: true };
 		}
 		this.#messages[index] = message;
+		return { inserted: false };
 	}
 
 	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {

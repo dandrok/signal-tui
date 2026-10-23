@@ -200,13 +200,21 @@ export class SqliteMessageStore implements MessageStore {
 			.run(by, conversationId);
 	}
 
-	async markConversationRead(conversationId: ConversationId): Promise<void> {
-		this.#db
-			.query<null, [string]>("UPDATE conversations SET unread_count = 0 WHERE id = ?1")
+	async markConversationRead(conversationId: ConversationId): Promise<boolean> {
+		const result = this.#db
+			.query<null, [string]>(
+				// The guard makes the result meaningful: an already-read conversation
+				// reports no change, which is what stops the UI feedback loop.
+				"UPDATE conversations SET unread_count = 0 WHERE id = ?1 AND unread_count > 0",
+			)
 			.run(conversationId);
+		return result.changes > 0;
 	}
 
-	async saveMessage(message: Message): Promise<void> {
+	async saveMessage(message: Message): Promise<{ readonly inserted: boolean }> {
+		const existing = this.#db
+			.query<{ id: string }, [string]>("SELECT id FROM messages WHERE id = ?1")
+			.get(message.id);
 		this.#db
 			.query<null, [string, string, string, string, number, number, number]>(
 				`INSERT INTO messages (id, conversation_id, author, body, sent_at, is_outgoing, is_deleted)
@@ -227,6 +235,7 @@ export class SqliteMessageStore implements MessageStore {
 				message.isOutgoing ? 1 : 0,
 				message.isDeleted ? 1 : 0,
 			);
+		return { inserted: existing === null };
 	}
 
 	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {

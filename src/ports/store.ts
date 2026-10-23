@@ -20,9 +20,10 @@ export interface MessageWriter {
 	upsertConversation(conversation: Conversation): Promise<void>;
 	/** Adds to the unread count; incoming messages only. */
 	incrementUnread(conversationId: ConversationId, by: number): Promise<void>;
-	/** Clears the unread count, e.g. when the conversation is opened. */
-	markConversationRead(conversationId: ConversationId): Promise<void>;
-	saveMessage(message: Message): Promise<void>;
+	/** Clears the unread count. Resolves true when something actually changed. */
+	markConversationRead(conversationId: ConversationId): Promise<boolean>;
+	/** Upserts a message; `inserted` is false when it was already cached. */
+	saveMessage(message: Message): Promise<{ readonly inserted: boolean }>;
 	/** Marks a message as deleted; a no-op when the message is not cached. */
 	markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void>;
 }

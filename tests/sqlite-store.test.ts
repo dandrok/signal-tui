@@ -83,8 +83,8 @@ describe("SqliteMessageStore", () => {
 		const store = open();
 		await store.upsertConversation(conversation());
 
-		await store.saveMessage(message({ body: "typo here" }));
-		await store.saveMessage(message({ body: "typo fixed" }));
+		expect(await store.saveMessage(message({ body: "typo here" }))).toEqual({ inserted: true });
+		expect(await store.saveMessage(message({ body: "typo fixed" }))).toEqual({ inserted: false });
 
 		const saved = await store.listMessages("uuid-alice");
 		expect(saved).toHaveLength(1);
@@ -149,8 +149,10 @@ describe("SqliteMessageStore", () => {
 		await store.incrementUnread("uuid-alice", 1);
 		expect((await store.listConversations())[0]?.unreadCount).toBe(2);
 
-		await store.markConversationRead("uuid-alice");
+		expect(await store.markConversationRead("uuid-alice")).toBe(true);
 		expect((await store.listConversations())[0]?.unreadCount).toBe(0);
+		// Already read: reporting "no change" is what stops the UI feedback loop.
+		expect(await store.markConversationRead("uuid-alice")).toBe(false);
 	});
 
 	test("leaves the unread count alone when metadata is updated", async () => {

@@ -51,12 +51,14 @@ export function createSession({ store, backend }: SessionDeps): Session {
 			case "conversation-updated":
 				await store.upsertConversation(event.conversation);
 				break;
-			case "message":
-				await store.saveMessage(event.message);
-				if (!event.message.isOutgoing) {
+			case "message": {
+				const { inserted } = await store.saveMessage(event.message);
+				// A replayed envelope must not count twice, so only a new row increments.
+				if (inserted && !event.message.isOutgoing) {
 					await store.incrementUnread(event.message.conversationId, 1);
 				}
 				break;
+			}
 			case "message-deleted":
 				await store.markMessageDeleted(event.conversationId, event.messageId);
 				break;
@@ -80,10 +82,18 @@ export function createSession({ store, backend }: SessionDeps): Session {
 		},
 		async markRead(conversationId: ConversationId): Promise<void> {
 			// Queued so it runs after any pending increment: opening a conversation
-			// while a message lands must end at zero, not one.
-			queue = queue.then(() => store.markConversationRead(conversationId)).catch(record);
+			// while a message lands must end at zero, not one. Notification happens
+			// only on a real change, otherwise listeners re-run markRead forever.
+			let changed = false;
+			queue = queue
+				.then(async () => {
+					changed = await store.markConversationRead(conversationId);
+				})
+				.catch(record);
 			await queue;
-			notify();
+			if (changed) {
+				notify();
+			}
 		},
 		async send(conversationId: ConversationId, body: string): Promise<void> {
 			const { timestamp } = await backend.sendMessage(conversationId, body);
