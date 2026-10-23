@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SqliteMessageStore } from "../src/adapters/sqlite/store";
@@ -23,6 +23,16 @@ const message = (overrides: Partial<Message> = {}): Message => ({
 	isDeleted: false,
 	...overrides,
 });
+
+/** Number of open file descriptors pointing at `needle`, to prove handles are released. */
+const openHandlesFor = (needle: string): number =>
+	readdirSync("/proc/self/fd").filter((fd) => {
+		try {
+			return readlinkSync(`/proc/self/fd/${fd}`).includes(needle);
+		} catch {
+			return false;
+		}
+	}).length;
 
 const opened: SqliteMessageStore[] = [];
 const open = (path = ":memory:"): SqliteMessageStore => {
@@ -119,6 +129,20 @@ describe("SqliteMessageStore", () => {
 
 	test("started at schema version 1", async () => {
 		expect(open().schemaVersion).toBe(1);
+	});
+
+	test.skipIf(!existsSync("/proc/self/fd"))("closes the handle when initialization fails", () => {
+		const dir = mkdtempSync(join(tmpdir(), "signal-tui-bad-"));
+		const path = join(dir, "corrupt.db");
+		writeFileSync(path, "this is not a sqlite database".repeat(32));
+
+		try {
+			expect(() => new SqliteMessageStore({ path })).toThrow();
+			// Construction threw, so nobody else can close the handle: it must be gone.
+			expect(openHandlesFor("corrupt.db")).toBe(0);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 
 	test("survives a reopen", async () => {

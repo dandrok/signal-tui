@@ -86,11 +86,18 @@ export class SqliteMessageStore implements MessageStore {
 		this.#messageLimit = options.messageLimit ?? DEFAULT_MESSAGE_LIMIT;
 		this.#searchLimit = options.searchLimit ?? DEFAULT_SEARCH_LIMIT;
 		this.#db = new Database(options.path, { create: true, strict: true });
-		this.#db.exec("PRAGMA foreign_keys = ON;");
-		if (options.path !== ":memory:") {
-			this.#db.exec("PRAGMA journal_mode = WAL;");
+
+		try {
+			this.#db.exec("PRAGMA foreign_keys = ON;");
+			if (options.path !== ":memory:") {
+				this.#db.exec("PRAGMA journal_mode = WAL;");
+			}
+			this.#migrate();
+		} catch (error) {
+			// Construction failed, so the caller never gets an instance to close.
+			this.#db.close();
+			throw error;
 		}
-		this.#migrate();
 	}
 
 	/** Applied schema version, useful for `doctor` output and tests. */
