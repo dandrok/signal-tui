@@ -9,6 +9,9 @@ export const conversation = (id = "uuid-alice"): Conversation => ({
 	lastActivityAt: 10,
 });
 
+/** Realistic conversation key: receipts resolve recipients as numbers or UUIDs. */
+export const DIRECT_ID = "4b1c9f1e-0000-4000-8000-000000000000";
+
 export const message = (id = "m1"): Message => ({
 	id,
 	conversationId: "uuid-alice",
@@ -27,8 +30,10 @@ export class RecordingStore implements MessageStore {
 		return [];
 	}
 
-	async listMessages(): Promise<readonly Message[]> {
-		return [];
+	readonly messages = new Map<string, Message[]>();
+
+	async listMessages(conversationId: string): Promise<readonly Message[]> {
+		return this.messages.get(conversationId) ?? [];
 	}
 
 	async search(): Promise<readonly Message[]> {
@@ -88,6 +93,20 @@ export class FakeBackend implements SignalBackend {
 
 	async stop(): Promise<void> {
 		this.stopped++;
+	}
+
+	readonly receipts: Array<{ recipient: string; timestamps: readonly number[]; type: string }> = [];
+	failReceipts = false;
+
+	async sendReceipt(
+		recipient: string,
+		timestamps: readonly number[],
+		type = "read",
+	): Promise<void> {
+		if (this.failReceipts) {
+			throw new Error("receipt rejected");
+		}
+		this.receipts.push({ recipient, timestamps, type });
 	}
 
 	async sendMessage(

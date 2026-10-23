@@ -1,5 +1,5 @@
 import type { ConversationId } from "../../domain/types";
-import type { BackendEvent, SendResult, SignalBackend } from "../../ports/backend";
+import type { BackendEvent, ReceiptType, SendResult, SignalBackend } from "../../ports/backend";
 import { JsonRpcClient } from "./json-rpc-client";
 import { mapEnvelope } from "./map-envelope";
 import { createProcessStream } from "./process-stream";
@@ -118,6 +118,22 @@ export class SignalCliBackend implements SignalBackend {
 		const result = await this.#client.request<{ timestamp?: unknown } | undefined>("send", params);
 		const timestamp = result?.timestamp;
 		return { timestamp: typeof timestamp === "number" ? timestamp : undefined };
+	}
+
+	async sendReceipt(
+		recipient: ConversationId,
+		timestamps: readonly number[],
+		type: ReceiptType = "read",
+	): Promise<void> {
+		if (timestamps.length === 0) {
+			return;
+		}
+		// `--target-timestamp` maps to targetTimestamp; the CLI takes one or more.
+		await this.#client.request("sendReceipt", {
+			recipient,
+			targetTimestamp: [...timestamps],
+			type,
+		});
 	}
 
 	subscribe(listener: (event: BackendEvent) => void): () => void {
