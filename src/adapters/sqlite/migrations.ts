@@ -54,4 +54,25 @@ export const migrations: readonly Migration[] = [
 			END;
 		`,
 	},
+	{
+		version: 2,
+		// Files are stored beside their message rather than in a JSON column so a
+		// deleted message can drop them without rewriting its row, and so the FTS
+		// index stays exactly what it was: bodies only.
+		sql: `
+			CREATE TABLE attachments (
+				message_id    TEXT    NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+				position      INTEGER NOT NULL,
+				id            TEXT,
+				content_type  TEXT,
+				filename      TEXT,
+				size          INTEGER,
+				caption       TEXT,
+				is_voice_note INTEGER NOT NULL DEFAULT 0,
+				PRIMARY KEY (message_id, position)
+			);
+
+			CREATE INDEX attachments_message ON attachments(message_id);
+		`,
+	},
 ];

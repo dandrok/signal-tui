@@ -1,4 +1,4 @@
-import type { Conversation, Message } from "./types";
+import type { Attachment, Conversation, Message } from "./types";
 
 /** Two-digit 24h clock in the local timezone, e.g. 09:04. */
 export function formatClock(timestampMs: number): string {
@@ -41,6 +41,50 @@ export function describeAuthor(message: Message): string {
 /** Body text safe to render, honouring deletions. */
 export function describeBody(message: Message): string {
 	return message.isDeleted ? "message deleted" : message.body;
+}
+
+/** Stand-in body for a message that carried only files. */
+export const ATTACHMENT_BODY_PLACEHOLDER = "[attachment]";
+
+/** Attachments of a message, without every caller repeating `?? []`. */
+export function attachmentsOf(message: Message): readonly Attachment[] {
+	return message.attachments ?? [];
+}
+
+/** 1536 → "1.5 KB", 4096 → "4.0 KB", 5242880 → "5.0 MB". */
+export function formatBytes(bytes: number): string {
+	if (!Number.isFinite(bytes) || bytes < 0) {
+		return "";
+	}
+	if (bytes < 1024) {
+		return `${bytes} B`;
+	}
+	const units = ["KB", "MB", "GB", "TB"];
+	let value = bytes / 1024;
+	let unit = 0;
+	while (value >= 1024 && unit < units.length - 1) {
+		value /= 1024;
+		unit += 1;
+	}
+	return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
+}
+
+/**
+ * One attachment as a single readable line. signal-cli reports the downloaded
+ * path, so the label shows the last segment; a file with no name falls back to
+ * its type, and a voice note says what it is.
+ */
+export function describeAttachment(attachment: Attachment): string {
+	const path = attachment.filename ?? "";
+	const name = path.split("/").pop() ?? "";
+	const label =
+		name.length > 0
+			? name
+			: attachment.isVoiceNote
+				? "voice note"
+				: (attachment.contentType ?? "attachment");
+	const size = attachment.size === null ? "" : ` (${formatBytes(attachment.size)})`;
+	return `${label}${size}`;
 }
 
 /**

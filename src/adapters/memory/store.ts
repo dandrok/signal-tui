@@ -4,6 +4,12 @@ import { demoConversations, demoMessages } from "./demo-data";
 
 const DEFAULT_LIMIT = 200;
 
+/** Same shape the SQLite adapter returns: always an array, never a missing field. */
+const withFiles = (message: Message): Message => ({
+	...message,
+	attachments: message.attachments ?? [],
+});
+
 /** Test/demo store. Shape-compatible with the SQLite adapter. */
 export class InMemoryStore implements MessageStore {
 	#conversations: Conversation[] = [...demoConversations];
@@ -19,11 +25,12 @@ export class InMemoryStore implements MessageStore {
 	): Promise<readonly Message[]> {
 		return this.#messages
 			.filter((message) => message.conversationId === conversationId)
-			.slice(-limit);
+			.slice(-limit)
+			.map(withFiles);
 	}
 
 	async listAllMessages(conversationId: ConversationId): Promise<readonly Message[]> {
-		return this.#messages.filter((entry) => entry.conversationId === conversationId);
+		return this.#messages.filter((entry) => entry.conversationId === conversationId).map(withFiles);
 	}
 
 	async search(query: string, limit = 20): Promise<readonly Message[]> {
@@ -36,6 +43,7 @@ export class InMemoryStore implements MessageStore {
 				// A deleted message must not be discoverable through search.
 				.filter((message) => !message.isDeleted && message.body.toLowerCase().includes(needle))
 				.slice(0, limit)
+				.map(withFiles)
 		);
 	}
 
@@ -96,6 +104,8 @@ export class InMemoryStore implements MessageStore {
 		if (existing === undefined || existing.conversationId !== conversationId) {
 			return;
 		}
-		this.#messages[index] = { ...existing, isDeleted: true, body: "" };
+		// Attachments go with the text: a deleted message should stop pointing at
+		// files, same as the SQLite adapter drops their rows.
+		this.#messages[index] = { ...existing, isDeleted: true, body: "", attachments: [] };
 	}
 }

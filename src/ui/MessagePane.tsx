@@ -1,5 +1,13 @@
 import { Box, Text } from "ink";
-import { describeAuthor, describeBody, displayName, formatClock } from "../domain/format";
+import {
+	ATTACHMENT_BODY_PLACEHOLDER,
+	attachmentsOf,
+	describeAttachment,
+	describeAuthor,
+	describeBody,
+	displayName,
+	formatClock,
+} from "../domain/format";
 import type { Conversation, Message } from "../domain/types";
 
 export interface MessagePaneProps {
@@ -31,9 +39,34 @@ export function MessagePane({ conversation, messages, height }: MessagePaneProps
 						<Text dimColor>{formatClock(message.sentAt)} </Text>
 						<Text bold>{describeAuthor(message)}</Text>
 					</Text>
-					<Text dimColor={message.isDeleted}>{describeBody(message)}</Text>
+					<MessageBody message={message} />
 				</Box>
 			))}
 		</Box>
+	);
+}
+
+function MessageBody({ message }: { readonly message: Message }) {
+	const attachments = attachmentsOf(message);
+	// A message that only carried files has a stand-in body: showing both
+	// "[attachment]" and the file itself would say the same thing twice. A deleted
+	// message always shows its notice, whatever its body used to be.
+	const showBody =
+		message.isDeleted ||
+		(message.body.length > 0 &&
+			!(attachments.length > 0 && message.body === ATTACHMENT_BODY_PLACEHOLDER));
+
+	return (
+		<>
+			{showBody ? <Text dimColor={message.isDeleted}>{describeBody(message)}</Text> : null}
+			{message.isDeleted
+				? null
+				: attachments.map((attachment, index) => (
+						// biome-ignore lint/suspicious/noArrayIndexKey: files render in the order signal-cli listed them and are replaced as a set, so a position is a stable key here
+						<Text key={`${message.id}:${index}`} dimColor>
+							📎 {describeAttachment(attachment)}
+						</Text>
+					))}
+		</>
 	);
 }

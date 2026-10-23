@@ -86,6 +86,7 @@ describe("mapEnvelope", () => {
 			sentAt: 1_760_000_000_000,
 			isOutgoing: false,
 			isDeleted: false,
+			attachments: [],
 		});
 		expect(mapped.conversation).toEqual({
 			id: "b5b0c3d2-0000-4000-8000-000000000000",
@@ -162,6 +163,7 @@ describe("mapEnvelope", () => {
 			sentAt: 1_760_000_000_000,
 			isOutgoing: true,
 			isDeleted: false,
+			attachments: [],
 		});
 		// No name: a transcript only knows the destination id.
 		expect(mapped.conversation?.name).toBe("");

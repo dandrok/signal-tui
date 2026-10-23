@@ -75,6 +75,33 @@ export const demoMessages: readonly Message[] = [
 		isDeleted: true,
 	},
 	{
+		id: "m-9",
+		conversationId: "c-signal-devs",
+		author: "Marta",
+		body: "",
+		sentAt: minutes(4),
+		isOutgoing: false,
+		isDeleted: false,
+		attachments: [
+			{
+				id: "a-1",
+				contentType: "image/png",
+				filename: "/home/you/.local/share/signal-cli/attachments/screenshot-limit.png",
+				size: 412_000,
+				caption: "the 4 MiB limit, measured",
+				isVoiceNote: false,
+			},
+			{
+				id: "a-2",
+				contentType: "audio/ogg",
+				filename: null,
+				size: 61_440,
+				caption: null,
+				isVoiceNote: true,
+			},
+		],
+	},
+	{
 		id: "m-8",
 		conversationId: "c-note-to-self",
 		author: "You",
