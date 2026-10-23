@@ -23,7 +23,13 @@ Then, on npmjs.com → `signal-tui` → **Settings → Trusted Publisher**:
 | Organization or user | `dandrok` |
 | Repository | `signal-tui` |
 | Workflow filename | `release.yml` |
+| Environment name | `npm-publish` |
 | Allowed actions | tick **`npm publish`** (staged publish is always allowed) |
+
+The environment field matters: the workflow publishes inside the `npm-publish`
+environment, and binding it here is what stops an edited branch workflow from
+publishing under the same identity. In GitHub → Settings → **Environments**,
+create `npm-publish` and add a deployment branch rule allowing only `main`.
 
 Finally delete the `NPM_TOKEN` repository secret if one was created — from here on
 the workflow authenticates through OIDC and generates provenance.
@@ -42,9 +48,13 @@ and workflow run.
 
 | When | What to do |
 |---|---|
-| within 72 h | `npm unpublish signal-tui@<version>` |
-| after that | `npm deprecate signal-tui@<version> "reason"`, then publish a fixed version |
+| within 72 h, **and** nothing depends on the package | `npm unpublish signal-tui@<version>` |
+| later, **and** nothing depends on it, < 300 weekly downloads, single owner | unpublish is still permitted |
+| otherwise | `npm deprecate signal-tui@<version> "reason"`, then publish a fixed version |
 | workflow failed halfway | nothing was published unless `npm publish` succeeded; fix and re-run |
+
+Two hard rules from npm's policy: a version number can never be reused, and
+unpublishing all versions blocks the name for 24 hours.
 
 ## Notes
 

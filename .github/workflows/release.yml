@@ -11,6 +11,12 @@ on:
 
 jobs:
   publish:
+    # `workflow_dispatch` lets anyone with write access pick a branch, so the job
+    # itself refuses anything that is not main. The environment adds the second
+    # lock: deployment rules can restrict it to main, and the npm trusted
+    # publisher is bound to this environment name.
+    if: github.ref == 'refs/heads/main'
+    environment: npm-publish
     runs-on: ubuntu-latest # trusted publishing needs a GitHub-hosted runner
     permissions:
       contents: read
