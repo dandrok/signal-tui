@@ -4,17 +4,20 @@ import { demoConversations, demoMessages } from "./demo-data";
 
 const DEFAULT_LIMIT = 200;
 
-/** Test/demo store. Shape-compatible with the future SQLite adapter. */
+/** Test/demo store. Shape-compatible with the SQLite adapter. */
 export class InMemoryStore implements MessageStore {
+	#conversations: Conversation[] = [...demoConversations];
+	#messages: Message[] = [...demoMessages];
+
 	async listConversations(): Promise<readonly Conversation[]> {
-		return demoConversations;
+		return [...this.#conversations].sort((a, b) => b.lastActivityAt - a.lastActivityAt);
 	}
 
 	async listMessages(
 		conversationId: ConversationId,
 		limit = DEFAULT_LIMIT,
 	): Promise<readonly Message[]> {
-		return demoMessages
+		return this.#messages
 			.filter((message) => message.conversationId === conversationId)
 			.slice(-limit);
 	}
@@ -24,8 +27,26 @@ export class InMemoryStore implements MessageStore {
 		if (needle.length === 0) {
 			return [];
 		}
-		return demoMessages
+		return this.#messages
 			.filter((message) => message.body.toLowerCase().includes(needle))
 			.slice(0, limit);
+	}
+
+	async upsertConversation(conversation: Conversation): Promise<void> {
+		const index = this.#conversations.findIndex((existing) => existing.id === conversation.id);
+		if (index === -1) {
+			this.#conversations.push(conversation);
+			return;
+		}
+		this.#conversations[index] = conversation;
+	}
+
+	async saveMessage(message: Message): Promise<void> {
+		const index = this.#messages.findIndex((existing) => existing.id === message.id);
+		if (index === -1) {
+			this.#messages.push(message);
+			return;
+		}
+		this.#messages[index] = message;
 	}
 }
