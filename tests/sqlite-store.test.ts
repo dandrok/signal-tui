@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdtempSync,
+	readdirSync,
+	readlinkSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SqliteMessageStore } from "../src/adapters/sqlite/store";
@@ -151,6 +159,15 @@ describe("SqliteMessageStore", () => {
 
 	test("started at schema version 1", async () => {
 		expect(open().schemaVersion).toBe(1);
+	});
+
+	test.skipIf(process.platform !== "linux")("keeps the cache private to the owner", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "signal-tui-perm-"));
+		const path = join(dir, "cache.db");
+		opened.push(new SqliteMessageStore({ path }));
+
+		// 0600: bodies are plaintext, so other local users must not read them.
+		expect(statSync(path).mode & 0o777).toBe(0o600);
 	});
 
 	test.skipIf(!existsSync("/proc/self/fd"))("closes the handle when initialization fails", () => {

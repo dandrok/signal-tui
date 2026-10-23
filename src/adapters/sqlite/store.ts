@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { chmodSync } from "node:fs";
 import type { Conversation, ConversationId, Message, MessageId } from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
 import { migrations } from "./migrations";
@@ -91,6 +92,14 @@ export class SqliteMessageStore implements MessageStore {
 			this.#db.exec("PRAGMA foreign_keys = ON;");
 			if (options.path !== ":memory:") {
 				this.#db.exec("PRAGMA journal_mode = WAL;");
+				// Message bodies are plaintext: keep the cache private to this user.
+				// SQLite copies the database file's mode onto its -wal and -shm files,
+				// so setting it here covers those too.
+				try {
+					chmodSync(options.path, 0o600);
+				} catch {
+					// Non-POSIX filesystem: `doctor` reports the exposure instead.
+				}
 			}
 			this.#migrate();
 		} catch (error) {

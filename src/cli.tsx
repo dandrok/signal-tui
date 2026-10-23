@@ -46,7 +46,7 @@ async function startDemo(): Promise<Running> {
 }
 
 async function startLive(account: string, dbPath: string): Promise<Running> {
-	mkdirSync(dirname(dbPath), { recursive: true });
+	mkdirSync(dirname(dbPath), { recursive: true, mode: 0o700 });
 	const store = new SqliteMessageStore({ path: dbPath });
 
 	// Spawning happens here too: a missing signal-cli throws before start(), so

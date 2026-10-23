@@ -14,6 +14,7 @@ const probes = (overrides: Partial<Probes> = {}): Probes => ({
 	javaVersion: 'openjdk version "25.0.1" 2026-09-16',
 	accounts: ["+48123456789"],
 	dbWritable: true,
+	dbExposed: false,
 	dbPath: "/tmp/signal-tui/cache.db",
 	...overrides,
 });
@@ -46,7 +47,15 @@ describe("evaluateChecks", () => {
 		const checks = evaluateChecks(probes(), { account: "+48123456789" });
 
 		expect(hasFailures(checks)).toBe(false);
-		expect(checks.map((check) => check.status)).toEqual(["ok", "ok", "ok", "ok", "ok"]);
+		expect(checks.map((check) => check.name)).toEqual([
+			"bun runtime",
+			"signal-cli",
+			"java",
+			"linked account",
+			"cache database",
+			"cache permissions",
+		]);
+		expect(checks.every((check) => check.status === "ok")).toBe(true);
 	});
 
 	test("fails when signal-cli is missing, with an install hint", () => {
@@ -93,6 +102,14 @@ describe("evaluateChecks", () => {
 	test("fails when the cache directory is not usable", () => {
 		const checks = evaluateChecks(probes({ dbWritable: false }), {});
 		expect(find(checks, "cache database")?.status).toBe("fail");
+	});
+
+	test("warns when the cache is readable by other users", () => {
+		const checks = evaluateChecks(probes({ dbExposed: true }), {});
+		const perms = find(checks, "cache permissions");
+
+		expect(perms?.status).toBe("warn");
+		expect(perms?.hint).toContain("chmod 600");
 	});
 
 	test("skips the account check when no account was given", () => {

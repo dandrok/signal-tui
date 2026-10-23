@@ -1,4 +1,4 @@
-import { accessSync, constants, mkdirSync } from "node:fs";
+import { accessSync, constants, mkdirSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 
 export interface CommandResult {
@@ -20,6 +20,8 @@ export interface Probes {
 	readonly accounts: readonly string[] | null;
 	readonly dbWritable: boolean;
 	readonly dbPath: string;
+	/** True when the cache (if it exists) is readable by group or others. */
+	readonly dbExposed: boolean;
 }
 
 export type CheckStatus = "ok" | "warn" | "fail";
@@ -132,6 +134,23 @@ export function evaluateChecks(
 		hint: probes.dbWritable ? undefined : "the directory is not writable",
 	});
 
+	if (probes.dbWritable) {
+		checks.push(
+			probes.dbExposed
+				? {
+						name: "cache permissions",
+						status: "warn",
+						detail: "readable by other local users",
+						hint: `message bodies are stored in plaintext: chmod 600 ${probes.dbPath}`,
+					}
+				: {
+						name: "cache permissions",
+						status: "ok",
+						detail: "owner-only",
+					},
+		);
+	}
+
 	return checks;
 }
 
@@ -190,11 +209,18 @@ export async function collectProbes(
 	let dbWritable = false;
 	try {
 		const directory = dirname(options.dbPath);
-		mkdirSync(directory, { recursive: true });
+		mkdirSync(directory, { recursive: true, mode: 0o700 });
 		accessSync(directory, constants.W_OK);
 		dbWritable = true;
 	} catch {
 		dbWritable = false;
+	}
+
+	let dbExposed = false;
+	try {
+		dbExposed = (statSync(options.dbPath).mode & 0o077) !== 0;
+	} catch {
+		dbExposed = false; // not created yet
 	}
 
 	return {
@@ -204,5 +230,6 @@ export async function collectProbes(
 		accounts,
 		dbWritable,
 		dbPath: options.dbPath,
+		dbExposed,
 	};
 }
