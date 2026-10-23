@@ -34,6 +34,7 @@
 	"scripts": {
 		"start": "bun run src/cli.tsx",
 		"dev": "bun run src/cli.tsx",
+		"link": "bun run src/link.ts",
 		"test": "bun test",
 		"typecheck": "bun check",
 		"lint": "biome check .",
