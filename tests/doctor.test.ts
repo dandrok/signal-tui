@@ -11,7 +11,7 @@ import {
 const probes = (overrides: Partial<Probes> = {}): Probes => ({
 	bunVersion: "1.4.4",
 	signalCliVersion: "signal-cli 0.14.9",
-	javaVersion: 'openjdk version "21.0.4" 2026-07-16',
+	javaVersion: 'openjdk version "25.0.1" 2026-09-16',
 	accounts: ["+48123456789"],
 	dbWritable: true,
 	dbPath: "/tmp/signal-tui/cache.db",
@@ -36,7 +36,7 @@ describe("parseVersion / atLeast", () => {
 		expect(atLeast([1, 4, 4], [1, 4, 4])).toBe(true);
 		expect(atLeast([1, 10, 0], [1, 9, 9])).toBe(true);
 		expect(atLeast([1, 4, 3], [1, 4, 4])).toBe(false);
-		expect(atLeast([21, 0, 0], [21, 0, 0])).toBe(true);
+		expect(atLeast([25, 0, 0], [25, 0, 0])).toBe(true);
 		expect(atLeast(null, [1, 0, 0])).toBe(false);
 	});
 });
@@ -62,7 +62,7 @@ describe("evaluateChecks", () => {
 		const java = find(checks, "java");
 
 		expect(java?.status).toBe("warn");
-		expect(java?.hint).toContain("21");
+		expect(java?.hint).toContain("25");
 	});
 
 	test("fails when the account is not linked", () => {
@@ -115,14 +115,14 @@ describe("collectProbes", () => {
 		const probes_ = await collectProbes(
 			runner({
 				"signal-cli --version": { code: 0, stdout: "signal-cli 0.14.9\n", stderr: "" },
-				"java -version": { code: 0, stdout: "", stderr: 'openjdk version "21.0.4" 2026-07-16\n' },
+				"java -version": { code: 0, stdout: "", stderr: 'openjdk version "25.0.1" 2026-09-16\n' },
 				"signal-cli listAccounts": { code: 0, stdout: "+48123456789\n+48999999999\n", stderr: "" },
 			}),
 			{ account: "+48123456789", dbPath: "/tmp/signal-tui-probe/cache.db", bunVersion: "1.4.4" },
 		);
 
 		expect(probes_.signalCliVersion).toBe("signal-cli 0.14.9");
-		expect(probes_.javaVersion).toContain("21.0.4");
+		expect(probes_.javaVersion).toContain("25.0.1");
 		expect(probes_.accounts).toEqual(["+48123456789", "+48999999999"]);
 		expect(probes_.dbWritable).toBe(true);
 	});

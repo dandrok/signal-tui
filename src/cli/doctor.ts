@@ -32,7 +32,7 @@ export interface Check {
 }
 
 const MINIMUM_BUN: readonly [number, number, number] = [1, 4, 4];
-const MINIMUM_JAVA: readonly [number, number, number] = [21, 0, 0];
+const MINIMUM_JAVA: readonly [number, number, number] = [25, 0, 0];
 
 export function parseVersion(text: string | null): readonly [number, number, number] | null {
 	if (text === null) {
@@ -95,7 +95,7 @@ export function evaluateChecks(
 			name: "java",
 			status: probes.signalCliVersion === null ? "warn" : "fail",
 			detail: "not found on PATH",
-			hint: `signal-cli needs a JRE ${MINIMUM_JAVA[0]}+ (unless you use a native build)`,
+			hint: `signal-cli needs a JRE ${MINIMUM_JAVA[0]}+, or use the GraalVM native build which bundles it`,
 		});
 	} else {
 		checks.push({
@@ -104,7 +104,7 @@ export function evaluateChecks(
 			detail: probes.javaVersion,
 			hint: atLeast(java, MINIMUM_JAVA)
 				? undefined
-				: `signal-cli 0.14+ needs Java ${MINIMUM_JAVA[0]}+; upgrade before linking`,
+				: `signal-cli 0.14+ needs Java ${MINIMUM_JAVA[0]}+; alternatively use the -Linux-native release`,
 		});
 	}
 
