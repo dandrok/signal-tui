@@ -32,9 +32,11 @@ signal-cli listAccounts                       # prints your number
 bun run src/cli.tsx --account +48123456789    # cache: ~/.local/share/signal-tui/cache.db
 ```
 
-`bun run link` exists because `signal-cli link` draws its QR with Unicode block
-characters, which many terminal fonts render as `?` — the phone then sees nothing.
-The helper takes the link URI and renders a PNG instead.
+`bun run link` exists because the QR that `signal-cli link` draws in the terminal is
+unusable: the GraalVM native build ships a US-ASCII-only charset and therefore emits
+literal `?` bytes instead of block glyphs (verified by hexdumping its pty output;
+`-Dfile.encoding=UTF-8` does not fix it). The helper reads the `sgnl://` URI that
+signal-cli prints alongside the art and renders a PNG instead.
 
 The cache stores message bodies in plaintext, so it is created `0600` inside a `0700`
 directory; `--db` refuses a directory other users can write to.

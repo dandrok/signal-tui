@@ -1,10 +1,14 @@
 /**
  * Linking a new device to an existing Signal account.
  *
- * `signal-cli link` prints the QR as Unicode block art, which many terminal
- * fonts cannot render (they show `?`), and the phone then sees nothing. The same
- * command also prints the `sgnl://linkdevice?…` URI as plain text, so we can
- * render a real image from it instead of relying on the font.
+ * `signal-cli link` prints the QR as Unicode block art. The GraalVM native build
+ * comes with a US-ASCII-only charset, so it writes literal `?` bytes instead of
+ * the block glyphs — verified by hexdumping its output under a pty, and
+ * `-Dfile.encoding=UTF-8` does not change it (the tables are not in the image).
+ * The font and locale are irrelevant; the art cannot be rendered at all.
+ *
+ * The same command prints the `sgnl://linkdevice?…` URI as plain text on the line
+ * before, so we render a real image from that instead.
  */
 
 export interface LinkEvent {
