@@ -56,7 +56,9 @@ interface Target {
 export function conversationTarget(envelope: Envelope): Target | null {
 	const group = envelope.dataMessage?.groupInfo;
 	if (group !== undefined) {
-		return { id: group.groupId, name: group.groupName ?? "Group", kind: "group" };
+		// Blank when unnamed: the stores treat a blank name as "unknown" and keep a
+		// name learned earlier, where a placeholder like "Group" would overwrite it.
+		return { id: group.groupId, name: group.groupName ?? "", kind: "group" };
 	}
 
 	const id = peerId(envelope);
@@ -90,7 +92,7 @@ const EMPTY: MappedEnvelope = {
 const groupTarget = (groupInfo: DataMessage["groupInfo"]): Target | null =>
 	groupInfo === undefined
 		? null
-		: { id: groupInfo.groupId, name: groupInfo.groupName ?? "Group", kind: "group" };
+		: { id: groupInfo.groupId, name: groupInfo.groupName ?? "", kind: "group" };
 
 /** Incoming message: the sender identifies the conversation. */
 function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {

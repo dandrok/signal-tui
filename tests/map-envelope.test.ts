@@ -58,9 +58,9 @@ describe("conversationTarget", () => {
 		});
 	});
 
-	test("falls back to a generic label for unnamed groups", () => {
+	test("leaves the name blank for an unnamed group, so a known name survives", () => {
 		const unnamed = withData({ timestamp: 1, message: "hi", groupInfo: { groupId: "group-2" } });
-		expect(conversationTarget(unnamed)).toEqual({ id: "group-2", name: "Group", kind: "group" });
+		expect(conversationTarget(unnamed)).toEqual({ id: "group-2", name: "", kind: "group" });
 	});
 
 	test("keys a direct message by peer identity", () => {
@@ -190,6 +190,17 @@ describe("mapEnvelope", () => {
 			lastActivityAt: 5,
 		});
 		expect(mapped.conversationKind).toBe("group");
+	});
+
+	test("does not rename a group from a transcript without a group name", () => {
+		const envelope: Envelope = {
+			timestamp: 1,
+			syncMessage: {
+				sentMessage: { timestamp: 5, message: "hi all", groupInfo: { groupId: "group-9" } },
+			},
+		};
+
+		expect(mapEnvelope(envelope).conversation?.name).toBe("");
 	});
 
 	test("ignores a sync transcript without a destination", () => {

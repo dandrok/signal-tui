@@ -181,8 +181,8 @@ export class SqliteMessageStore implements MessageStore {
 				`INSERT INTO conversations (id, name, unread_count, last_activity_at)
 				 VALUES (?1, ?2, ?3, ?4)
 				 ON CONFLICT(id) DO UPDATE SET
-					name = CASE WHEN excluded.name = '' THEN conversations.name ELSE excluded.name END,
-					unread_count = excluded.unread_count,
+					name = CASE WHEN TRIM(excluded.name) = '' THEN conversations.name ELSE excluded.name END,
+					unread_count = MAX(conversations.unread_count, excluded.unread_count),
 					last_activity_at = MAX(conversations.last_activity_at, excluded.last_activity_at)`,
 			)
 			.run(

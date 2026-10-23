@@ -1,83 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { RpcCaller } from "../src/adapters/signal/signal-cli-backend";
-import {
-	defaultCommand,
-	SignalCliBackend,
-	unwrapNotification,
-} from "../src/adapters/signal/signal-cli-backend";
-import type { BackendEvent } from "../src/ports/backend";
-
-class FakeRpc implements RpcCaller {
-	readonly requests: Array<{ method: string; params?: unknown }> = [];
-	readonly results = new Map<string, unknown>();
-	readonly failing = new Set<string>();
-	closedWith: string | null = null;
-
-	#handler: ((method: string, params: unknown) => void) | null = null;
-
-	async request<T = unknown>(method: string, params?: unknown): Promise<T> {
-		this.requests.push(params === undefined ? { method } : { method, params });
-		if (this.failing.has(method)) {
-			throw new Error(`${method} failed`);
-		}
-		return this.results.get(method) as T;
-	}
-
-	onNotification(handler: (method: string, params: unknown) => void): () => void {
-		this.#handler = handler;
-		return () => {
-			this.#handler = null;
-		};
-	}
-
-	close(reason?: string): void {
-		this.closedWith = reason ?? "closed";
-		this.#handler = null;
-	}
-
-	emit(method: string, params: unknown): void {
-		this.#handler?.(method, params);
-	}
-
-	get hasListener(): boolean {
-		return this.#handler !== null;
-	}
-
-	sent(method: string): Array<{ method: string; params?: unknown }> {
-		return this.requests.filter((request) => request.method === method);
-	}
-}
-
-const ACCOUNT = "+10000000000";
-
-const envelope = (dataMessage: Record<string, unknown>) => ({
-	sourceNumber: ACCOUNT,
-	sourceUuid: "uuid-alice",
-	sourceName: "Alice",
-	sourceDevice: 1,
-	timestamp: 1,
-	dataMessage,
-});
-
-/** Auto mode: the envelope sits directly in params. */
-const directParams = () => ({
-	envelope: envelope({ timestamp: 1_760_000_000_000, message: "hi" }),
-});
-
-/** Manual mode: the envelope is wrapped in a subscription response. */
-const subscriptionParams = () => ({
-	subscription: 0,
-	result: { account: ACCOUNT, envelope: envelope({ timestamp: 1_760_000_000_000, message: "hi" }) },
-});
-
-const setup = () => {
-	const rpc = new FakeRpc();
-	rpc.results.set("subscribeReceive", 0);
-	const backend = new SignalCliBackend(rpc, { account: ACCOUNT });
-	const events: BackendEvent[] = [];
-	backend.subscribe((event) => events.push(event));
-	return { rpc, backend, events };
-};
+import { defaultCommand, unwrapNotification } from "../src/adapters/signal/signal-cli-backend";
+import { ACCOUNT, directParams, envelope, setup, subscriptionParams } from "./helpers/fake-rpc";
 
 describe("defaultCommand", () => {
 	test("puts the subcommand option after the command name", () => {
@@ -223,15 +146,23 @@ describe("SignalCliBackend", () => {
 		]);
 	});
 
-	test("sends a direct message with the account and recipient", async () => {
+	test("sends a direct message and reports the server timestamp", async () => {
 		const { rpc, backend } = setup();
+		rpc.results.set("send", { timestamp: 1_760_000_000_500 });
 
-		await backend.sendMessage("uuid-alice", "hello");
+		const result = await backend.sendMessage("uuid-alice", "hello");
 
 		expect(rpc.requests.at(-1)).toEqual({
 			method: "send",
 			params: { recipient: ["uuid-alice"], message: "hello" },
 		});
+		expect(result).toEqual({ timestamp: 1_760_000_000_500 });
+	});
+
+	test("reports no timestamp when the peer omits one", async () => {
+		const { backend } = setup();
+
+		expect(await backend.sendMessage("uuid-alice", "hello")).toEqual({ timestamp: undefined });
 	});
 
 	test("sends a group message with groupId once the group is known", async () => {

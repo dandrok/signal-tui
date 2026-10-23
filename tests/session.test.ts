@@ -75,8 +75,12 @@ class FakeBackend implements SignalBackend {
 		this.stopped++;
 	}
 
-	async sendMessage(conversationId: string, body: string): Promise<void> {
+	async sendMessage(
+		conversationId: string,
+		body: string,
+	): Promise<{ timestamp: number | undefined }> {
 		this.sent.push({ conversationId, body });
+		return { timestamp: 1_760_000_000_500 };
 	}
 
 	subscribe(listener: (event: BackendEvent) => void): () => void {
@@ -210,7 +214,8 @@ describe("createSession", () => {
 		expect(backend.sent).toEqual([{ conversationId: "uuid-alice", body: "hello" }]);
 		expect(store.ops).toHaveLength(2);
 		expect(store.ops[0]).toBe("conversation:uuid-alice");
-		expect(store.ops[1]).toMatch(/^message:uuid-alice:\d+$/);
+		// the server timestamp, not a local clock reading: deletes refer to it
+		expect(store.ops[1]).toBe("message:uuid-alice:1760000000500");
 		expect(changes).toBe(1);
 	});
 

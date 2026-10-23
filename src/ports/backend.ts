@@ -13,9 +13,18 @@ export type BackendEvent =
  * Live transport port. The first adapter wraps `signal-cli` JSON-RPC;
  * a later one can speak to a Rust backend without touching the app layer.
  */
+/** What the transport knows about a sent message. */
+export interface SendResult {
+	/**
+	 * Server timestamp assigned to the message. It is the identity every other
+	 * device sees, so deletes and later sync transcripts refer to it.
+	 */
+	readonly timestamp: number | undefined;
+}
+
 export interface SignalBackend {
 	start(): Promise<void>;
 	stop(): Promise<void>;
-	sendMessage(conversationId: ConversationId, body: string): Promise<void>;
+	sendMessage(conversationId: ConversationId, body: string): Promise<SendResult>;
 	subscribe(listener: (event: BackendEvent) => void): () => void;
 }

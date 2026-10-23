@@ -74,11 +74,13 @@ export function createSession({ store, backend }: SessionDeps): Session {
 			await backend.stop();
 		},
 		async send(conversationId: ConversationId, body: string): Promise<void> {
-			await backend.sendMessage(conversationId, body);
+			const { timestamp } = await backend.sendMessage(conversationId, body);
 
 			// Echo locally: Signal does not send a transcript back to the device that
 			// wrote the message, so without this your own message never appears.
-			const sentAt = Date.now();
+			// The server timestamp is the message's identity everywhere else, so a
+			// delete-for-everyone from another device can match it.
+			const sentAt = timestamp ?? Date.now();
 			queue = queue
 				.then(async () => {
 					await store.upsertConversation({

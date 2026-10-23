@@ -42,7 +42,10 @@ export class InMemoryStore implements MessageStore {
 		// An empty name means "unknown" (a sync transcript has only the destination
 		// id): never let it erase a name learned from an incoming message.
 		const name = conversation.name.trim().length > 0 ? conversation.name : existing.name;
-		this.#conversations[index] = { ...conversation, name };
+		// Unread only grows: an outgoing transcript reports 0, and that must not mark
+		// someone else's messages as read.
+		const unreadCount = Math.max(existing.unreadCount, conversation.unreadCount);
+		this.#conversations[index] = { ...conversation, name, unreadCount };
 	}
 
 	async saveMessage(message: Message): Promise<void> {

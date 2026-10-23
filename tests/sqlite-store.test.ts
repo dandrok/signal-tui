@@ -131,6 +131,25 @@ describe("SqliteMessageStore", () => {
 		expect(updated?.lastActivityAt).toBe(5_000);
 	});
 
+	test("never lowers an unread count on upsert", async () => {
+		const store = open();
+		await store.upsertConversation(conversation({ unreadCount: 3 }));
+
+		// An outgoing transcript reports 0; that must not mark the others as read.
+		await store.upsertConversation(conversation({ unreadCount: 0 }));
+
+		expect((await store.listConversations())[0]?.unreadCount).toBe(3);
+	});
+
+	test("treats a whitespace-only name as unknown", async () => {
+		const store = open();
+		await store.upsertConversation(conversation({ name: "Alice" }));
+
+		await store.upsertConversation(conversation({ name: "   " }));
+
+		expect((await store.listConversations())[0]?.name).toBe("Alice");
+	});
+
 	test("keeps a known name when a sync transcript has none", async () => {
 		const store = open();
 		await store.upsertConversation(conversation({ name: "Alice" }));
