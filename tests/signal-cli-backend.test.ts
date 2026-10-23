@@ -143,6 +143,19 @@ describe("SignalCliBackend", () => {
 		expect(rpc.hasListener).toBe(true);
 	});
 
+	test("rejects a start that returned no subscription id", async () => {
+		const { rpc, backend } = setup();
+		rpc.results.set("subscribeReceive", "zero");
+
+		await expect(backend.start()).rejects.toThrow("expected a subscription id");
+		expect(rpc.hasListener).toBe(false);
+
+		// the cleanup path must leave a usable retry
+		rpc.results.set("subscribeReceive", 0);
+		await backend.start();
+		expect(rpc.hasListener).toBe(true);
+	});
+
 	test("reads a subscription-wrapped notification", async () => {
 		const { rpc, backend, events } = setup();
 		await backend.start();

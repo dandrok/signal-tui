@@ -75,7 +75,14 @@ export class SignalCliBackend implements SignalBackend {
 
 		try {
 			const subscription = await this.#client.request<unknown>("subscribeReceive");
-			this.#subscription = typeof subscription === "number" ? subscription : null;
+			if (typeof subscription !== "number") {
+				// A peer that answers without an id would leave start() "successful"
+				// but unable to retry or unsubscribe; fail inside the cleanup path.
+				throw new Error(
+					`subscribeReceive returned ${typeof subscription}, expected a subscription id`,
+				);
+			}
+			this.#subscription = subscription;
 			this.#unsubscribe = unsubscribe;
 		} catch (error) {
 			// Startup failed: leave no handler behind, so a retry can really retry.
