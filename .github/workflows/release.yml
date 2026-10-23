@@ -26,6 +26,9 @@ jobs:
       id-token: write # OIDC: short-lived publish credential + provenance
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Auth to npm comes from OIDC, never from Git credentials.
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@v2
         with:

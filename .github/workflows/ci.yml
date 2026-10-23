@@ -13,8 +13,16 @@ jobs:
   check:
     name: typecheck · lint · test
     runs-on: ubuntu-24.04
+    # The job only reads the repository; without this the token keeps the default
+    # permissions of the repository, which may be broader.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          # No later step needs authenticated Git, and a persisted credential stays
+          # usable by anything the build runs.
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@v2
         with:
