@@ -37,7 +37,7 @@ export interface Check {
 	readonly hint?: string | undefined;
 }
 
-const MINIMUM_BUN: readonly [number, number, number] = [1, 4, 4];
+const MINIMUM_BUN: readonly [number, number, number] = [1, 4, 3];
 const MINIMUM_SIGNAL_CLI: readonly [number, number, number] = [0, 14, 0];
 const MINIMUM_JAVA: readonly [number, number, number] = [25, 0, 0];
 
@@ -112,29 +112,34 @@ export function evaluateChecks(
 		checks.push({ name: "signal-cli", status: "ok", detail: probes.signalCliVersion });
 	}
 
-	const java = parseVersion(probes.javaVersion);
-	if (probes.javaVersion === null) {
-		checks.push(
-			// A JVM signal-cli cannot even print its version without Java, so a
-			// working signal-cli with no java on PATH means a native build.
-			probes.signalCliVersion === null
-				? {
-						name: "java",
-						status: "warn",
-						detail: "not found on PATH",
-						hint: `signal-cli needs a JRE ${MINIMUM_JAVA[0]}+, or use the GraalVM native build which bundles it`,
-					}
-				: { name: "java", status: "ok", detail: "not needed — native build" },
-		);
-	} else {
+	// A JVM-backed signal-cli cannot print its version without a suitable JRE, so a
+	// working signal-cli means Java is either satisfied or unnecessary (native
+	// build). Java only becomes actionable when signal-cli itself is failing.
+	if (probes.signalCliVersion !== null) {
 		checks.push({
 			name: "java",
-			status: atLeast(java, MINIMUM_JAVA) ? "ok" : "warn",
-			detail: probes.javaVersion,
-			hint: atLeast(java, MINIMUM_JAVA)
-				? undefined
-				: `signal-cli 0.14+ needs Java ${MINIMUM_JAVA[0]}+; alternatively use the -Linux-native release`,
+			status: "ok",
+			detail:
+				probes.javaVersion === null
+					? "not installed — not needed by a native build"
+					: `${probes.javaVersion} (not used by a native build)`,
 		});
+	} else if (probes.javaVersion === null) {
+		checks.push({
+			name: "java",
+			status: "warn",
+			detail: "not found on PATH",
+			hint: `a JVM signal-cli needs JRE ${MINIMUM_JAVA[0]}+; the native build needs none`,
+		});
+	} else if (!atLeast(parseVersion(probes.javaVersion), MINIMUM_JAVA)) {
+		checks.push({
+			name: "java",
+			status: "warn",
+			detail: probes.javaVersion,
+			hint: `a JVM signal-cli needs JRE ${MINIMUM_JAVA[0]}+; the native build needs none`,
+		});
+	} else {
+		checks.push({ name: "java", status: "ok", detail: probes.javaVersion });
 	}
 
 	if (options.account !== undefined) {
