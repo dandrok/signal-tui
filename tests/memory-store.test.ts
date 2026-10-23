@@ -12,7 +12,8 @@ const conversation = (overrides: Record<string, unknown> = {}) => ({
 describe("InMemoryStore", () => {
 	test("keeps the name, unread count and activity monotonic", async () => {
 		const store = new InMemoryStore();
-		await store.upsertConversation(conversation({ unreadCount: 2, lastActivityAt: 5_000 }));
+		await store.upsertConversation(conversation({ lastActivityAt: 5_000 }));
+		await store.incrementUnread("uuid-x", 2);
 
 		// An outgoing transcript knows no name, reports unread 0, and may arrive late.
 		await store.upsertConversation(

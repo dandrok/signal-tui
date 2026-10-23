@@ -182,7 +182,6 @@ export class SqliteMessageStore implements MessageStore {
 				 VALUES (?1, ?2, ?3, ?4)
 				 ON CONFLICT(id) DO UPDATE SET
 					name = CASE WHEN TRIM(excluded.name) = '' THEN conversations.name ELSE excluded.name END,
-					unread_count = MAX(conversations.unread_count, excluded.unread_count),
 					last_activity_at = MAX(conversations.last_activity_at, excluded.last_activity_at)`,
 			)
 			.run(
@@ -193,27 +192,57 @@ export class SqliteMessageStore implements MessageStore {
 			);
 	}
 
-	async saveMessage(message: Message): Promise<void> {
+	async incrementUnread(conversationId: ConversationId, by: number): Promise<void> {
 		this.#db
-			.query<null, [string, string, string, string, number, number, number]>(
+			.query<null, [number, string]>(
+				"UPDATE conversations SET unread_count = unread_count + ?1 WHERE id = ?2",
+			)
+			.run(by, conversationId);
+	}
+
+	async markConversationRead(conversationId: ConversationId): Promise<boolean> {
+		const result = this.#db
+			.query<null, [string]>(
+				// The guard makes the result meaningful: an already-read conversation
+				// reports no change, which is what stops the UI feedback loop.
+				"UPDATE conversations SET unread_count = 0 WHERE id = ?1 AND unread_count > 0",
+			)
+			.run(conversationId);
+		return result.changes > 0;
+	}
+
+	async saveMessage(message: Message): Promise<{ readonly inserted: boolean }> {
+		type SaveParams = [string, string, string, string, number, number, number];
+		const params: SaveParams = [
+			message.id,
+			message.conversationId,
+			message.author,
+			message.body,
+			message.sentAt,
+			message.isOutgoing ? 1 : 0,
+			message.isDeleted ? 1 : 0,
+		];
+
+		// One write on the common path: a message seen once is inserted, and only a
+		// replay or an edit falls through to the update.
+		const inserted = this.#db
+			.query<null, SaveParams>(
 				`INSERT INTO messages (id, conversation_id, author, body, sent_at, is_outgoing, is_deleted)
 				 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-				 ON CONFLICT(id) DO UPDATE SET
-					author = excluded.author,
-					body = excluded.body,
-					sent_at = excluded.sent_at,
-					is_outgoing = excluded.is_outgoing,
-					is_deleted = excluded.is_deleted`,
+				 ON CONFLICT(id) DO NOTHING`,
 			)
-			.run(
-				message.id,
-				message.conversationId,
-				message.author,
-				message.body,
-				message.sentAt,
-				message.isOutgoing ? 1 : 0,
-				message.isDeleted ? 1 : 0,
-			);
+			.run(...params).changes;
+
+		if (inserted === 0) {
+			this.#db
+				.query<null, SaveParams>(
+					`UPDATE messages SET author = ?3, body = ?4, sent_at = ?5, is_outgoing = ?6, is_deleted = ?7
+					 WHERE id = ?1 AND conversation_id = ?2`,
+				)
+				.run(...params);
+		}
+
+		return { inserted: inserted > 0 };
 	}
 
 	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {
