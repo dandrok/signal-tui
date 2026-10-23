@@ -82,6 +82,12 @@ export const editMessageSchema = z.looseObject({
 	dataMessage: z.unknown().nullish(),
 });
 
+export const groupInfoSchema = z.looseObject({
+	groupId: z.string(),
+	groupName: z.string().nullish(),
+	type: z.string().nullish(),
+});
+
 export const dataMessageSchema = z.looseObject({
 	timestamp: z.number().int(),
 	message: z.string().nullish(),
@@ -94,7 +100,7 @@ export const dataMessageSchema = z.looseObject({
 	remoteDelete: remoteDeleteSchema.optional(),
 	/** Modelled kinds we do not surface yet, validated as unknown on purpose. */
 	sticker: z.unknown().optional(),
-	groupInfo: z.unknown().optional(),
+	groupInfo: groupInfoSchema.optional(),
 });
 
 export const receiptMessageSchema = z.looseObject({

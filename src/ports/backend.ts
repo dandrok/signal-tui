@@ -1,8 +1,13 @@
-import type { Conversation, ConversationId, Message } from "../domain/types";
+import type { Conversation, ConversationId, Message, MessageId } from "../domain/types";
 
 export type BackendEvent =
 	| { readonly kind: "message"; readonly message: Message }
-	| { readonly kind: "conversation-updated"; readonly conversation: Conversation };
+	| { readonly kind: "conversation-updated"; readonly conversation: Conversation }
+	| {
+			readonly kind: "message-deleted";
+			readonly conversationId: ConversationId;
+			readonly messageId: MessageId;
+	  };
 
 /**
  * Live transport port. The first adapter wraps `signal-cli` JSON-RPC;
