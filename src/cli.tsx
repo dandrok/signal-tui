@@ -1,5 +1,4 @@
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+#!/usr/bin/env bun
 import { render } from "ink";
 import { InMemoryStore } from "./adapters/memory/store";
 import { spawnSignalCliBackend } from "./adapters/signal/signal-cli-backend";
@@ -9,6 +8,7 @@ import { defaultDbPath, parseArgs, USAGE, UsageError } from "./app/config";
 import { formatStartupFailure } from "./app/report";
 import type { Session } from "./app/session";
 import { createSession } from "./app/session";
+import { ensurePrivateDirectory } from "./cli/paths";
 import type { MessageStore } from "./ports/store";
 import { Root } from "./ui/Root";
 
@@ -46,15 +46,20 @@ async function startDemo(): Promise<Running> {
 }
 
 async function startLive(account: string, dbPath: string): Promise<Running> {
-	mkdirSync(dirname(dbPath), { recursive: true, mode: 0o700 });
+	ensurePrivateDirectory(dbPath);
 	const store = new SqliteMessageStore({ path: dbPath });
 
 	// Spawning happens here too: a missing signal-cli throws before start(), so
-	// both steps share one failure path.
+	// both steps share one failure path, and the child is stopped if start fails.
 	const session = await (async () => {
 		const { backend } = spawnSignalCliBackend({ account });
 		const opened = createSession({ store, backend });
-		await opened.start();
+		try {
+			await opened.start();
+		} catch (error) {
+			await backend.stop().catch(() => undefined);
+			throw error;
+		}
 		return opened;
 	})().catch((error: unknown) => {
 		store.close();

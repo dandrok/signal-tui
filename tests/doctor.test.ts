@@ -11,10 +11,12 @@ import {
 const probes = (overrides: Partial<Probes> = {}): Probes => ({
 	bunVersion: "1.4.4",
 	signalCliVersion: "signal-cli 0.14.9",
+	signalCliError: null,
 	javaVersion: 'openjdk version "25.0.1" 2026-09-16',
 	accounts: ["+48123456789"],
 	dbWritable: true,
 	dbExposed: false,
+	dbDirExposed: false,
 	dbPath: "/tmp/signal-tui/cache.db",
 	...overrides,
 });
@@ -53,6 +55,7 @@ describe("evaluateChecks", () => {
 			"java",
 			"linked account",
 			"cache database",
+			"cache directory",
 			"cache permissions",
 		]);
 		expect(checks.every((check) => check.status === "ok")).toBe(true);
@@ -64,6 +67,39 @@ describe("evaluateChecks", () => {
 
 		expect(signalCli?.status).toBe("fail");
 		expect(signalCli?.hint).toContain("install signal-cli");
+	});
+
+	test("distinguishes a broken install from a missing one", () => {
+		const broken = find(
+			evaluateChecks(probes({ signalCliVersion: null, signalCliError: "no JVM found" }), {}),
+			"signal-cli",
+		);
+		const missing = find(
+			evaluateChecks(probes({ signalCliVersion: null, signalCliError: null }), {}),
+			"signal-cli",
+		);
+
+		expect(broken?.detail).toContain("failed to run");
+		expect(broken?.detail).toContain("no JVM found");
+		expect(missing?.detail).toBe("not found on PATH");
+	});
+
+	test("rejects a signal-cli older than the supported baseline", () => {
+		const check = find(
+			evaluateChecks(probes({ signalCliVersion: "signal-cli 0.13.9" }), {}),
+			"signal-cli",
+		);
+
+		expect(check?.status).toBe("fail");
+		expect(check?.detail).toContain("older than 0.14");
+	});
+
+	test("does not require java for a working native build", () => {
+		const checks = evaluateChecks(probes({ javaVersion: null }), { account: "+48123456789" });
+
+		expect(hasFailures(checks)).toBe(false);
+		expect(find(checks, "java")?.status).toBe("ok");
+		expect(find(checks, "java")?.detail).toContain("native build");
 	});
 
 	test("warns about old java rather than failing", () => {
@@ -102,6 +138,13 @@ describe("evaluateChecks", () => {
 	test("fails when the cache directory is not usable", () => {
 		const checks = evaluateChecks(probes({ dbWritable: false }), {});
 		expect(find(checks, "cache database")?.status).toBe("fail");
+	});
+
+	test("warns when the cache directory is writable by other users", () => {
+		const check = find(evaluateChecks(probes({ dbDirExposed: true }), {}), "cache directory");
+
+		expect(check?.status).toBe("warn");
+		expect(check?.hint).toContain("replace the database");
 	});
 
 	test("warns when the cache is readable by other users", () => {

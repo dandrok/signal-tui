@@ -60,12 +60,25 @@ export function Root({ store, session }: RootProps) {
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `version` is a reload trigger, not a value read by the effect.
 	useEffect(() => {
 		let cancelled = false;
-		void store.listConversations().then((conversations) => {
-			if (cancelled) {
-				return;
-			}
-			setState((current) => reduce(current, { type: "conversations-loaded", conversations }));
-		});
+		void store
+			.listConversations()
+			.then((conversations) => {
+				if (cancelled) {
+					return;
+				}
+				setState((current) => reduce(current, { type: "conversations-loaded", conversations }));
+			})
+			.catch((error: unknown) => {
+				if (cancelled) {
+					return;
+				}
+				setState((current) =>
+					reduce(current, {
+						type: "notice",
+						notice: { kind: "info", text: `cannot read conversations: ${describe(error)}` },
+					}),
+				);
+			});
 		return () => {
 			cancelled = true;
 		};
@@ -77,12 +90,27 @@ export function Root({ store, session }: RootProps) {
 			return;
 		}
 		let cancelled = false;
-		void store.listMessages(conversationId).then((messages) => {
-			if (cancelled) {
-				return;
-			}
-			setState((current) => reduce(current, { type: "messages-loaded", conversationId, messages }));
-		});
+		void store
+			.listMessages(conversationId)
+			.then((messages) => {
+				if (cancelled) {
+					return;
+				}
+				setState((current) =>
+					reduce(current, { type: "messages-loaded", conversationId, messages }),
+				);
+			})
+			.catch((error: unknown) => {
+				if (cancelled) {
+					return;
+				}
+				setState((current) =>
+					reduce(current, {
+						type: "notice",
+						notice: { kind: "info", text: `cannot read messages: ${describe(error)}` },
+					}),
+				);
+			});
 		return () => {
 			cancelled = true;
 		};

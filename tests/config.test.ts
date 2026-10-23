@@ -59,6 +59,14 @@ describe("parseArgs", () => {
 		expect(() => parse(["--account"])).toThrow(UsageError);
 		expect(() => parse(["--db"])).toThrow(UsageError);
 	});
+
+	test("rejects an empty database path", () => {
+		// An empty path makes SQLite open a private temp database: the cache would
+		// silently stop persisting.
+		expect(() => parse(["--db", ""])).toThrow(UsageError);
+		expect(() => parse(["--db="])).toThrow(UsageError);
+		expect(() => parse(["--db", "   "])).toThrow(UsageError);
+	});
 });
 
 describe("defaultDbPath", () => {

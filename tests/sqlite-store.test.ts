@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+	chmodSync,
 	existsSync,
 	mkdtempSync,
 	readdirSync,
@@ -161,14 +162,22 @@ describe("SqliteMessageStore", () => {
 		expect(open().schemaVersion).toBe(1);
 	});
 
-	test.skipIf(process.platform !== "linux")("keeps the cache private to the owner", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "signal-tui-perm-"));
-		const path = join(dir, "cache.db");
-		opened.push(new SqliteMessageStore({ path }));
+	test.skipIf(process.platform !== "linux")(
+		"keeps the cache private even if it already existed",
+		async () => {
+			const dir = mkdtempSync(join(tmpdir(), "signal-tui-perm-"));
+			const path = join(dir, "cache.db");
+			// Pre-create it world-readable: with a typical umask SQLite would create
+			// 0600 on its own, so the test must not depend on that.
+			writeFileSync(path, "");
+			(chmodSync as (file: string, mode: number) => void)(path, 0o644);
 
-		// 0600: bodies are plaintext, so other local users must not read them.
-		expect(statSync(path).mode & 0o777).toBe(0o600);
-	});
+			opened.push(new SqliteMessageStore({ path }));
+
+			// 0600: bodies are plaintext, so other local users must not read them.
+			expect(statSync(path).mode & 0o777).toBe(0o600);
+		},
+	);
 
 	test.skipIf(!existsSync("/proc/self/fd"))("closes the handle when initialization fails", () => {
 		const dir = mkdtempSync(join(tmpdir(), "signal-tui-bad-"));

@@ -2,9 +2,16 @@
 import { defaultDbPath, parseArgs, USAGE, UsageError } from "./app/config";
 import { collectProbes, evaluateChecks, hasFailures, processRunner } from "./cli/doctor";
 
+const argv = process.argv.slice(2);
+
 const config = ((): { account?: string | undefined; dbPath: string } => {
+	// `bun run doctor` passes no arguments: run the default checks instead of
+	// printing usage. Only an explicit --help asks for the usage text.
+	if (argv.length === 0) {
+		return { dbPath: defaultDbPath() };
+	}
 	try {
-		const parsed = parseArgs(process.argv.slice(2), { defaultDbPath: defaultDbPath() });
+		const parsed = parseArgs(argv, { defaultDbPath: defaultDbPath() });
 		if (parsed.mode === "help") {
 			console.log(USAGE);
 			process.exit(0);
@@ -42,5 +49,10 @@ if (hasFailures(checks)) {
 	process.exit(1);
 }
 
-console.log("\nall good — start with:");
+const warnings = checks.filter((check) => check.status === "warn").length;
+console.log(
+	warnings === 0
+		? "\nall good — start with:"
+		: `\nready, with ${warnings} warning(s) — start with:`,
+);
 console.log(`  bun run src/cli.tsx --account ${config.account ?? "+48..."}`);

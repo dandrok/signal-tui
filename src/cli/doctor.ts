@@ -1,4 +1,4 @@
-import { accessSync, constants, mkdirSync, statSync } from "node:fs";
+import { accessSync, constants, existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 
 export interface CommandResult {
@@ -15,6 +15,8 @@ export interface CommandRunner {
 export interface Probes {
 	readonly bunVersion: string;
 	readonly signalCliVersion: string | null;
+	/** Why `signal-cli --version` failed, when it ran but did not succeed. */
+	readonly signalCliError: string | null;
 	readonly javaVersion: string | null;
 	/** Account numbers reported by `signal-cli listAccounts`, or null if it failed. */
 	readonly accounts: readonly string[] | null;
@@ -22,6 +24,8 @@ export interface Probes {
 	readonly dbPath: string;
 	/** True when the cache (if it exists) is readable by group or others. */
 	readonly dbExposed: boolean;
+	/** True when other users can write to the cache directory. */
+	readonly dbDirExposed: boolean;
 }
 
 export type CheckStatus = "ok" | "warn" | "fail";
@@ -34,6 +38,7 @@ export interface Check {
 }
 
 const MINIMUM_BUN: readonly [number, number, number] = [1, 4, 4];
+const MINIMUM_SIGNAL_CLI: readonly [number, number, number] = [0, 14, 0];
 const MINIMUM_JAVA: readonly [number, number, number] = [25, 0, 0];
 
 export function parseVersion(text: string | null): readonly [number, number, number] | null {
@@ -80,25 +85,47 @@ export function evaluateChecks(
 			: `the project targets Bun >= ${MINIMUM_BUN.join(".")}`,
 	});
 
-	checks.push(
-		probes.signalCliVersion === null
-			? {
-					name: "signal-cli",
-					status: "fail",
-					detail: "not found on PATH",
-					hint: "install signal-cli 0.14 or newer: https://github.com/AsamK/signal-cli#installation",
-				}
-			: { name: "signal-cli", status: "ok", detail: probes.signalCliVersion },
-	);
+	if (probes.signalCliVersion === null) {
+		checks.push(
+			probes.signalCliError === null
+				? {
+						name: "signal-cli",
+						status: "fail",
+						detail: "not found on PATH",
+						hint: "install signal-cli 0.14 or newer: https://github.com/AsamK/signal-cli#installation",
+					}
+				: {
+						name: "signal-cli",
+						status: "fail",
+						detail: `found but failed to run: ${probes.signalCliError}`,
+						hint: "run it directly to see the full error (that is not a missing binary)",
+					},
+		);
+	} else if (!atLeast(parseVersion(probes.signalCliVersion), MINIMUM_SIGNAL_CLI)) {
+		checks.push({
+			name: "signal-cli",
+			status: "fail",
+			detail: `${probes.signalCliVersion} is older than ${MINIMUM_SIGNAL_CLI.slice(0, 2).join(".")}`,
+			hint: "upgrade: releases older than ~3 months stop working as Signal changes",
+		});
+	} else {
+		checks.push({ name: "signal-cli", status: "ok", detail: probes.signalCliVersion });
+	}
 
 	const java = parseVersion(probes.javaVersion);
 	if (probes.javaVersion === null) {
-		checks.push({
-			name: "java",
-			status: probes.signalCliVersion === null ? "warn" : "fail",
-			detail: "not found on PATH",
-			hint: `signal-cli needs a JRE ${MINIMUM_JAVA[0]}+, or use the GraalVM native build which bundles it`,
-		});
+		checks.push(
+			// A JVM signal-cli cannot even print its version without Java, so a
+			// working signal-cli with no java on PATH means a native build.
+			probes.signalCliVersion === null
+				? {
+						name: "java",
+						status: "warn",
+						detail: "not found on PATH",
+						hint: `signal-cli needs a JRE ${MINIMUM_JAVA[0]}+, or use the GraalVM native build which bundles it`,
+					}
+				: { name: "java", status: "ok", detail: "not needed — native build" },
+		);
 	} else {
 		checks.push({
 			name: "java",
@@ -135,6 +162,16 @@ export function evaluateChecks(
 	});
 
 	if (probes.dbWritable) {
+		checks.push(
+			probes.dbDirExposed
+				? {
+						name: "cache directory",
+						status: "warn",
+						detail: "writable by other users",
+						hint: "another user could replace the database file; use a private directory",
+					}
+				: { name: "cache directory", status: "ok", detail: "owner-only" },
+		);
 		checks.push(
 			probes.dbExposed
 				? {
@@ -195,6 +232,13 @@ export async function collectProbes(
 	const signalCli = await runner.run(["signal-cli", "--version"]);
 	const java = await runner.run(["java", "-version"]);
 
+	const output = `${signalCli.stderr}${signalCli.stdout}`;
+	// A missing executable looks like 127 with no output: that is "not installed",
+	// not "installed but broken", and the two need different advice.
+	const missing = signalCli.code === 127 && output.trim().length === 0;
+	const signalCliError =
+		signalCli.code === 0 || missing ? null : (firstLine(output) ?? `exit code ${signalCli.code}`);
+
 	let accounts: readonly string[] | null = null;
 	if (options.account !== undefined && signalCli.code === 0) {
 		const listed = await runner.run(["signal-cli", "listAccounts"]);
@@ -206,30 +250,44 @@ export async function collectProbes(
 		}
 	}
 
-	let dbWritable = false;
-	try {
-		const directory = dirname(options.dbPath);
-		mkdirSync(directory, { recursive: true, mode: 0o700 });
-		accessSync(directory, constants.W_OK);
-		dbWritable = true;
-	} catch {
-		dbWritable = false;
-	}
+	const directory = dirname(options.dbPath);
+	const dbWritable = ((): boolean => {
+		try {
+			mkdirSync(directory, { recursive: true, mode: 0o700 });
+		} catch {
+			return false;
+		}
+		try {
+			// An existing database file must itself be writable, not just its parent.
+			accessSync(existsSync(options.dbPath) ? options.dbPath : directory, constants.W_OK);
+			return true;
+		} catch {
+			return false;
+		}
+	})();
 
 	let dbExposed = false;
+	let dbDirExposed = false;
 	try {
 		dbExposed = (statSync(options.dbPath).mode & 0o077) !== 0;
 	} catch {
 		dbExposed = false; // not created yet
 	}
+	try {
+		dbDirExposed = (statSync(directory).mode & 0o022) !== 0;
+	} catch {
+		dbDirExposed = false;
+	}
 
 	return {
 		bunVersion: options.bunVersion,
 		signalCliVersion: signalCli.code === 0 ? firstLine(signalCli.stdout) : null,
+		signalCliError,
 		javaVersion: java.code === 0 ? firstLine(`${java.stderr}${java.stdout}`) : null,
 		accounts,
 		dbWritable,
 		dbPath: options.dbPath,
 		dbExposed,
+		dbDirExposed,
 	};
 }

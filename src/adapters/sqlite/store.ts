@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { chmodSync } from "node:fs";
+import { chmodSync, statSync } from "node:fs";
 import type { Conversation, ConversationId, Message, MessageId } from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
 import { migrations } from "./migrations";
@@ -97,8 +97,16 @@ export class SqliteMessageStore implements MessageStore {
 				// so setting it here covers those too.
 				try {
 					chmodSync(options.path, 0o600);
-				} catch {
-					// Non-POSIX filesystem: `doctor` reports the exposure instead.
+				} catch (error) {
+					// Refuse to run with a readable cache: bodies are plaintext. Only
+					// fail when the mode is actually exposed, so filesystems where the
+					// mode is already restrictive (or meaningless) still work.
+					const mode = statSync(options.path).mode & 0o077;
+					if (mode !== 0) {
+						throw new Error(
+							`cannot restrict cache permissions (${options.path}): ${error instanceof Error ? error.message : String(error)}`,
+						);
+					}
 				}
 			}
 			this.#migrate();

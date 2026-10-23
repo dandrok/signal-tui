@@ -24,6 +24,14 @@ export function assertAccount(value: string): string {
 	return value;
 }
 
+/** An empty path would make SQLite open a private temp database and silently stop persisting. */
+export function assertDbPath(value: string): string {
+	if (value.trim().length === 0) {
+		throw new UsageError("--db needs a file path");
+	}
+	return value;
+}
+
 /**
  * Pure argument parsing: no env reads, no fs, no exit. `signal-tui` with no
  * arguments prints usage rather than guessing a mode, because live mode needs an
@@ -58,7 +66,7 @@ export function parseArgs(argv: readonly string[], options: ParseOptions): CliCo
 			continue;
 		}
 		if (arg === "--db") {
-			dbPath = next(index + 1, "--db");
+			dbPath = assertDbPath(next(index + 1, "--db"));
 			index++;
 			continue;
 		}
@@ -67,7 +75,7 @@ export function parseArgs(argv: readonly string[], options: ParseOptions): CliCo
 			continue;
 		}
 		if (arg.startsWith("--db=")) {
-			dbPath = arg.slice("--db=".length);
+			dbPath = assertDbPath(arg.slice("--db=".length));
 			continue;
 		}
 		throw new UsageError(`unknown option: ${arg}`);
