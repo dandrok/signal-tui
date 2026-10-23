@@ -1,105 +1,103 @@
 # signal-tui
 
-A terminal Signal client. Ink + Bun, local-first, with full-text search over your history.
+A terminal Signal client. Ink + Bun, local-first: messages live in SQLite on your
+machine, and the TUI never touches the network itself — it drives
+[`signal-cli`](https://github.com/AsamK/signal-cli) over JSON-RPC on stdio.
 
-**Status: `0.0.x` — usable, early.** The TUI runs in demo mode on built-in data, or in
-live mode against a linked Signal account. Message content, keys and history stay on
-your machine; the TUI itself never talks to the network — it drives `signal-cli` over
-JSON-RPC on stdio.
+**Status: `0.0.x` — usable for text conversations.** Read, send, groups, deletes,
+unread counts and read receipts work against a real account.
 
 ## Requirements
 
-- [Bun](https://bun.sh/docs/installation) **1.4.4+** — required at runtime, not just for development
-- [signal-cli](https://github.com/AsamK/signal-cli) **0.14+** — only for live mode; the
-  GraalVM native build needs no Java
-- `qrencode` — only for `bun run link`, to draw the linking QR as an image
+| Tool | Why |
+|---|---|
+| [Bun](https://bun.sh/docs/installation) **1.4.3+** | runtime, not just for development |
+| [`signal-cli`](https://github.com/AsamK/signal-cli) **0.14+** | live mode only; the GraalVM native build needs no Java |
+| `qrencode` | `bun run link` renders the QR as an image |
 
 ## Quick start
 
 ```sh
 bun install
-bun run setup   # enables the tracked git hooks (.githooks)
-bun start       # demo mode, no account needed
+bun run setup          # enables the tracked git hooks
+bun start              # demo mode — no account needed
 ```
-
-Keys: `j`/`k` move · `i` or `Enter` compose · `Esc` back · `q` quit.
 
 ### Live mode
 
 ```sh
-bun run link                                  # QR image → scan with Signal → Linked devices
-signal-cli listAccounts                       # prints your number
-bun run src/cli.tsx --account +48123456789    # cache: ~/.local/share/signal-tui/cache.db
+bun run link                            # PNG QR → Signal → Settings → Linked devices
+bun run doctor -- --account +48…        # checks signal-cli, account, cache, permissions
+bun run src/cli.tsx --account +48…      # cache: ~/.local/share/signal-tui/cache.db
 ```
 
-`bun run link` exists because the QR that `signal-cli link` draws in the terminal is
-unusable: the GraalVM native build ships a US-ASCII-only charset and therefore emits
-literal `?` bytes instead of block glyphs (verified by hexdumping its pty output;
-`-Dfile.encoding=UTF-8` does not fix it). The helper reads the `sgnl://` URI that
-signal-cli prints alongside the art and renders a PNG instead.
+`bun run link` exists because `signal-cli link` draws its QR with Unicode blocks and
+the GraalVM native build ships a US-ASCII charset, so it emits literal `?` bytes —
+unusable regardless of your terminal font. The helper reads the `sgnl://` URI
+signal-cli prints beside the art and renders a PNG instead.
 
-The cache stores message bodies in plaintext, so it is created `0600` inside a `0700`
-directory; `--db` refuses a directory other users can write to.
+The cache holds message bodies in plaintext, so it is created `0600` inside a `0700`
+directory, and `--db` refuses a directory other users can write to.
+
+## Keys
+
+| Key | Action |
+|---|---|
+| `j` / `k` | move selection |
+| `i`, `/`, `⏎` | compose |
+| `⏎` | send (while composing) |
+| `Esc` | back to the list |
+| `q` | quit |
+
+## What works
+
+- conversations from your account, keyed per group rather than per sender
+- sending, with the message appearing immediately (Signal never echoes a transcript
+  back to the device that wrote it)
+- messages you send elsewhere show up here, with the server timestamp as identity
+- unread counts that clear when you open a conversation, and while you watch it
+- **read receipts**: the other side sees "read" when you open the chat, not when the
+  message arrives
+- delete-for-everyone, reflected in the cache
+- history persisted across restarts
+
+## Not there yet
+
+Search UI (the FTS5 index exists and is tested), attachments beyond a `[attachment]`
+placeholder, applying edits, scrollback past the last 50 messages, typing indicators,
+desktop notifications, history from before you linked.
 
 ## Scripts
 
 | Script | What it does |
 |---|---|
-| `bun start` | run the TUI |
-| `bun test` | unit + ink render tests |
-| `bun run typecheck` | `bun check` — Bun's native multi-core TypeScript check |
-| `bun run lint` | Biome: lint, format, import layering |
-| `bun run verify` | all three, the same gate CI runs |
+| `bun start` | run the TUI (demo mode) |
+| `bun run link` | link this computer to your account, QR as an image |
+| `bun run doctor` | check prerequisites; `-- --account +48…` adds the account |
+| `bun test` | unit, adapter and ink render tests |
+| `bun run verify` | typecheck + lint + tests — the gate CI runs |
 | `bun run setup` | `git config core.hooksPath .githooks` |
 
 ## Architecture
 
-Ports and adapters, so nothing outside `src/ui` knows about the terminal and nothing inside
+Ports and adapters: nothing in `src/ui` knows about the terminal, nothing in
 `src/domain` knows about IO.
 
 ```
 src/
-  domain/     pure types + formatting helpers        (no imports outside domain)
+  domain/     pure types and formatting helpers
   ports/      MessageStore, SignalBackend interfaces
-  adapters/   memory/ (tests, demo) · sqlite/ + signal/ (next)
-  app/        reducer: every transition is a pure function
-  ui/         ink components + hooks                 (no adapter imports)
-  cli.tsx     composition root: wires adapters into App
+  adapters/   memory/ (demo) · sqlite/ (cache) · signal/ (JSON-RPC)
+  app/        reducer + session (events → cache)
+  ui/         ink components
+  cli.tsx     composition root · link.ts / doctor.ts entry points
 ```
 
-Import boundaries are enforced in `biome.json` via `noRestrictedImports` — CI fails if
+Boundaries are enforced by `noRestrictedImports` in `biome.json`; CI fails if
 `domain` reaches for `ink` or `ui` imports an adapter.
 
-## Code review
-
-Two layers, both free on public repos:
-
-```sh
-# local, before pushing (CodeRabbit CLI)
-cr auth status          # or: cr auth login
-cr review --deep        # review your tracked local changes
-cr review --agent       # NDJSON findings, if you want them machine-readable
-```
-
-On GitHub, CodeRabbit's app automatically reviews non-draft PRs targeting `main`; `.coderabbit.yaml`
-carries the repo rules (layer boundaries, "tests must assert behaviour", lockfile excluded). Ask
-for a full PR review from scratch with `@coderabbitai full review` in a PR comment.
-
-## Roadmap
-
-| Phase | Scope |
-|---|---|
-| 0 | skeleton: ink app, reducer, memory store, CI, hooks ← **here** |
-| 1 | `signal-cli` JSON-RPC adapter, typed from the official 43 JSON schemas |
-| 2 | SQLite cache + FTS5 search, instant open |
-| 3 | attachments, groups, reactions, edits, receipts |
-| 4 | voice calls via signal-cli's RingRTC tunnel |
-| 5 | npm release with trusted publishing |
-
-Notes and design decisions live in the Obsidian vault (`BUILD/signal-tui/`).
+Design decisions live in the vault under `BUILD/signal-tui/`.
 
 ## License
 
-MIT — see [LICENSE](./LICENSE). Third-party JSON schemas used for type generation are fetched at
-build time from [signal-cli](https://github.com/AsamK/signal-cli) (GPL-3.0) and are not vendored
-into this repository.
+MIT — see [LICENSE](./LICENSE).
