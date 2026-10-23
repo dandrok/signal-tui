@@ -1,11 +1,16 @@
-#!/usr/bin/env bun
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { render } from "ink";
-import { useCallback, useEffect, useState } from "react";
 import { InMemoryStore } from "./adapters/memory/store";
-import type { Action, AppState } from "./app/state";
-import { emptyState, reduce, selectedConversation } from "./app/state";
+import { spawnSignalCliBackend } from "./adapters/signal/signal-cli-backend";
+import { SqliteMessageStore } from "./adapters/sqlite/store";
+import type { CliConfig } from "./app/config";
+import { defaultDbPath, parseArgs, USAGE, UsageError } from "./app/config";
+import { formatStartupFailure } from "./app/report";
+import type { Session } from "./app/session";
+import { createSession } from "./app/session";
 import type { MessageStore } from "./ports/store";
-import { App } from "./ui/App";
+import { Root } from "./ui/Root";
 
 if (typeof Bun === "undefined") {
 	console.error(
@@ -14,51 +19,66 @@ if (typeof Bun === "undefined") {
 	process.exit(1);
 }
 
-interface RootProps {
+let config: CliConfig;
+try {
+	config = parseArgs(process.argv.slice(2), { defaultDbPath: defaultDbPath() });
+} catch (error) {
+	if (error instanceof UsageError) {
+		console.error(`${error.message}\n\n${USAGE}`);
+		process.exit(2);
+	}
+	throw error;
+}
+
+if (config.mode === "help") {
+	console.log(USAGE);
+	process.exit(0);
+}
+
+interface Running {
 	readonly store: MessageStore;
+	readonly session: Session | undefined;
+	readonly dispose: () => Promise<void>;
 }
 
-function Root({ store }: RootProps) {
-	const [state, setState] = useState<AppState>(emptyState);
-	const dispatch = useCallback(
-		(action: Action): void => setState((current) => reduce(current, action)),
-		[],
-	);
-
-	const conversationId = selectedConversation(state)?.id;
-
-	useEffect(() => {
-		let cancelled = false;
-		void store.listConversations().then((conversations) => {
-			if (cancelled) {
-				return;
-			}
-			dispatch({ type: "conversations-loaded", conversations });
-		});
-		return () => {
-			cancelled = true;
-		};
-	}, [store, dispatch]);
-
-	useEffect(() => {
-		if (conversationId === undefined) {
-			return;
-		}
-		let cancelled = false;
-		void store.listMessages(conversationId).then((messages) => {
-			if (cancelled) {
-				return;
-			}
-			dispatch({ type: "messages-loaded", conversationId, messages });
-		});
-		return () => {
-			cancelled = true;
-		};
-	}, [store, conversationId, dispatch]);
-
-	return <App state={state} dispatch={dispatch} />;
+async function startDemo(): Promise<Running> {
+	return { store: new InMemoryStore(), session: undefined, dispose: async () => undefined };
 }
 
-const store = new InMemoryStore();
-const instance = render(<Root store={store} />);
-await instance.waitUntilExit();
+async function startLive(account: string, dbPath: string): Promise<Running> {
+	mkdirSync(dirname(dbPath), { recursive: true });
+	const store = new SqliteMessageStore({ path: dbPath });
+
+	// Spawning happens here too: a missing signal-cli throws before start(), so
+	// both steps share one failure path.
+	const session = await (async () => {
+		const { backend } = spawnSignalCliBackend({ account });
+		const opened = createSession({ store, backend });
+		await opened.start();
+		return opened;
+	})().catch((error: unknown) => {
+		store.close();
+		console.error(formatStartupFailure(account, error));
+		process.exit(1);
+	});
+
+	return {
+		store,
+		session,
+		dispose: async () => {
+			await session.stop();
+			store.close();
+		},
+	};
+}
+
+const running =
+	config.mode === "live" ? await startLive(config.account, config.dbPath) : await startDemo();
+
+const instance = render(<Root store={running.store} session={running.session} />);
+
+try {
+	await instance.waitUntilExit();
+} finally {
+	await running.dispose();
+}
