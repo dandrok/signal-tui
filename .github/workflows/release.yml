@@ -17,12 +17,18 @@ jobs:
     # publisher is bound to this environment name.
     if: github.ref == 'refs/heads/main'
     environment: npm-publish
-    runs-on: ubuntu-latest # trusted publishing needs a GitHub-hosted runner
+    # Pinned rather than `ubuntu-latest`: that label moves to Ubuntu 26.04 and the
+    # publish path should not change underneath a release. Must stay GitHub-hosted
+    # for trusted publishing.
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write # OIDC: short-lived publish credential + provenance
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
+        with:
+          # Auth to npm comes from OIDC, never from Git credentials.
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -37,13 +43,14 @@ jobs:
       - name: Check the package contents
         run: bun pm pack --dry-run
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
-      # Trusted publishing needs npm >= 11.5.1 and node >= 22.14; the npm bundled
-      # with the runner's node is older, so bring it forward explicitly.
+      # Trusted publishing needs npm >= 11.5.1 and node >= 22.14. Rather than trust
+      # whatever npm the runner image carries, install the current one; the versions
+      # are printed so a future failure names the culprit.
       - name: Use a modern npm
         run: |
           npm install --global npm@latest
