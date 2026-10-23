@@ -131,6 +131,18 @@ describe("SqliteMessageStore", () => {
 		expect(updated?.lastActivityAt).toBe(5_000);
 	});
 
+	test("keeps a known name when a sync transcript has none", async () => {
+		const store = open();
+		await store.upsertConversation(conversation({ name: "Alice" }));
+
+		// A sent message only knows the destination id.
+		await store.upsertConversation(conversation({ name: "", lastActivityAt: 2_000 }));
+
+		const [updated] = await store.listConversations();
+		expect(updated?.name).toBe("Alice");
+		expect(updated?.lastActivityAt).toBe(2_000);
+	});
+
 	test("rejects a message whose conversation does not exist", async () => {
 		const store = open();
 		await expect(store.saveMessage(message({ conversationId: "ghost" }))).rejects.toThrow();

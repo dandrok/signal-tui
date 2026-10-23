@@ -1,5 +1,5 @@
 import { Box, Text } from "ink";
-import { formatUnread, truncate } from "../domain/format";
+import { displayName, formatUnread, truncate } from "../domain/format";
 import type { Conversation } from "../domain/types";
 
 export interface ConversationListProps {
@@ -39,7 +39,7 @@ export function ConversationList({
 					<Box key={conversation.id} justifyContent="space-between">
 						<Text inverse={selected} color={selected ? "green" : "gray"}>
 							{selected ? "▸ " : "  "}
-							{truncate(conversation.name, labelWidth)}
+							{truncate(displayName(conversation), labelWidth)}
 						</Text>
 						{badge.length > 0 ? <Text color="yellow">{badge}</Text> : null}
 					</Box>

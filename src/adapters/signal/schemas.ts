@@ -103,6 +103,26 @@ export const dataMessageSchema = z.looseObject({
 	groupInfo: groupInfoSchema.optional(),
 });
 
+/**
+ * A message you sent, as it comes back on your other devices: `JsonSyncDataMessage`
+ * unwraps the data message, so its fields sit at the same level as `destination*`.
+ */
+export const sentMessageSchema = dataMessageSchema.extend({
+	destination: z.string().nullish(),
+	destinationNumber: z.string().nullish(),
+	destinationUuid: z.string().nullish(),
+	editMessage: z.unknown().nullish(),
+});
+
+export const syncMessageSchema = z.looseObject({
+	sentMessage: sentMessageSchema.optional(),
+	/** Replies, reactions and read receipts on other devices: not surfaced yet. */
+	readMessages: z.unknown().optional(),
+	blockedNumbers: z.unknown().optional(),
+	blockedGroupIds: z.unknown().optional(),
+	type: z.unknown().optional(),
+});
+
 export const receiptMessageSchema = z.looseObject({
 	when: z.number().int(),
 	isDelivery: z.boolean(),
@@ -140,7 +160,7 @@ export const envelopeSchema = z.looseObject({
 	/** Edits arrive beside the data message, not inside it. */
 	editMessage: editMessageSchema.optional(),
 	storyMessage: z.unknown().optional(),
-	syncMessage: z.unknown().optional(),
+	syncMessage: syncMessageSchema.optional(),
 	callMessage: callMessageSchema.optional(),
 	receiptMessage: receiptMessageSchema.optional(),
 	typingMessage: typingMessageSchema.optional(),
@@ -158,6 +178,8 @@ export type Mention = z.infer<typeof mentionSchema>;
 export type Reaction = z.infer<typeof reactionSchema>;
 export type DataMessage = z.infer<typeof dataMessageSchema>;
 export type EditMessage = z.infer<typeof editMessageSchema>;
+export type SentMessage = z.infer<typeof sentMessageSchema>;
+export type SyncMessage = z.infer<typeof syncMessageSchema>;
 export type ReceiptMessage = z.infer<typeof receiptMessageSchema>;
 export type TypingMessage = z.infer<typeof typingMessageSchema>;
 export type CallMessage = z.infer<typeof callMessageSchema>;

@@ -138,6 +138,73 @@ describe("mapEnvelope", () => {
 		});
 	});
 
+	test("maps your own sent message from a sync transcript as outgoing", () => {
+		const envelope: Envelope = {
+			timestamp: 1,
+			syncMessage: {
+				sentMessage: {
+					timestamp: 1_760_000_000_000,
+					message: "on my way",
+					destinationUuid: "uuid-bob",
+					destinationNumber: "+10000000002",
+				},
+			},
+		};
+
+		const mapped = mapEnvelope(envelope);
+
+		expect(mapped.message).toEqual({
+			id: "uuid-bob:1760000000000",
+			conversationId: "uuid-bob",
+			author: "You",
+			body: "on my way",
+			sentAt: 1_760_000_000_000,
+			isOutgoing: true,
+			isDeleted: false,
+		});
+		// No name: a transcript only knows the destination id.
+		expect(mapped.conversation?.name).toBe("");
+		expect(mapped.conversation?.unreadCount).toBe(0);
+		expect(mapped.conversationKind).toBe("direct");
+	});
+
+	test("maps a sent message to a group by group id", () => {
+		const envelope: Envelope = {
+			timestamp: 1,
+			syncMessage: {
+				sentMessage: {
+					timestamp: 5,
+					message: "hi all",
+					destinationNumber: "+10000000002",
+					groupInfo: { groupId: "group-9", groupName: "Signal devs" },
+				},
+			},
+		};
+
+		const mapped = mapEnvelope(envelope);
+
+		expect(mapped.conversation).toEqual({
+			id: "group-9",
+			name: "Signal devs",
+			unreadCount: 0,
+			lastActivityAt: 5,
+		});
+		expect(mapped.conversationKind).toBe("group");
+	});
+
+	test("ignores a sync transcript without a destination", () => {
+		const envelope: Envelope = {
+			timestamp: 1,
+			syncMessage: { sentMessage: { timestamp: 1, message: "nowhere" } },
+		};
+		expect(mapEnvelope(envelope)).toEqual({
+			message: null,
+			conversation: null,
+			conversationKind: "direct",
+			deleted: null,
+		});
+	});
+
 	test("returns nothing for envelopes without a data message", () => {
 		const mapped = mapEnvelope(envelope({ typingMessage: { action: "STARTED", timestamp: 1 } }));
 		expect(mapped).toEqual({

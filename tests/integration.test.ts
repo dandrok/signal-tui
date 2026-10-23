@@ -43,6 +43,8 @@ describe("signal-cli adapter over a real child process", () => {
 			await backend.start();
 			await waitFor(() => messages.length > 0);
 
+			await waitFor(() => messages.length > 1);
+
 			expect(messages[0]).toEqual({
 				id: "uuid-alice:1760000000000",
 				conversationId: "uuid-alice",
@@ -52,8 +54,18 @@ describe("signal-cli adapter over a real child process", () => {
 				isOutgoing: false,
 				isDeleted: false,
 			});
+			// your own message arrives as a sync transcript, not as incoming text
+			expect(messages[1]).toEqual({
+				id: "uuid-bob:1760000000001",
+				conversationId: "uuid-bob",
+				author: "You",
+				body: "sent from my phone",
+				sentAt: 1_760_000_000_001,
+				isOutgoing: true,
+				isDeleted: false,
+			});
 			// the peer also pushes a "typing" notification that must be ignored
-			expect(kinds).toEqual(["conversation-updated", "message"]);
+			expect(kinds).toEqual(["conversation-updated", "message", "conversation-updated", "message"]);
 
 			await backend.sendMessage("uuid-alice", "hi back");
 			await waitFor(() => existsSync(capture) && readFileSync(capture, "utf8").trim().length > 0);

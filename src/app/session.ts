@@ -1,3 +1,4 @@
+import { SELF_LABEL } from "../domain/format";
 import type { ConversationId } from "../domain/types";
 import type { BackendEvent, SignalBackend } from "../ports/backend";
 import type { MessageStore } from "../ports/store";
@@ -74,6 +75,32 @@ export function createSession({ store, backend }: SessionDeps): Session {
 		},
 		async send(conversationId: ConversationId, body: string): Promise<void> {
 			await backend.sendMessage(conversationId, body);
+
+			// Echo locally: Signal does not send a transcript back to the device that
+			// wrote the message, so without this your own message never appears.
+			const sentAt = Date.now();
+			queue = queue
+				.then(async () => {
+					await store.upsertConversation({
+						id: conversationId,
+						name: "",
+						unreadCount: 0,
+						lastActivityAt: sentAt,
+					});
+					await store.saveMessage({
+						id: `${conversationId}:${sentAt}`,
+						conversationId,
+						author: SELF_LABEL,
+						body,
+						sentAt,
+						isOutgoing: true,
+						isDeleted: false,
+					});
+					notify();
+				})
+				.catch(record);
+
+			await queue;
 		},
 		async flush(): Promise<void> {
 			await queue.catch(() => undefined);

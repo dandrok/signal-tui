@@ -196,6 +196,37 @@ describe("createSession", () => {
 		expect(backend.sent).toEqual([{ conversationId: "uuid-alice", body: "hello" }]);
 	});
 
+	test("echoes a sent message into the store so it appears immediately", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		const session = createSession({ store, backend });
+		let changes = 0;
+		session.onChange(() => {
+			changes++;
+		});
+
+		await session.send("uuid-alice", "hello");
+
+		expect(backend.sent).toEqual([{ conversationId: "uuid-alice", body: "hello" }]);
+		expect(store.ops).toHaveLength(2);
+		expect(store.ops[0]).toBe("conversation:uuid-alice");
+		expect(store.ops[1]).toMatch(/^message:uuid-alice:\d+$/);
+		expect(changes).toBe(1);
+	});
+
+	test("does not echo a message the backend refused to send", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		backend.sendMessage = async () => {
+			throw new Error("network down");
+		};
+		const session = createSession({ store, backend });
+
+		await expect(session.send("uuid-alice", "hello")).rejects.toThrow("network down");
+
+		expect(store.ops).toEqual([]);
+	});
+
 	test("stop unsubscribes before stopping the backend", async () => {
 		const store = new RecordingStore();
 		const backend = new FakeBackend();

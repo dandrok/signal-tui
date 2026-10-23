@@ -34,11 +34,15 @@ export class InMemoryStore implements MessageStore {
 
 	async upsertConversation(conversation: Conversation): Promise<void> {
 		const index = this.#conversations.findIndex((existing) => existing.id === conversation.id);
-		if (index === -1) {
+		const existing = this.#conversations[index];
+		if (existing === undefined) {
 			this.#conversations.push(conversation);
 			return;
 		}
-		this.#conversations[index] = conversation;
+		// An empty name means "unknown" (a sync transcript has only the destination
+		// id): never let it erase a name learned from an incoming message.
+		const name = conversation.name.trim().length > 0 ? conversation.name : existing.name;
+		this.#conversations[index] = { ...conversation, name };
 	}
 
 	async saveMessage(message: Message): Promise<void> {

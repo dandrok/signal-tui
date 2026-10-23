@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	describeAuthor,
 	describeBody,
+	displayName,
 	formatClock,
 	formatUnread,
 	truncate,
@@ -77,6 +78,15 @@ describe("describeAuthor / describeBody", () => {
 	test("shows the real author and body otherwise", () => {
 		expect(describeAuthor(message())).toBe("Alice");
 		expect(describeBody(message())).toBe("hello");
+	});
+});
+
+describe("displayName", () => {
+	test("falls back to the id when no name is known", () => {
+		const base = { unreadCount: 0, lastActivityAt: 1 };
+		expect(displayName({ ...base, id: "uuid-x", name: "Alice" })).toBe("Alice");
+		expect(displayName({ ...base, id: "uuid-x", name: "" })).toBe("uuid-x");
+		expect(displayName({ ...base, id: "uuid-x", name: "   " })).toBe("uuid-x");
 	});
 });
 
