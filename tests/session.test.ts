@@ -160,6 +160,8 @@ describe("createSession", () => {
 		await session.flush();
 
 		expect(store.ops).toEqual(["message:m1", "unread+1:uuid-alice", "message:m1"]);
+		// The outcome, not just the sequence: one message, one unread.
+		expect(store.unread.get("uuid-alice")).toBe(1);
 	});
 
 	test("does not increment unread for your own message", async () => {

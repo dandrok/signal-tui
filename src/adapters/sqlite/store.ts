@@ -212,30 +212,37 @@ export class SqliteMessageStore implements MessageStore {
 	}
 
 	async saveMessage(message: Message): Promise<{ readonly inserted: boolean }> {
-		const existing = this.#db
-			.query<{ id: string }, [string]>("SELECT id FROM messages WHERE id = ?1")
-			.get(message.id);
-		this.#db
-			.query<null, [string, string, string, string, number, number, number]>(
+		type SaveParams = [string, string, string, string, number, number, number];
+		const params: SaveParams = [
+			message.id,
+			message.conversationId,
+			message.author,
+			message.body,
+			message.sentAt,
+			message.isOutgoing ? 1 : 0,
+			message.isDeleted ? 1 : 0,
+		];
+
+		// One write on the common path: a message seen once is inserted, and only a
+		// replay or an edit falls through to the update.
+		const inserted = this.#db
+			.query<null, SaveParams>(
 				`INSERT INTO messages (id, conversation_id, author, body, sent_at, is_outgoing, is_deleted)
 				 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-				 ON CONFLICT(id) DO UPDATE SET
-					author = excluded.author,
-					body = excluded.body,
-					sent_at = excluded.sent_at,
-					is_outgoing = excluded.is_outgoing,
-					is_deleted = excluded.is_deleted`,
+				 ON CONFLICT(id) DO NOTHING`,
 			)
-			.run(
-				message.id,
-				message.conversationId,
-				message.author,
-				message.body,
-				message.sentAt,
-				message.isOutgoing ? 1 : 0,
-				message.isDeleted ? 1 : 0,
-			);
-		return { inserted: existing === null };
+			.run(...params).changes;
+
+		if (inserted === 0) {
+			this.#db
+				.query<null, SaveParams>(
+					`UPDATE messages SET author = ?3, body = ?4, sent_at = ?5, is_outgoing = ?6, is_deleted = ?7
+					 WHERE id = ?1 AND conversation_id = ?2`,
+				)
+				.run(...params);
+		}
+
+		return { inserted: inserted > 0 };
 	}
 
 	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {

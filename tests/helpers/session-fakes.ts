@@ -53,6 +53,7 @@ export class RecordingStore implements MessageStore {
 
 	async incrementUnread(conversationId: string, by: number): Promise<void> {
 		this.#record(`unread+${by}:${conversationId}`);
+		this.unread.set(conversationId, (this.unread.get(conversationId) ?? 0) + by);
 	}
 
 	unread = new Map<string, number>();
