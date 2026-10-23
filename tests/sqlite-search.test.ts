@@ -92,6 +92,15 @@ describe("SqliteMessageStore search", () => {
 		}
 	});
 
+	test("never returns a deleted message that still has its text", async () => {
+		// markMessageDeleted clears the body, which would make this pass without the
+		// filter. A row marked deleted but holding text is the case the filter guards,
+		// so write one directly through saveMessage.
+		await store.saveMessage(message("deleted-hit", "purple elephants", { isDeleted: true }));
+
+		expect(await store.search("purple")).toEqual([]);
+	});
+
 	test("keeps the index in sync when a body is edited", async () => {
 		await store.saveMessage(message("m3", "dinner at eight"));
 

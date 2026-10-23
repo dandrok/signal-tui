@@ -14,6 +14,9 @@ export interface RootProps {
 const describe = (error: unknown): string =>
 	error instanceof Error ? error.message : String(error);
 
+/** Results shown at once; the pane truncates rather than pages. */
+const SEARCH_LIMIT = 20;
+
 /**
  * Owns app state and the two side effects it needs: a send when a draft is
  * submitted, and a reload when the session says the cache changed.
@@ -56,6 +59,37 @@ export function Root({ store, session }: RootProps) {
 	}, [session]);
 
 	const conversationId = selectedConversation(state)?.id;
+	const searchQuery = state.search?.query ?? null;
+
+	// Search runs on every keystroke: the index is local, so a query is a millisecond.
+	useEffect(() => {
+		if (searchQuery === null) {
+			return;
+		}
+		let cancelled = false;
+		const run = async (): Promise<void> => {
+			const results =
+				searchQuery.trim().length === 0 ? [] : await store.search(searchQuery, SEARCH_LIMIT);
+			if (!cancelled) {
+				setState((current) =>
+					current.search === null ? current : reduce(current, { type: "search-results", results }),
+				);
+			}
+		};
+		void run().catch((error: unknown) => {
+			if (!cancelled) {
+				setState((current) =>
+					reduce(current, {
+						type: "notice",
+						notice: { kind: "info", text: `search failed: ${describe(error)}` },
+					}),
+				);
+			}
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [store, searchQuery]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `version` is a reload trigger, not a value read by the effect.
 	useEffect(() => {

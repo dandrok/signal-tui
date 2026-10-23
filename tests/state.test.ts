@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { demoConversations, demoMessages } from "../src/adapters/memory/demo-data";
+import type { AppState } from "../src/app/state";
 import { emptyState, reduce, selectedConversation, selectedMessages } from "../src/app/state";
 
 const loaded = () =>
@@ -74,5 +75,66 @@ describe("reduce", () => {
 	test("setting the same focus returns the same object", () => {
 		const state = loaded();
 		expect(reduce(state, { type: "focus", focus: "conversations" })).toBe(state);
+	});
+});
+
+describe("search mode", () => {
+	const opened = (): AppState =>
+		reduce(reduce(emptyState, { type: "conversations-loaded", conversations: demoConversations }), {
+			type: "search-opened",
+		});
+
+	test("starts empty and closes back to browse", () => {
+		const state = opened();
+		expect(state.search).toEqual({ query: "", results: [], selectedIndex: 0, ran: false });
+		expect(reduce(state, { type: "search-closed" }).search).toBeNull();
+	});
+
+	test("a new query drops the previous results", () => {
+		let state = reduce(opened(), { type: "search-changed", query: "dinner" });
+		state = reduce(state, { type: "search-results", results: demoMessages.slice(0, 2) });
+		expect(state.search?.results).toHaveLength(2);
+
+		state = reduce(state, { type: "search-changed", query: "dinne" });
+
+		// Showing stale hits under a new query would imply they match it.
+		expect(state.search?.results).toEqual([]);
+		expect(state.search?.ran).toBe(false);
+	});
+
+	test("moves within results and clamps at the ends", () => {
+		let state = reduce(opened(), { type: "search-results", results: demoMessages.slice(0, 2) });
+		expect(state.search?.selectedIndex).toBe(0);
+
+		state = reduce(state, { type: "search-moved", delta: 5 });
+		expect(state.search?.selectedIndex).toBe(1);
+		state = reduce(state, { type: "search-moved", delta: -5 });
+		expect(state.search?.selectedIndex).toBe(0);
+	});
+
+	test("selecting a result jumps to its conversation and closes search", () => {
+		const target = demoMessages.find((entry) => entry.conversationId !== demoConversations[0]?.id);
+		let state = reduce(opened(), { type: "search-results", results: target ? [target] : [] });
+
+		state = reduce(state, { type: "search-selected" });
+
+		const expectedIndex = demoConversations.findIndex(
+			(entry) => entry.id === target?.conversationId,
+		);
+		expect(state.search).toBeNull();
+		expect(state.selectedIndex).toBe(expectedIndex);
+	});
+
+	test("selecting with no results changes nothing", () => {
+		const state = reduce(opened(), { type: "search-selected" });
+		expect(state.search).not.toBeNull();
+	});
+
+	test("query and results updates are ignored when search is closed", () => {
+		const closed = reduce(emptyState, { type: "search-changed", query: "x" });
+		expect(closed.search).toBeNull();
+		expect(
+			reduce(emptyState, { type: "search-results", results: demoMessages.slice(0, 1) }).search,
+		).toBeNull();
 	});
 });
