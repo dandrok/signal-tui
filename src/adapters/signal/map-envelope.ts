@@ -1,13 +1,24 @@
-import type { Conversation, Message } from "../../domain/types";
+import type { Conversation, ConversationId, Message, MessageId } from "../../domain/types";
 import type { Envelope } from "./schemas";
 
+export type ConversationKind = "direct" | "group";
+
+/** Identity of a message that a `remoteDelete` refers to. */
+export interface DeletedMessage {
+	readonly conversationId: ConversationId;
+	readonly messageId: MessageId;
+}
+
 /**
- * A received envelope translated into domain objects. Either field can be `null`
- * when the envelope carries no user-visible message (typing, receipts, sync, …).
+ * A received envelope translated into domain objects. Every field can be empty:
+ * typing and receipt envelopes carry no message, and a delete notification
+ * carries no message of its own — only a reference to an earlier one.
  */
 export interface MappedEnvelope {
 	readonly message: Message | null;
 	readonly conversation: Conversation | null;
+	readonly conversationKind: ConversationKind;
+	readonly deleted: DeletedMessage | null;
 }
 
 /** Stable conversation key for a peer, preferring the UUID (numbers can change). */
@@ -26,6 +37,29 @@ export function peerName(envelope: Envelope): string {
 	);
 }
 
+interface Target {
+	readonly id: ConversationId;
+	readonly name: string;
+	readonly kind: ConversationKind;
+}
+
+/**
+ * Where a message belongs: a group message is keyed by the group id, not by the
+ * sender, otherwise every member's messages would open a separate conversation.
+ */
+export function conversationTarget(envelope: Envelope): Target | null {
+	const group = envelope.dataMessage?.groupInfo;
+	if (group !== undefined) {
+		return { id: group.groupId, name: group.groupName ?? "Group", kind: "group" };
+	}
+
+	const id = peerId(envelope);
+	if (id === null) {
+		return null;
+	}
+	return { id, name: peerName(envelope), kind: "direct" };
+}
+
 const ATTACHMENT_PLACEHOLDER = "[attachment]";
 
 /**
@@ -34,31 +68,42 @@ const ATTACHMENT_PLACEHOLDER = "[attachment]";
  */
 export function mapEnvelope(envelope: Envelope): MappedEnvelope {
 	const data = envelope.dataMessage;
-	const conversationId = peerId(envelope);
+	const target = data === undefined ? null : conversationTarget(envelope);
 
-	if (!data || conversationId === null) {
-		return { message: null, conversation: null };
+	if (data === undefined || target === null) {
+		return { message: null, conversation: null, conversationKind: "direct", deleted: null };
+	}
+
+	// A delete-for-everyone names the message it removes; it is not a new message.
+	const remoteDelete = data.remoteDelete;
+	if (remoteDelete !== undefined) {
+		return {
+			message: null,
+			conversation: null,
+			conversationKind: target.kind,
+			deleted: { conversationId: target.id, messageId: `${target.id}:${remoteDelete.timestamp}` },
+		};
 	}
 
 	const hasAttachments = (data.attachments?.length ?? 0) > 0;
 	const body = data.message ?? (hasAttachments ? ATTACHMENT_PLACEHOLDER : "");
 
 	const message: Message = {
-		id: `${conversationId}:${data.timestamp}`,
-		conversationId,
+		id: `${target.id}:${data.timestamp}`,
+		conversationId: target.id,
 		author: peerName(envelope),
 		body,
 		sentAt: data.timestamp,
 		isOutgoing: false,
-		isDeleted: data.remoteDelete !== undefined,
+		isDeleted: false,
 	};
 
 	const conversation: Conversation = {
-		id: conversationId,
-		name: peerName(envelope),
+		id: target.id,
+		name: target.name,
 		unreadCount: 1,
 		lastActivityAt: data.timestamp,
 	};
 
-	return { message, conversation };
+	return { message, conversation, conversationKind: target.kind, deleted: null };
 }

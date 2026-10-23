@@ -23,6 +23,23 @@ export interface SignalCliBackendOptions {
 }
 
 const DEFAULT_NOTIFICATION_METHOD = "receive";
+const MAX_PROTOCOL_ERRORS = 20;
+
+/**
+ * signal-cli wraps notifications differently per receive mode: automatic mode
+ * sends `params.envelope`, manual mode (the default here) sends
+ * `params.result.envelope` inside a subscription envelope. Both must parse.
+ */
+export function unwrapNotification(params: unknown): unknown {
+	if (typeof params !== "object" || params === null) {
+		return params;
+	}
+	const result = (params as { result?: unknown }).result;
+	if (typeof result === "object" && result !== null && "envelope" in result) {
+		return result;
+	}
+	return params;
+}
 
 export class SignalCliBackend implements SignalBackend {
 	readonly #client: RpcCaller;
@@ -31,6 +48,9 @@ export class SignalCliBackend implements SignalBackend {
 
 	#listeners = new Set<(event: BackendEvent) => void>();
 	#unsubscribe: (() => void) | null = null;
+	#subscription: number | null = null;
+	/** Group conversations seen so far, so replies use `groupId` instead of `recipient`. */
+	#groupIds = new Set<ConversationId>();
 	#protocolErrors: string[] = [];
 
 	constructor(client: RpcCaller, options: SignalCliBackendOptions) {
@@ -48,24 +68,48 @@ export class SignalCliBackend implements SignalBackend {
 		if (this.#unsubscribe !== null) {
 			return;
 		}
-		this.#unsubscribe = this.#client.onNotification((method, params) => {
+
+		const unsubscribe = this.#client.onNotification((method, params) => {
 			this.#handleNotification(method, params);
 		});
-		await this.#client.request("subscribeReceive", { account: this.#account });
+
+		try {
+			const subscription = await this.#client.request<unknown>("subscribeReceive", {
+				account: this.#account,
+			});
+			this.#subscription = typeof subscription === "number" ? subscription : null;
+			this.#unsubscribe = unsubscribe;
+		} catch (error) {
+			// Startup failed: leave no handler behind, so a retry can really retry.
+			unsubscribe();
+			this.#subscription = null;
+			throw error;
+		}
 	}
 
 	async stop(): Promise<void> {
-		this.#unsubscribe?.();
+		const unsubscribe = this.#unsubscribe;
 		this.#unsubscribe = null;
+		unsubscribe?.();
+
+		if (this.#subscription !== null) {
+			const subscription = this.#subscription;
+			this.#subscription = null;
+			try {
+				await this.#client.request("unsubscribeReceive", { account: this.#account, subscription });
+			} catch {
+				// Best effort: the child may already be gone.
+			}
+		}
+
 		this.#client.close("backend stopped");
 	}
 
 	async sendMessage(conversationId: ConversationId, body: string): Promise<void> {
-		await this.#client.request("send", {
-			account: this.#account,
-			recipient: [conversationId],
-			message: body,
-		});
+		const params = this.#groupIds.has(conversationId)
+			? { account: this.#account, groupId: conversationId, message: body }
+			: { account: this.#account, recipient: [conversationId], message: body };
+		await this.#client.request("send", params);
 	}
 
 	subscribe(listener: (event: BackendEvent) => void): () => void {
@@ -80,7 +124,7 @@ export class SignalCliBackend implements SignalBackend {
 			return;
 		}
 
-		const parsed = receiveEnvelopeSchema.safeParse(params);
+		const parsed = receiveEnvelopeSchema.safeParse(unwrapNotification(params));
 		if (!parsed.success) {
 			this.#recordProtocolError(
 				`invalid envelope: ${parsed.error.issues[0]?.message ?? "unknown"}`,
@@ -89,17 +133,29 @@ export class SignalCliBackend implements SignalBackend {
 		}
 
 		const mapped = mapEnvelope(parsed.data.envelope);
+		const conversationId = mapped.conversation?.id ?? mapped.deleted?.conversationId;
+		if (mapped.conversationKind === "group" && conversationId !== undefined) {
+			this.#groupIds.add(conversationId);
+		}
+
 		if (mapped.conversation !== null) {
 			this.#emit({ kind: "conversation-updated", conversation: mapped.conversation });
 		}
 		if (mapped.message !== null) {
 			this.#emit({ kind: "message", message: mapped.message });
 		}
+		if (mapped.deleted !== null) {
+			this.#emit({
+				kind: "message-deleted",
+				conversationId: mapped.deleted.conversationId,
+				messageId: mapped.deleted.messageId,
+			});
+		}
 	}
 
 	#recordProtocolError(message: string): void {
 		this.#protocolErrors.push(message);
-		if (this.#protocolErrors.length > 20) {
+		if (this.#protocolErrors.length > MAX_PROTOCOL_ERRORS) {
 			this.#protocolErrors.shift();
 		}
 	}
@@ -112,20 +168,26 @@ export class SignalCliBackend implements SignalBackend {
 }
 
 export interface SpawnBackendOptions extends SignalCliBackendOptions {
-	/** Defaults to `signal-cli -a <account> jsonRpc`. */
+	/** Defaults to manual receive mode, so no message is delivered before `start()`. */
 	readonly command?: readonly string[];
 	readonly defaultTimeoutMs?: number;
 }
 
 /**
- * Composition helper: spawns `signal-cli` in JSON-RPC mode and wraps it.
- * Kept separate from the adapter so the adapter itself needs no process at all.
+ * Composition helper: spawns `signal-cli` in JSON-RPC manual-receive mode and
+ * wraps it. Kept separate from the adapter so the adapter needs no process.
  */
 export function spawnSignalCliBackend(options: SpawnBackendOptions): {
 	readonly backend: SignalCliBackend;
 	readonly client: JsonRpcClient;
 } {
-	const command = options.command ?? ["signal-cli", "-a", options.account, "jsonRpc"];
+	const command = options.command ?? [
+		"signal-cli",
+		"-a",
+		options.account,
+		"--receive-mode=manual",
+		"jsonRpc",
+	];
 	const stream = createProcessStream({ command });
 	const client = new JsonRpcClient(stream, {
 		defaultTimeoutMs: options.defaultTimeoutMs ?? 30_000,

@@ -1,17 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import type { RpcCaller } from "../src/adapters/signal/signal-cli-backend";
-import { SignalCliBackend } from "../src/adapters/signal/signal-cli-backend";
+import { SignalCliBackend, unwrapNotification } from "../src/adapters/signal/signal-cli-backend";
 import type { BackendEvent } from "../src/ports/backend";
 
 class FakeRpc implements RpcCaller {
 	readonly requests: Array<{ method: string; params?: unknown }> = [];
+	readonly results = new Map<string, unknown>();
+	readonly failing = new Set<string>();
 	closedWith: string | null = null;
 
 	#handler: ((method: string, params: unknown) => void) | null = null;
 
 	async request<T = unknown>(method: string, params?: unknown): Promise<T> {
 		this.requests.push(params === undefined ? { method } : { method, params });
-		return undefined as T;
+		if (this.failing.has(method)) {
+			throw new Error(`${method} failed`);
+		}
+		return this.results.get(method) as T;
 	}
 
 	onNotification(handler: (method: string, params: unknown) => void): () => void {
@@ -33,63 +38,115 @@ class FakeRpc implements RpcCaller {
 	get hasListener(): boolean {
 		return this.#handler !== null;
 	}
+
+	sent(method: string): Array<{ method: string; params?: unknown }> {
+		return this.requests.filter((request) => request.method === method);
+	}
 }
 
-const envelope = {
-	account: "+10000000000",
-	envelope: {
-		source: "+10000000000",
-		sourceNumber: "+10000000000",
-		sourceUuid: "uuid-alice",
-		sourceName: "Alice",
-		sourceDevice: 1,
-		timestamp: 1,
-		dataMessage: { timestamp: 1_760_000_000_000, message: "hi" },
-	},
+const ACCOUNT = "+10000000000";
+
+const envelope = (dataMessage: Record<string, unknown>) => ({
+	sourceNumber: ACCOUNT,
+	sourceUuid: "uuid-alice",
+	sourceName: "Alice",
+	sourceDevice: 1,
+	timestamp: 1,
+	dataMessage,
+});
+
+/** Auto mode: the envelope sits directly in params. */
+const directParams = () => ({
+	envelope: envelope({ timestamp: 1_760_000_000_000, message: "hi" }),
+});
+
+/** Manual mode: the envelope is wrapped in a subscription response. */
+const subscriptionParams = () => ({
+	subscription: 0,
+	result: { account: ACCOUNT, envelope: envelope({ timestamp: 1_760_000_000_000, message: "hi" }) },
+});
+
+const setup = () => {
+	const rpc = new FakeRpc();
+	rpc.results.set("subscribeReceive", 0);
+	const backend = new SignalCliBackend(rpc, { account: ACCOUNT });
+	const events: BackendEvent[] = [];
+	backend.subscribe((event) => events.push(event));
+	return { rpc, backend, events };
 };
+
+describe("unwrapNotification", () => {
+	test("unwraps the subscription response of manual receive mode", () => {
+		expect(unwrapNotification(subscriptionParams())).toEqual({
+			account: ACCOUNT,
+			envelope: envelope({ timestamp: 1_760_000_000_000, message: "hi" }),
+		});
+	});
+
+	test("passes automatic-mode params through untouched", () => {
+		expect(unwrapNotification(directParams())).toEqual(directParams());
+	});
+
+	test("survives non-object payloads", () => {
+		expect(unwrapNotification(null)).toBeNull();
+		expect(unwrapNotification("x")).toBe("x");
+	});
+});
 
 describe("SignalCliBackend", () => {
 	test("subscribes for receives on start", async () => {
-		const rpc = new FakeRpc();
-		const backend = new SignalCliBackend(rpc, { account: "+10000000000" });
+		const { rpc, backend } = setup();
 
 		await backend.start();
 
-		expect(rpc.requests).toEqual([
-			{ method: "subscribeReceive", params: { account: "+10000000000" } },
-		]);
+		expect(rpc.requests).toEqual([{ method: "subscribeReceive", params: { account: ACCOUNT } }]);
 		expect(rpc.hasListener).toBe(true);
 	});
 
 	test("start is idempotent", async () => {
-		const rpc = new FakeRpc();
-		const backend = new SignalCliBackend(rpc, { account: "+1" });
+		const { rpc, backend } = setup();
 
 		await backend.start();
 		await backend.start();
 
-		expect(rpc.requests).toHaveLength(1);
+		expect(rpc.sent("subscribeReceive")).toHaveLength(1);
 	});
 
-	test("emits conversation and message events for a received envelope", async () => {
-		const rpc = new FakeRpc();
-		const backend = new SignalCliBackend(rpc, { account: "+1" });
-		const events: BackendEvent[] = [];
-		backend.subscribe((event) => events.push(event));
+	test("a failed start leaves no handler behind, so a retry works", async () => {
+		const { rpc, backend } = setup();
+		rpc.failing.add("subscribeReceive");
+
+		await expect(backend.start()).rejects.toThrow("subscribeReceive failed");
+		expect(rpc.hasListener).toBe(false);
+
+		rpc.failing.delete("subscribeReceive");
 		await backend.start();
 
-		rpc.emit("receive", envelope);
+		expect(rpc.sent("subscribeReceive")).toHaveLength(2);
+		expect(rpc.hasListener).toBe(true);
+	});
+
+	test("reads a subscription-wrapped notification", async () => {
+		const { rpc, backend, events } = setup();
+		await backend.start();
+
+		rpc.emit("receive", subscriptionParams());
 
 		expect(events.map((event) => event.kind)).toEqual(["conversation-updated", "message"]);
-		const message = events[1];
-		expect(message?.kind === "message" && message.message.body).toBe("hi");
+		expect(backend.protocolErrors).toEqual([]);
+	});
+
+	test("also reads an unwrapped notification", async () => {
+		const { rpc, backend, events } = setup();
+		await backend.start();
+
+		rpc.emit("receive", directParams());
+
+		expect(events.map((event) => event.kind)).toEqual(["conversation-updated", "message"]);
 	});
 
 	test("ignores notifications of other kinds", async () => {
-		const rpc = new FakeRpc();
-		const backend = new SignalCliBackend(rpc, { account: "+1" });
-		const events: BackendEvent[] = [];
-		backend.subscribe((event) => events.push(event));
+		const { rpc, backend, events } = setup();
 		await backend.start();
 
 		rpc.emit("callEvent", { state: "RINGING" });
@@ -98,13 +155,10 @@ describe("SignalCliBackend", () => {
 	});
 
 	test("records a protocol error instead of throwing on a bad envelope", async () => {
-		const rpc = new FakeRpc();
-		const backend = new SignalCliBackend(rpc, { account: "+1" });
-		const events: BackendEvent[] = [];
-		backend.subscribe((event) => events.push(event));
+		const { rpc, backend, events } = setup();
 		await backend.start();
 
-		rpc.emit("receive", { envelope: { nope: true } });
+		rpc.emit("receive", { subscription: 0, result: { envelope: { nope: true } } });
 
 		expect(events).toHaveLength(0);
 		expect(backend.protocolErrors).toHaveLength(1);
@@ -112,8 +166,7 @@ describe("SignalCliBackend", () => {
 	});
 
 	test("bounds the protocol error log", async () => {
-		const rpc = new FakeRpc();
-		const backend = new SignalCliBackend(rpc, { account: "+1" });
+		const { rpc, backend } = setup();
 		await backend.start();
 
 		for (let index = 0; index < 25; index++) {
@@ -123,41 +176,91 @@ describe("SignalCliBackend", () => {
 		expect(backend.protocolErrors).toHaveLength(20);
 	});
 
-	test("sends a message with the account and recipient", async () => {
-		const rpc = new FakeRpc();
-		const backend = new SignalCliBackend(rpc, { account: "+1" });
+	test("emits a deletion event naming the deleted message", async () => {
+		const { rpc, backend, events } = setup();
+		await backend.start();
+
+		rpc.emit("receive", {
+			subscription: 0,
+			result: {
+				account: ACCOUNT,
+				envelope: envelope({ timestamp: 9_000, remoteDelete: { timestamp: 1_000 } }),
+			},
+		});
+
+		expect(events).toEqual([
+			{ kind: "message-deleted", conversationId: "uuid-alice", messageId: "uuid-alice:1000" },
+		]);
+	});
+
+	test("sends a direct message with the account and recipient", async () => {
+		const { rpc, backend } = setup();
 
 		await backend.sendMessage("uuid-alice", "hello");
 
 		expect(rpc.requests.at(-1)).toEqual({
 			method: "send",
-			params: { account: "+1", recipient: ["uuid-alice"], message: "hello" },
+			params: { account: ACCOUNT, recipient: ["uuid-alice"], message: "hello" },
 		});
 	});
 
-	test("stop unsubscribes and closes the client", async () => {
-		const rpc = new FakeRpc();
-		const backend = new SignalCliBackend(rpc, { account: "+1" });
+	test("sends a group message with groupId once the group is known", async () => {
+		const { rpc, backend } = setup();
+		await backend.start();
+		rpc.emit("receive", {
+			subscription: 0,
+			result: {
+				account: ACCOUNT,
+				envelope: envelope({
+					timestamp: 5,
+					message: "hi all",
+					groupInfo: { groupId: "group-1", groupName: "Signal devs" },
+				}),
+			},
+		});
+
+		await backend.sendMessage("group-1", "hello group");
+
+		expect(rpc.requests.at(-1)).toEqual({
+			method: "send",
+			params: { account: ACCOUNT, groupId: "group-1", message: "hello group" },
+		});
+	});
+
+	test("stop unsubscribes, then closes the client", async () => {
+		const { rpc, backend } = setup();
 		await backend.start();
 
 		await backend.stop();
 
+		expect(rpc.sent("unsubscribeReceive")).toEqual([
+			{ method: "unsubscribeReceive", params: { account: ACCOUNT, subscription: 0 } },
+		]);
 		expect(rpc.hasListener).toBe(false);
 		expect(rpc.closedWith).toBe("backend stopped");
 	});
 
+	test("stop survives a failing unsubscribe", async () => {
+		const { rpc, backend } = setup();
+		await backend.start();
+		rpc.failing.add("unsubscribeReceive");
+
+		await backend.stop();
+
+		expect(rpc.closedWith).toBe("backend stopped");
+	});
+
 	test("a listener can unsubscribe itself", async () => {
-		const rpc = new FakeRpc();
-		const backend = new SignalCliBackend(rpc, { account: "+1" });
+		const { rpc, backend } = setup();
 		let calls = 0;
 		const unsubscribe = backend.subscribe(() => {
 			calls++;
 		});
 		await backend.start();
 
-		rpc.emit("receive", envelope);
+		rpc.emit("receive", directParams());
 		unsubscribe();
-		rpc.emit("receive", envelope);
+		rpc.emit("receive", directParams());
 
 		expect(calls).toBe(2);
 	});
