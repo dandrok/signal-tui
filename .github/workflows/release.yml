@@ -11,11 +11,10 @@ on:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest # trusted publishing needs a GitHub-hosted runner
     permissions:
       contents: read
-      # Required for npm provenance (trusted publishing)
-      id-token: write
+      id-token: write # OIDC: short-lived publish credential + provenance
     steps:
       - uses: actions/checkout@v5
 
@@ -34,11 +33,22 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm >= 11.5.1 and node >= 22.14; the npm bundled
+      # with the runner's node is older, so bring it forward explicitly.
+      - name: Use a modern npm
+        run: |
+          npm install --global npm@latest
+          node --version
+          npm --version
 
       - name: Publish
         if: inputs.dry_run == false
         run: npm publish --access public --provenance
         env:
+          # Deliberately allowed to be empty: npm prefers OIDC when the workflow is a
+          # configured trusted publisher, and only falls back to this token while
+          # bootstrapping the very first version.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
