@@ -112,17 +112,18 @@ export function evaluateChecks(
 		checks.push({ name: "signal-cli", status: "ok", detail: probes.signalCliVersion });
 	}
 
-	// A JVM-backed signal-cli cannot print its version without a suitable JRE, so a
-	// working signal-cli means Java is either satisfied or unnecessary (native
-	// build). Java only becomes actionable when signal-cli itself is failing.
+	// A working signal-cli means Java is satisfied or unnecessary, and Java only
+	// becomes actionable when signal-cli itself fails. A successful version check
+	// does not reveal which build is installed, so the detail never claims one:
+	// absent java proves a native build, present java proves nothing.
 	if (probes.signalCliVersion !== null) {
 		checks.push({
 			name: "java",
 			status: "ok",
 			detail:
 				probes.javaVersion === null
-					? "not installed — not needed by a native build"
-					: `${probes.javaVersion} (not used by a native build)`,
+					? "not installed — signal-cli runs without it"
+					: probes.javaVersion,
 		});
 	} else if (probes.javaVersion === null) {
 		checks.push({
