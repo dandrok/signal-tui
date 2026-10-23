@@ -75,8 +75,12 @@ class FakeBackend implements SignalBackend {
 		this.stopped++;
 	}
 
-	async sendMessage(conversationId: string, body: string): Promise<void> {
+	async sendMessage(
+		conversationId: string,
+		body: string,
+	): Promise<{ timestamp: number | undefined }> {
 		this.sent.push({ conversationId, body });
+		return { timestamp: 1_760_000_000_500 };
 	}
 
 	subscribe(listener: (event: BackendEvent) => void): () => void {
@@ -194,6 +198,38 @@ describe("createSession", () => {
 		await session.send("uuid-alice", "hello");
 
 		expect(backend.sent).toEqual([{ conversationId: "uuid-alice", body: "hello" }]);
+	});
+
+	test("echoes a sent message into the store so it appears immediately", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		const session = createSession({ store, backend });
+		let changes = 0;
+		session.onChange(() => {
+			changes++;
+		});
+
+		await session.send("uuid-alice", "hello");
+
+		expect(backend.sent).toEqual([{ conversationId: "uuid-alice", body: "hello" }]);
+		expect(store.ops).toHaveLength(2);
+		expect(store.ops[0]).toBe("conversation:uuid-alice");
+		// the server timestamp, not a local clock reading: deletes refer to it
+		expect(store.ops[1]).toBe("message:uuid-alice:1760000000500");
+		expect(changes).toBe(1);
+	});
+
+	test("does not echo a message the backend refused to send", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		backend.sendMessage = async () => {
+			throw new Error("network down");
+		};
+		const session = createSession({ store, backend });
+
+		await expect(session.send("uuid-alice", "hello")).rejects.toThrow("network down");
+
+		expect(store.ops).toEqual([]);
 	});
 
 	test("stop unsubscribes before stopping the backend", async () => {

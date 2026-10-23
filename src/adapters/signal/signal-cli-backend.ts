@@ -1,5 +1,5 @@
 import type { ConversationId } from "../../domain/types";
-import type { BackendEvent, SignalBackend } from "../../ports/backend";
+import type { BackendEvent, SendResult, SignalBackend } from "../../ports/backend";
 import { JsonRpcClient } from "./json-rpc-client";
 import { mapEnvelope } from "./map-envelope";
 import { createProcessStream } from "./process-stream";
@@ -110,12 +110,14 @@ export class SignalCliBackend implements SignalBackend {
 		this.#client.close("backend stopped");
 	}
 
-	async sendMessage(conversationId: ConversationId, body: string): Promise<void> {
+	async sendMessage(conversationId: ConversationId, body: string): Promise<SendResult> {
 		// Single-account mode: params carry no `account`, exactly as documented.
 		const params = this.#groupIds.has(conversationId)
 			? { groupId: conversationId, message: body }
 			: { recipient: [conversationId], message: body };
-		await this.#client.request("send", params);
+		const result = await this.#client.request<{ timestamp?: unknown } | undefined>("send", params);
+		const timestamp = result?.timestamp;
+		return { timestamp: typeof timestamp === "number" ? timestamp : undefined };
 	}
 
 	subscribe(listener: (event: BackendEvent) => void): () => void {

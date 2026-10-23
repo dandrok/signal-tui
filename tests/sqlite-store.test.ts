@@ -112,6 +112,16 @@ describe("SqliteMessageStore", () => {
 		expect(await store.listMessages("uuid-alice", 0)).toEqual([]);
 	});
 
+	test("preserves the later activity time", async () => {
+		const store = open();
+		await store.upsertConversation(conversation({ lastActivityAt: 5_000 }));
+
+		// A late-arriving transcript carries an older timestamp.
+		await store.upsertConversation(conversation({ lastActivityAt: 1_000 }));
+
+		expect((await store.listConversations())[0]?.lastActivityAt).toBe(5_000);
+	});
+
 	test("orders conversations by last activity", async () => {
 		const store = open();
 		await store.upsertConversation(conversation({ id: "a", name: "Old", lastActivityAt: 10 }));
@@ -129,6 +139,37 @@ describe("SqliteMessageStore", () => {
 		const [updated] = await store.listConversations();
 		expect(updated?.name).toBe("Alice Smith");
 		expect(updated?.lastActivityAt).toBe(5_000);
+	});
+
+	test("never lowers an unread count on upsert", async () => {
+		const store = open();
+		await store.upsertConversation(conversation({ unreadCount: 3 }));
+
+		// An outgoing transcript reports 0; that must not mark the others as read.
+		await store.upsertConversation(conversation({ unreadCount: 0 }));
+
+		expect((await store.listConversations())[0]?.unreadCount).toBe(3);
+	});
+
+	test("treats a whitespace-only name as unknown", async () => {
+		const store = open();
+		await store.upsertConversation(conversation({ name: "Alice" }));
+
+		await store.upsertConversation(conversation({ name: "   " }));
+
+		expect((await store.listConversations())[0]?.name).toBe("Alice");
+	});
+
+	test("keeps a known name when a sync transcript has none", async () => {
+		const store = open();
+		await store.upsertConversation(conversation({ name: "Alice" }));
+
+		// A sent message only knows the destination id.
+		await store.upsertConversation(conversation({ name: "", lastActivityAt: 2_000 }));
+
+		const [updated] = await store.listConversations();
+		expect(updated?.name).toBe("Alice");
+		expect(updated?.lastActivityAt).toBe(2_000);
 	});
 
 	test("rejects a message whose conversation does not exist", async () => {

@@ -43,6 +43,18 @@ for await (const line of console) {
 			timestamp: 1_760_000_000_000,
 			dataMessage: { timestamp: 1_760_000_000_000, message: "hello from the fake peer" },
 		});
+		// Your own message, echoed to this device as a sync transcript.
+		notify({
+			timestamp: 1_760_000_000_002,
+			syncMessage: {
+				sentMessage: {
+					timestamp: 1_760_000_000_001,
+					message: "sent from my phone",
+					destinationUuid: "uuid-bob",
+					destinationNumber: "+10000000009",
+				},
+			},
+		});
 		// A notification kind the adapter must ignore.
 		write({
 			jsonrpc: "2.0",

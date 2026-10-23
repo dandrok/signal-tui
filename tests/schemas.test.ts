@@ -191,11 +191,33 @@ describe("envelopeSchema", () => {
 		expect(receiveEnvelopeSchema.safeParse(wrapper).success).toBe(true);
 	});
 
-	test("leaves unmodelled envelope kinds as opaque", () => {
+	test("parses a sync transcript with its destination ids", () => {
 		const parsed = envelopeSchema.parse({
+			timestamp: 1,
+			syncMessage: {
+				sentMessage: {
+					timestamp: 5,
+					message: "hi",
+					destinationUuid: "uuid-bob",
+					destinationNumber: "+10000000002",
+				},
+			},
+		});
+
+		expect(parsed.syncMessage?.sentMessage?.destinationUuid).toBe("uuid-bob");
+		expect(parsed.syncMessage?.sentMessage?.message).toBe("hi");
+	});
+
+	test("requires a timestamp inside a sync transcript", () => {
+		const parsed = envelopeSchema.safeParse({
 			timestamp: 1,
 			syncMessage: { sentMessage: { message: "hi" } },
 		});
-		expect(parsed.syncMessage).toEqual({ sentMessage: { message: "hi" } });
+		expect(parsed.success).toBe(false);
+	});
+
+	test("leaves unmodelled envelope kinds as opaque", () => {
+		const parsed = envelopeSchema.parse({ timestamp: 1, storyMessage: { text: "hi" } });
+		expect(parsed.storyMessage).toEqual({ text: "hi" });
 	});
 });

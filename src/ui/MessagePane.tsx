@@ -1,5 +1,5 @@
 import { Box, Text } from "ink";
-import { describeAuthor, describeBody, formatClock } from "../domain/format";
+import { describeAuthor, describeBody, displayName, formatClock } from "../domain/format";
 import type { Conversation, Message } from "../domain/types";
 
 export interface MessagePaneProps {
@@ -22,7 +22,7 @@ export function MessagePane({ conversation, messages, height }: MessagePaneProps
 			height={height}
 		>
 			<Text bold color="cyan">
-				{conversation ? conversation.name : "—"}
+				{conversation ? displayName(conversation) : "—"}
 			</Text>
 			{visible.length === 0 ? <Text dimColor>no messages yet</Text> : null}
 			{visible.map((message) => (

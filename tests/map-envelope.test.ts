@@ -58,9 +58,9 @@ describe("conversationTarget", () => {
 		});
 	});
 
-	test("falls back to a generic label for unnamed groups", () => {
+	test("leaves the name blank for an unnamed group, so a known name survives", () => {
 		const unnamed = withData({ timestamp: 1, message: "hi", groupInfo: { groupId: "group-2" } });
-		expect(conversationTarget(unnamed)).toEqual({ id: "group-2", name: "Group", kind: "group" });
+		expect(conversationTarget(unnamed)).toEqual({ id: "group-2", name: "", kind: "group" });
 	});
 
 	test("keys a direct message by peer identity", () => {
@@ -135,6 +135,84 @@ describe("mapEnvelope", () => {
 		expect(mapped.deleted).toEqual({
 			conversationId: "b5b0c3d2-0000-4000-8000-000000000000",
 			messageId: "b5b0c3d2-0000-4000-8000-000000000000:1000",
+		});
+	});
+
+	test("maps your own sent message from a sync transcript as outgoing", () => {
+		const envelope: Envelope = {
+			timestamp: 1,
+			syncMessage: {
+				sentMessage: {
+					timestamp: 1_760_000_000_000,
+					message: "on my way",
+					destinationUuid: "uuid-bob",
+					destinationNumber: "+10000000002",
+				},
+			},
+		};
+
+		const mapped = mapEnvelope(envelope);
+
+		expect(mapped.message).toEqual({
+			id: "uuid-bob:1760000000000",
+			conversationId: "uuid-bob",
+			author: "You",
+			body: "on my way",
+			sentAt: 1_760_000_000_000,
+			isOutgoing: true,
+			isDeleted: false,
+		});
+		// No name: a transcript only knows the destination id.
+		expect(mapped.conversation?.name).toBe("");
+		expect(mapped.conversation?.unreadCount).toBe(0);
+		expect(mapped.conversationKind).toBe("direct");
+	});
+
+	test("maps a sent message to a group by group id", () => {
+		const envelope: Envelope = {
+			timestamp: 1,
+			syncMessage: {
+				sentMessage: {
+					timestamp: 5,
+					message: "hi all",
+					destinationNumber: "+10000000002",
+					groupInfo: { groupId: "group-9", groupName: "Signal devs" },
+				},
+			},
+		};
+
+		const mapped = mapEnvelope(envelope);
+
+		expect(mapped.conversation).toEqual({
+			id: "group-9",
+			name: "Signal devs",
+			unreadCount: 0,
+			lastActivityAt: 5,
+		});
+		expect(mapped.conversationKind).toBe("group");
+	});
+
+	test("does not rename a group from a transcript without a group name", () => {
+		const envelope: Envelope = {
+			timestamp: 1,
+			syncMessage: {
+				sentMessage: { timestamp: 5, message: "hi all", groupInfo: { groupId: "group-9" } },
+			},
+		};
+
+		expect(mapEnvelope(envelope).conversation?.name).toBe("");
+	});
+
+	test("ignores a sync transcript without a destination", () => {
+		const envelope: Envelope = {
+			timestamp: 1,
+			syncMessage: { sentMessage: { timestamp: 1, message: "nowhere" } },
+		};
+		expect(mapEnvelope(envelope)).toEqual({
+			message: null,
+			conversation: null,
+			conversationKind: "direct",
+			deleted: null,
 		});
 	});
 
