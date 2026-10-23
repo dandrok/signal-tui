@@ -1,4 +1,4 @@
-import type { Conversation, ConversationId, Message } from "../../domain/types";
+import type { Conversation, ConversationId, Message, MessageId } from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
 import { demoConversations, demoMessages } from "./demo-data";
 
@@ -48,5 +48,14 @@ export class InMemoryStore implements MessageStore {
 			return;
 		}
 		this.#messages[index] = message;
+	}
+
+	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {
+		const index = this.#messages.findIndex((message) => message.id === messageId);
+		const existing = this.#messages[index];
+		if (existing === undefined || existing.conversationId !== conversationId) {
+			return;
+		}
+		this.#messages[index] = { ...existing, isDeleted: true, body: "" };
 	}
 }

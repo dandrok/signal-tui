@@ -1,7 +1,7 @@
 {
 	"name": "signal-tui",
 	"version": "0.0.0",
-	"description": "A terminal Signal client — ink + bun, local-first with full-text search",
+	"description": "A terminal Signal client \u2014 ink + bun, local-first with full-text search",
 	"type": "module",
 	"bin": {
 		"signal-tui": "src/cli.tsx"
@@ -39,7 +39,8 @@
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"verify": "bun run typecheck && bun run lint && bun test",
-		"setup": "bun run scripts/setup-hooks.ts"
+		"setup": "bun run scripts/setup-hooks.ts",
+		"doctor": "bun run src/doctor.ts"
 	},
 	"dependencies": {
 		"ink": "^8.0.0",

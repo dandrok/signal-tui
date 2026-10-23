@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
-import type { Conversation, ConversationId, Message } from "../../domain/types";
+import { chmodSync, statSync } from "node:fs";
+import type { Conversation, ConversationId, Message, MessageId } from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
 import { migrations } from "./migrations";
 
@@ -91,6 +92,22 @@ export class SqliteMessageStore implements MessageStore {
 			this.#db.exec("PRAGMA foreign_keys = ON;");
 			if (options.path !== ":memory:") {
 				this.#db.exec("PRAGMA journal_mode = WAL;");
+				// Message bodies are plaintext: keep the cache private to this user.
+				// SQLite copies the database file's mode onto its -wal and -shm files,
+				// so setting it here covers those too.
+				try {
+					chmodSync(options.path, 0o600);
+				} catch (error) {
+					// Refuse to run with a readable cache: bodies are plaintext. Only
+					// fail when the mode is actually exposed, so filesystems where the
+					// mode is already restrictive (or meaningless) still work.
+					const mode = statSync(options.path).mode & 0o077;
+					if (mode !== 0) {
+						throw new Error(
+							`cannot restrict cache permissions (${options.path}): ${error instanceof Error ? error.message : String(error)}`,
+						);
+					}
+				}
 			}
 			this.#migrate();
 		} catch (error) {
@@ -199,10 +216,18 @@ export class SqliteMessageStore implements MessageStore {
 			);
 	}
 
+	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {
+		this.#db
+			.query<null, [string, string]>(
+				`UPDATE messages SET is_deleted = 1, body = ''
+				 WHERE id = ?1 AND conversation_id = ?2`,
+			)
+			.run(messageId, conversationId);
+	}
+
 	close(): void {
 		this.#db.close();
 	}
-
 	#migrate(): void {
 		const current = this.schemaVersion;
 		for (const migration of migrations) {

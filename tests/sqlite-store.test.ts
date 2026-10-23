@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdtempSync,
+	readdirSync,
+	readlinkSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SqliteMessageStore } from "../src/adapters/sqlite/store";
@@ -127,9 +136,48 @@ describe("SqliteMessageStore", () => {
 		await expect(store.saveMessage(message({ conversationId: "ghost" }))).rejects.toThrow();
 	});
 
+	test("marks a message deleted and clears its body", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+		await store.saveMessage(message({ body: "oops" }));
+
+		await store.markMessageDeleted("uuid-alice", "m1");
+
+		const [saved] = await store.listMessages("uuid-alice");
+		expect(saved?.isDeleted).toBe(true);
+		expect(saved?.body).toBe("");
+		expect(await store.search("oops")).toEqual([]);
+	});
+
+	test("ignores a delete for a message it does not have", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+
+		await store.markMessageDeleted("uuid-alice", "missing");
+
+		expect(await store.listMessages("uuid-alice")).toEqual([]);
+	});
+
 	test("started at schema version 1", async () => {
 		expect(open().schemaVersion).toBe(1);
 	});
+
+	test.skipIf(process.platform !== "linux")(
+		"keeps the cache private even if it already existed",
+		async () => {
+			const dir = mkdtempSync(join(tmpdir(), "signal-tui-perm-"));
+			const path = join(dir, "cache.db");
+			// Pre-create it world-readable: with a typical umask SQLite would create
+			// 0600 on its own, so the test must not depend on that.
+			writeFileSync(path, "");
+			(chmodSync as (file: string, mode: number) => void)(path, 0o644);
+
+			opened.push(new SqliteMessageStore({ path }));
+
+			// 0600: bodies are plaintext, so other local users must not read them.
+			expect(statSync(path).mode & 0o777).toBe(0o600);
+		},
+	);
 
 	test.skipIf(!existsSync("/proc/self/fd"))("closes the handle when initialization fails", () => {
 		const dir = mkdtempSync(join(tmpdir(), "signal-tui-bad-"));
