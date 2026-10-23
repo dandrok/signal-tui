@@ -13,6 +13,11 @@ describe("parseArgs", () => {
 		expect(parse(["-h"])).toEqual({ mode: "help" });
 	});
 
+	test("understands --version and -v", () => {
+		expect(parse(["--version"])).toEqual({ mode: "version" });
+		expect(parse(["-v"])).toEqual({ mode: "version" });
+	});
+
 	test("selects demo mode", () => {
 		expect(parse(["--demo"])).toEqual({ mode: "demo" });
 	});

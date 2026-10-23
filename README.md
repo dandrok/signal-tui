@@ -15,12 +15,20 @@ unread counts and read receipts work against a real account.
 | [`signal-cli`](https://github.com/AsamK/signal-cli) **0.14+** | live mode only; the GraalVM native build needs no Java |
 | `qrencode` | `bun run link` renders the QR as an image |
 
-## Quick start
+## Install
+
+```sh
+npm i -g signal-tui        # needs Bun on PATH: the bin is run by `#!/usr/bin/env bun`
+signal-tui --demo          # built-in sample data, no account
+signal-tui --version
+```
+
+From source:
 
 ```sh
 bun install
-bun run setup          # enables the tracked git hooks
-bun start              # demo mode — no account needed
+bun run setup              # enables the tracked git hooks
+bun start
 ```
 
 ### Live mode

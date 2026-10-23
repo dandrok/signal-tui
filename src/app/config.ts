@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 export type CliConfig =
 	| { readonly mode: "help" }
+	| { readonly mode: "version" }
 	| { readonly mode: "demo" }
 	| { readonly mode: "live"; readonly account: string; readonly dbPath: string };
 
@@ -64,6 +65,9 @@ export function parseArgs(argv: readonly string[], options: ParseOptions): CliCo
 		if (arg === "--help" || arg === "-h") {
 			return { mode: "help" };
 		}
+		if (arg === "--version" || arg === "-v") {
+			return { mode: "version" };
+		}
 		if (arg === "--demo") {
 			demo = true;
 			continue;
@@ -115,6 +119,7 @@ export const USAGE = `signal-tui — a terminal Signal client
 Usage:
   signal-tui --demo                        run on built-in sample data, no account
   signal-tui --account +48123456789        run against a linked signal-cli account
+  signal-tui --version                     print the version
   signal-tui --help                        show this text
 
 Options:

@@ -1,6 +1,6 @@
 {
 	"name": "signal-tui",
-	"version": "0.0.0",
+	"version": "0.0.1",
 	"description": "A terminal Signal client \u2014 ink + bun, local-first with full-text search",
 	"type": "module",
 	"bin": {
@@ -41,7 +41,9 @@
 		"lint:fix": "biome check --write .",
 		"verify": "bun run typecheck && bun run lint && bun test",
 		"setup": "bun run scripts/setup-hooks.ts",
-		"doctor": "bun run src/doctor.ts"
+		"doctor": "bun run src/doctor.ts",
+		"prepublishOnly": "bun run verify",
+		"pack:check": "bun pm pack --dry-run"
 	},
 	"dependencies": {
 		"ink": "^8.0.0",
@@ -54,5 +56,9 @@
 		"@types/react": "^19.3.0",
 		"ink-testing-library": "^4.0.0",
 		"typescript": "^7.0.2"
+	},
+	"homepage": "https://github.com/dandrok/signal-tui#readme",
+	"bugs": {
+		"url": "https://github.com/dandrok/signal-tui/issues"
 	}
 }
