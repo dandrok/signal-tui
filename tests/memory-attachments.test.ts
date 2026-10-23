@@ -47,6 +47,23 @@ describe("InMemoryStore attachments", () => {
 		expect(stored?.attachments).toEqual([]);
 	});
 
+	test("keeps files when an update says nothing about them", async () => {
+		const store = new InMemoryStore();
+		await store.saveMessage(withFiles);
+
+		// A partial update (an edit, say) that carries no attachments field must not
+		// be read as "this message lost its files".
+		const { attachments, ...withoutFiles } = withFiles;
+		await store.saveMessage({ ...withoutFiles, body: "edited" });
+
+		const stored = (await store.listMessages("c-signal-devs")).find(
+			(message) => message.id === "m-files",
+		);
+
+		expect(stored?.body).toBe("edited");
+		expect(stored?.attachments).toEqual(withFiles.attachments);
+	});
+
 	test("drops them when the message is deleted", async () => {
 		const store = new InMemoryStore();
 		await store.saveMessage(withFiles);

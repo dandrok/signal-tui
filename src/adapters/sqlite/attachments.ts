@@ -1,6 +1,9 @@
 import type { Database } from "bun:sqlite";
 import type { Attachment, Message } from "../../domain/types";
 
+/** Well under SQLite's historical 999-variable ceiling. */
+export const ATTACHMENT_ID_CHUNK = 500;
+
 interface AttachmentRow {
 	message_id: string;
 	position: number;
@@ -30,25 +33,29 @@ export function toAttachment(row: AttachmentRow): Attachment {
 export function loadAttachments(
 	db: Database,
 	messageIds: readonly string[],
+	chunkSize = ATTACHMENT_ID_CHUNK,
 ): Map<string, Attachment[]> {
 	const byMessage = new Map<string, Attachment[]>();
-	if (messageIds.length === 0) {
-		return byMessage;
-	}
-	const placeholders = messageIds.map((_, index) => `?${index + 1}`).join(", ");
-	const rows = db
-		.query<AttachmentRow, string[]>(
-			`SELECT message_id, position, id, content_type, filename, size, caption, is_voice_note
-			 FROM attachments
-			 WHERE message_id IN (${placeholders})
-			 ORDER BY message_id, position`,
-		)
-		.all(...messageIds);
 
-	for (const row of rows) {
-		const list = byMessage.get(row.message_id) ?? [];
-		list.push(toAttachment(row));
-		byMessage.set(row.message_id, list);
+	// One bind parameter per id, so a long conversation would exceed SQLite's
+	// variable ceiling (999 on older builds) and throw instead of returning rows.
+	for (let start = 0; start < messageIds.length; start += chunkSize) {
+		const chunk = messageIds.slice(start, start + chunkSize);
+		const placeholders = chunk.map((_, index) => `?${index + 1}`).join(", ");
+		const rows = db
+			.query<AttachmentRow, string[]>(
+				`SELECT message_id, position, id, content_type, filename, size, caption, is_voice_note
+				 FROM attachments
+				 WHERE message_id IN (${placeholders})
+				 ORDER BY message_id, position`,
+			)
+			.all(...chunk);
+
+		for (const row of rows) {
+			const list = byMessage.get(row.message_id) ?? [];
+			list.push(toAttachment(row));
+			byMessage.set(row.message_id, list);
+		}
 	}
 	return byMessage;
 }

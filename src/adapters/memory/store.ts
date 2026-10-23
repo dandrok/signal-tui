@@ -90,11 +90,16 @@ export class InMemoryStore implements MessageStore {
 
 	async saveMessage(message: Message): Promise<{ readonly inserted: boolean }> {
 		const index = this.#messages.findIndex((existing) => existing.id === message.id);
-		if (index === -1) {
+		const existing = this.#messages[index];
+		if (existing === undefined) {
 			this.#messages.push(message);
 			return { inserted: true };
 		}
-		this.#messages[index] = message;
+		// An absent `attachments` field means "this update says nothing about files",
+		// not "this message has none" — the rule the SQLite adapter already applies,
+		// or a partial update would silently drop files the store had.
+		const attachments = message.attachments ?? existing.attachments;
+		this.#messages[index] = attachments === undefined ? message : { ...message, attachments };
 		return { inserted: false };
 	}
 
