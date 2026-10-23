@@ -7,6 +7,10 @@ machine, and the TUI never touches the network itself — it drives
 **Status: `0.0.x` — usable for text conversations.** Read, send, groups, deletes,
 unread counts and read receipts work against a real account.
 
+> **Unofficial.** Not affiliated with Signal Messenger LLC. It is a terminal front
+> end for [`signal-cli`](https://github.com/AsamK/signal-cli), which does the
+> protocol work.
+
 ## Requirements
 
 | Tool | Why |
@@ -68,6 +72,18 @@ directory, and `--db` refuses a directory other users can write to.
   message arrives
 - delete-for-everyone, reflected in the cache
 - history persisted across restarts
+
+## Security notes
+
+- Linking makes this computer a **device on your account**: `signal-cli` stores the
+  account keys under `~/.local/share/signal-cli`, and this TUI stores decrypted
+  messages in `~/.local/share/signal-tui/cache.db`. Both are plaintext on disk, so
+  full-disk encryption is what protects them at rest.
+- The cache is created `0600` in a `0700` directory, and `--db` refuses a location
+  other users can write to.
+- Nothing is sent anywhere by this project: the TUI has no network code and only
+  talks to `signal-cli` over stdio. Signal's servers see what they always see.
+- Remove the device any time under **Signal → Settings → Linked devices**.
 
 ## Not there yet
 
