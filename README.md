@@ -80,8 +80,8 @@ desktop notifications, history from before you linked.
 
 ## Architecture
 
-Ports and adapters: nothing in `src/ui` knows about the terminal, nothing in
-`src/domain` knows about IO.
+Ports and adapters: `src/domain` holds no IO, and `src/ui` renders and handles keys
+with ink — but neither reaches for an adapter.
 
 ```
 src/
