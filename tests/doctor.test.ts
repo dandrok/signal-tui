@@ -99,11 +99,30 @@ describe("evaluateChecks", () => {
 
 		expect(hasFailures(checks)).toBe(false);
 		expect(find(checks, "java")?.status).toBe("ok");
-		expect(find(checks, "java")?.detail).toContain("native build");
+		expect(find(checks, "java")?.detail).toContain("runs without it");
 	});
 
-	test("warns about old java rather than failing", () => {
+	test("does not flag a working signal-cli because java is old", () => {
+		// A working signal-cli means Java is satisfied or unnecessary; an old java on
+		// PATH is therefore not actionable.
 		const checks = evaluateChecks(probes({ javaVersion: 'openjdk version "17.0.20.1"' }), {});
+		const java = find(checks, "java");
+
+		expect(java?.status).toBe("ok");
+		// A successful version check does not say which build this is.
+		expect(java?.detail).toBe('openjdk version "17.0.20.1"');
+		expect(java?.hint).toBeUndefined();
+	});
+
+	test("flags java only when signal-cli itself fails to run", () => {
+		const checks = evaluateChecks(
+			probes({
+				javaVersion: 'openjdk version "17.0.20.1"',
+				signalCliVersion: null,
+				signalCliError: "no JVM",
+			}),
+			{},
+		);
 		const java = find(checks, "java");
 
 		expect(java?.status).toBe("warn");
