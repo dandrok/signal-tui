@@ -46,9 +46,25 @@ describe("buildQrPlan", () => {
 		const plan = buildQrPlan("sgnl://linkdevice?uuid=a", "/tmp/link.png");
 
 		expect(plan.path).toBe("/tmp/link.png");
-		expect(plan.argv.slice(0, 7)).toEqual(["qrencode", "-t", "PNG", "-s", "8", "-m", "2"]);
-		expect(plan.argv.at(-1)).toBe("sgnl://linkdevice?uuid=a");
-		expect(plan.argv).toContain("-o");
+		expect(plan.argv).toEqual([
+			"qrencode",
+			"-t",
+			"PNG",
+			"-s",
+			"8",
+			"-m",
+			"2",
+			"-o",
+			"/tmp/link.png",
+		]);
+	});
+
+	test("never puts the URI on the command line", () => {
+		// argv is world-readable via /proc/<pid>/cmdline, and the URI is a credential.
+		const plan = buildQrPlan("sgnl://linkdevice?uuid=secret", "/tmp/link.png");
+
+		expect(plan.argv.join(" ")).not.toContain("secret");
+		expect(plan.input).toBe("sgnl://linkdevice?uuid=secret");
 	});
 });
 
@@ -61,9 +77,22 @@ describe("parseLinkArgs", () => {
 		expect(parseLinkArgs(["--name", "work-laptop"])).toBe("work-laptop");
 	});
 
+	test("accepts --name=value", () => {
+		expect(parseLinkArgs(["--name=work-laptop"])).toBe("work-laptop");
+	});
+
 	test("rejects --name without a value", () => {
 		expect(() => parseLinkArgs(["--name"])).toThrow();
 		expect(() => parseLinkArgs(["--name", "   "])).toThrow();
+	});
+
+	test("rejects an option token as the name", () => {
+		expect(() => parseLinkArgs(["--name", "--verbose"])).toThrow();
+	});
+
+	test("rejects unknown options instead of linking under the default name", () => {
+		expect(() => parseLinkArgs(["--nmae", "work-laptop"])).toThrow("unknown option");
+		expect(() => parseLinkArgs(["extra"])).toThrow("unknown option");
 	});
 });
 

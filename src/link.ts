@@ -4,17 +4,25 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	buildQrPlan,
+	LINK_USAGE,
 	linkInstructions,
 	parseLinkArgs,
 	parseLinkLine,
 	QR_UNAVAILABLE_HELP,
 } from "./cli/linking";
 
+const argv = process.argv.slice(2);
+
+if (argv.includes("--help") || argv.includes("-h")) {
+	console.log(LINK_USAGE);
+	process.exit(0);
+}
+
 const name = ((): string => {
 	try {
-		return parseLinkArgs(process.argv.slice(2));
+		return parseLinkArgs(argv);
 	} catch (error) {
-		console.error(error instanceof Error ? error.message : String(error));
+		console.error(`${error instanceof Error ? error.message : String(error)}\n\n${LINK_USAGE}`);
 		process.exit(2);
 	}
 })();
@@ -49,6 +57,9 @@ const showQr = (uri: string): void => {
 	const plan = buildQrPlan(uri, join(directory, "link.png"));
 	const result = Bun.spawnSync({
 		cmd: [qrencode, ...plan.argv.slice(1)],
+		// The URI is a credential: as an argument it would be readable from
+		// /proc/<pid>/cmdline by any local user while qrencode runs.
+		stdin: Buffer.from(plan.input),
 		stdout: "pipe",
 		stderr: "pipe",
 	});

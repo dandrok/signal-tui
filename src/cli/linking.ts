@@ -49,33 +49,57 @@ Install it and retry:
 export interface QrPlan {
 	readonly argv: readonly string[];
 	readonly path: string;
+	/** Written to qrencode's stdin: command lines are world-readable via /proc. */
+	readonly input: string;
 }
 
 /** Command that turns the link URI into a PNG the system image viewer can open. */
 export function buildQrPlan(uri: string, path: string): QrPlan {
 	return {
-		argv: ["qrencode", "-t", "PNG", "-s", "8", "-m", "2", "-o", path, uri],
+		argv: ["qrencode", "-t", "PNG", "-s", "8", "-m", "2", "-o", path],
 		path,
+		input: uri,
 	};
 }
 
 export const LINK_NAME_DEFAULT = "signal-tui";
 
+const assertName = (value: string | undefined): string => {
+	// An option token is not a name: `--name --verbose` must not swallow the flag.
+	if (value === undefined || value.trim().length === 0 || value.startsWith("-")) {
+		throw new Error("--name needs a device name");
+	}
+	return value;
+};
+
+/** Strict on purpose: a typo like `--nmae` must not silently link under the default name. */
 export function parseLinkArgs(argv: readonly string[]): string {
 	let name = LINK_NAME_DEFAULT;
+
 	for (let index = 0; index < argv.length; index++) {
-		const arg = argv[index];
+		const arg = argv[index] ?? "";
+
 		if (arg === "--name") {
-			const value = argv[index + 1];
-			if (value === undefined || value.trim().length === 0) {
-				throw new Error("--name needs a device name");
-			}
-			name = value;
+			name = assertName(argv[index + 1]);
 			index++;
+			continue;
 		}
+		if (arg.startsWith("--name=")) {
+			name = assertName(arg.slice("--name=".length));
+			continue;
+		}
+		throw new Error(`unknown option: ${arg}`);
 	}
+
 	return name;
 }
+
+export const LINK_USAGE = `usage: bun run link [--name <device name>]
+
+Links this computer to your Signal account by rendering the link QR as an image.
+
+  --name <device>   how the device appears in Signal → Linked devices
+                    (default: ${LINK_NAME_DEFAULT})`;
 
 export const linkInstructions = (number: string): string =>
 	[
