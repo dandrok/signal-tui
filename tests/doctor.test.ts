@@ -187,6 +187,19 @@ describe("collectProbes", () => {
 		expect(probes_.dbWritable).toBe(true);
 	});
 
+	test("records why a present signal-cli failed to run", async () => {
+		const probes_ = await collectProbes(
+			runner({
+				"signal-cli --version": { code: 1, stdout: "", stderr: "Error: no JVM found\nmore detail" },
+				"java -version": { code: 127, stdout: "", stderr: "" },
+			}),
+			{ account: "+48123456789", dbPath: "/tmp/signal-tui-probe3/cache.db", bunVersion: "1.4.4" },
+		);
+
+		expect(probes_.signalCliVersion).toBeNull();
+		expect(probes_.signalCliError).toBe("Error: no JVM found");
+	});
+
 	test("treats a missing signal-cli as absent, and does not list accounts", async () => {
 		let listed = false;
 		const probes_ = await collectProbes(
@@ -202,6 +215,8 @@ describe("collectProbes", () => {
 		);
 
 		expect(probes_.signalCliVersion).toBeNull();
+		// "not installed" must not look like "installed but broken".
+		expect(probes_.signalCliError).toBeNull();
 		expect(probes_.accounts).toBeNull();
 		expect(listed).toBe(false);
 	});

@@ -67,6 +67,11 @@ describe("parseArgs", () => {
 		expect(() => parse(["--db="])).toThrow(UsageError);
 		expect(() => parse(["--db", "   "])).toThrow(UsageError);
 	});
+
+	test("rejects an in-memory database, which would lose the cache on exit", () => {
+		expect(() => parse(["--db", ":memory:"])).toThrow(UsageError);
+		expect(() => parse(["--db=file::memory:?cache=shared"])).toThrow(UsageError);
+	});
 });
 
 describe("defaultDbPath", () => {

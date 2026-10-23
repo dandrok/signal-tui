@@ -24,10 +24,18 @@ export function assertAccount(value: string): string {
 	return value;
 }
 
-/** An empty path would make SQLite open a private temp database and silently stop persisting. */
+/**
+ * Rejects paths that would silently lose the cache: an empty path makes SQLite
+ * open a private temp database, and `:memory:` (or a `file::memory:` URI) is a
+ * database that disappears when the process exits.
+ */
 export function assertDbPath(value: string): string {
-	if (value.trim().length === 0) {
+	const trimmed = value.trim();
+	if (trimmed.length === 0) {
 		throw new UsageError("--db needs a file path");
+	}
+	if (trimmed === ":memory:" || trimmed.startsWith("file::memory:")) {
+		throw new UsageError("--db needs a real file: an in-memory cache is lost on exit");
 	}
 	return value;
 }
