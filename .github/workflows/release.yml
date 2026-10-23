@@ -1,0 +1,60 @@
+name: release
+
+# Manual only: publishing is a decision, not a side effect of merging.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Pack and verify without publishing"
+        type: boolean
+        default: true
+
+jobs:
+  publish:
+    # `workflow_dispatch` lets anyone with write access pick a branch, so the job
+    # itself refuses anything that is not main. The environment adds the second
+    # lock: deployment rules can restrict it to main, and the npm trusted
+    # publisher is bound to this environment name.
+    if: github.ref == 'refs/heads/main'
+    environment: npm-publish
+    runs-on: ubuntu-latest # trusted publishing needs a GitHub-hosted runner
+    permissions:
+      contents: read
+      id-token: write # OIDC: short-lived publish credential + provenance
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Verify
+        run: bun run verify
+
+      - name: Check the package contents
+        run: bun pm pack --dry-run
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm >= 11.5.1 and node >= 22.14; the npm bundled
+      # with the runner's node is older, so bring it forward explicitly.
+      - name: Use a modern npm
+        run: |
+          npm install --global npm@latest
+          node --version
+          npm --version
+
+      - name: Publish
+        if: inputs.dry_run == false
+        run: npm publish --access public --provenance
+        env:
+          # Deliberately allowed to be empty: npm prefers OIDC when the workflow is a
+          # configured trusted publisher, and only falls back to this token while
+          # bootstrapping the very first version.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

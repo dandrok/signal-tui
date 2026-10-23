@@ -8,6 +8,7 @@ import { defaultDbPath, parseArgs, USAGE, UsageError } from "./app/config";
 import { formatStartupFailure } from "./app/report";
 import type { Session } from "./app/session";
 import { createSession } from "./app/session";
+import { VERSION } from "./app/version";
 import { ensurePrivateDirectory } from "./cli/paths";
 import type { MessageStore } from "./ports/store";
 import { Root } from "./ui/Root";
@@ -32,6 +33,11 @@ try {
 
 if (config.mode === "help") {
 	console.log(USAGE);
+	process.exit(0);
+}
+
+if (config.mode === "version") {
+	console.log(`signal-tui ${VERSION}`);
 	process.exit(0);
 }
 
