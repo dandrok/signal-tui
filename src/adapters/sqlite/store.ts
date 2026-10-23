@@ -180,6 +180,7 @@ export class SqliteMessageStore implements MessageStore {
 				 FROM messages_fts
 				 JOIN messages m ON m.rowid = messages_fts.rowid
 				 WHERE messages_fts MATCH ?1
+				   AND m.is_deleted = 0
 				 ORDER BY bm25(messages_fts), m.sent_at DESC
 				 LIMIT ?2`,
 			)

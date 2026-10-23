@@ -31,9 +31,12 @@ export class InMemoryStore implements MessageStore {
 		if (needle.length === 0) {
 			return [];
 		}
-		return this.#messages
-			.filter((message) => message.body.toLowerCase().includes(needle))
-			.slice(0, limit);
+		return (
+			this.#messages
+				// A deleted message must not be discoverable through search.
+				.filter((message) => !message.isDeleted && message.body.toLowerCase().includes(needle))
+				.slice(0, limit)
+		);
 	}
 
 	async upsertConversation(conversation: Conversation): Promise<void> {

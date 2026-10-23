@@ -101,7 +101,7 @@ export function App({ state, dispatch }: AppProps) {
 	return (
 		<Box flexDirection="column" width={columns} height={rows}>
 			{state.search !== null ? (
-				<SearchPane search={state.search} width={columns} height={rows - 1} />
+				<SearchPane search={state.search} width={columns} height={rows - 2} />
 			) : (
 				<Box flexDirection="row" height={bodyHeight}>
 					<ConversationList

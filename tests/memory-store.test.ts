@@ -10,6 +10,15 @@ const conversation = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("InMemoryStore", () => {
+	test("does not return deleted messages from search", async () => {
+		const store = new InMemoryStore();
+		await store.markMessageDeleted("signal-devs", "seed-1");
+
+		const hits = await store.search("seed");
+
+		expect(hits.every((entry) => !entry.isDeleted)).toBe(true);
+	});
+
 	test("keeps the name, unread count and activity monotonic", async () => {
 		const store = new InMemoryStore();
 		await store.upsertConversation(conversation({ lastActivityAt: 5_000 }));

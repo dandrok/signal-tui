@@ -22,8 +22,9 @@ describe("search through the real store", () => {
 
 		const frame = lastFrame() ?? "";
 		expect(frame).toContain("Search  dinner");
-		// A demo message body, so the query really reached the cache.
-		expect(frame).toContain("dinner");
+		// The actual demo message, not just the query echoed in the header: this fails
+		// if the store-to-results path is broken.
+		expect(frame).toContain("Mum: dinner at 7?");
 		unmount();
 	});
 

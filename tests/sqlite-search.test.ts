@@ -92,6 +92,15 @@ describe("SqliteMessageStore search", () => {
 		}
 	});
 
+	test("never returns a deleted message", async () => {
+		await store.markMessageDeleted("alice", "m1");
+
+		// Deleting must remove it from search, not just from the conversation. Bob's
+		// message still matches, so assert on the id rather than emptiness.
+		const hits = await store.search("deploy", 10);
+		expect(hits.map((entry) => entry.id)).not.toContain("m1");
+	});
+
 	test("keeps the index in sync when a body is edited", async () => {
 		await store.saveMessage(message("m3", "dinner at eight"));
 
