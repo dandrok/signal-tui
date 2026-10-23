@@ -22,9 +22,20 @@ export interface SendResult {
 	readonly timestamp: number | undefined;
 }
 
+export type ReceiptType = "read" | "viewed";
+
 export interface SignalBackend {
 	start(): Promise<void>;
 	stop(): Promise<void>;
+	/**
+	 * Tells the sender their messages were read. `recipient` is the conversation
+	 * the messages belong to.
+	 */
+	sendReceipt(
+		recipient: ConversationId,
+		timestamps: readonly number[],
+		type?: ReceiptType,
+	): Promise<void>;
 	sendMessage(conversationId: ConversationId, body: string): Promise<SendResult>;
 	subscribe(listener: (event: BackendEvent) => void): () => void;
 }

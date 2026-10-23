@@ -4,6 +4,14 @@ import type { BackendEvent, SignalBackend } from "../ports/backend";
 import type { MessageStore } from "../ports/store";
 
 const MAX_ERRORS = 20;
+/**
+ * `sendReceipt` resolves its recipient as a phone number or a UUID, so a group
+ * conversation cannot be passed through unchanged. Groups are skipped until the
+ * receipt path for them is verified.
+ */
+export function isDirectConversationId(conversationId: ConversationId): boolean {
+	return /^\+?\d{5,}$/.test(conversationId) || /^[0-9a-fA-F-]{32,36}$/.test(conversationId);
+}
 
 export interface SessionDeps {
 	readonly store: MessageStore;
@@ -71,6 +79,23 @@ export function createSession({ store, backend }: SessionDeps): Session {
 		queue = queue.then(() => apply(event)).catch(record);
 	});
 
+	const sendReadReceipts = async (conversationId: ConversationId): Promise<void> => {
+		if (!isDirectConversationId(conversationId)) {
+			return;
+		}
+		try {
+			// Not a page: marking read clears the state, so anything left out of a page
+			// here would never be acknowledged.
+			const messages = await store.listAllMessages(conversationId);
+			const timestamps = messages
+				.filter((entry) => !entry.isOutgoing && !entry.isDeleted)
+				.map((entry) => entry.sentAt);
+			await backend.sendReceipt(conversationId, timestamps);
+		} catch (error) {
+			record(error instanceof Error ? `receipt: ${error.message}` : String(error));
+		}
+	};
+
 	return {
 		async start(): Promise<void> {
 			await backend.start();
@@ -91,9 +116,14 @@ export function createSession({ store, backend }: SessionDeps): Session {
 				})
 				.catch(record);
 			await queue;
-			if (changed) {
-				notify();
+			if (!changed) {
+				return;
 			}
+			notify();
+
+			// Tell the other side we actually read them, now that a human opened the
+			// conversation — not when the message merely arrived.
+			await sendReadReceipts(conversationId);
 		},
 		async send(conversationId: ConversationId, body: string): Promise<void> {
 			const { timestamp } = await backend.sendMessage(conversationId, body);

@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { createSession } from "../src/app/session";
-import { conversation, FakeBackend, message, RecordingStore } from "./helpers/session-fakes";
+import {
+	conversation,
+	DIRECT_ID,
+	FakeBackend,
+	GROUP_ID,
+	message,
+	RecordingStore,
+} from "./helpers/session-fakes";
 
 describe("createSession", () => {
 	test("persists a received message and notifies listeners", async () => {
@@ -192,6 +199,90 @@ describe("createSession", () => {
 		expect(store.ops).toEqual(["read:uuid-alice"]);
 		// nothing was unread, so no change: notifying here is what looped the UI
 		expect(changes).toBe(0);
+	});
+
+	test("sends a read receipt for incoming messages when a conversation is read", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		const session = createSession({ store, backend });
+		store.unread.set(DIRECT_ID, 2);
+		store.messages.set(DIRECT_ID, [
+			{ ...message("m1"), sentAt: 100 },
+			{ ...message("m2"), sentAt: 200 },
+			{ ...message("m3"), sentAt: 300, isOutgoing: true },
+			{ ...message("m4"), sentAt: 400, isDeleted: true },
+		]);
+
+		await session.markRead(DIRECT_ID);
+
+		// Only what the other side actually sent, and what still exists.
+		expect(backend.receipts).toEqual([
+			{ recipient: DIRECT_ID, timestamps: [100, 200], type: "read" },
+		]);
+	});
+
+	test("acknowledges a backlog larger than one page", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		const session = createSession({ store, backend });
+		const backlog = Array.from({ length: 150 }, (_, index) => ({
+			...message(`bulk-${index}`),
+			sentAt: 1_000 + index,
+		}));
+		store.unread.set(DIRECT_ID, 150);
+		store.messages.set(DIRECT_ID, backlog);
+
+		await session.markRead(DIRECT_ID);
+
+		// Leaving any out would drop them permanently: clearing read state is the end.
+		expect(backend.receipts[0]?.timestamps).toHaveLength(150);
+	});
+
+	test("sends no receipt when nothing was unread", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		const session = createSession({ store, backend });
+		// Same conversation and messages as the working case: the only difference is
+		// that nothing is unread, so the receipt path must be skipped deliberately.
+		store.messages.set(DIRECT_ID, [{ ...message("m1"), sentAt: 100 }]);
+
+		await session.markRead(DIRECT_ID);
+
+		expect(backend.receipts).toEqual([]);
+	});
+
+	test("skips receipts for group conversations", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		const session = createSession({ store, backend });
+		store.unread.set(GROUP_ID, 1);
+		store.messages.set(GROUP_ID, [{ ...message("m1"), sentAt: 100 }]);
+
+		await session.markRead(GROUP_ID);
+
+		expect(backend.receipts).toEqual([]);
+
+		// Control: the same shape of conversation with a direct id does send.
+		const control = new RecordingStore();
+		const controlBackend = new FakeBackend();
+		const controlSession = createSession({ store: control, backend: controlBackend });
+		control.unread.set(DIRECT_ID, 1);
+		control.messages.set(DIRECT_ID, [{ ...message("m1"), sentAt: 100 }]);
+		await controlSession.markRead(DIRECT_ID);
+		expect(controlBackend.receipts).toHaveLength(1);
+	});
+
+	test("records a rejected receipt without failing the read", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		backend.failReceipts = true;
+		const session = createSession({ store, backend });
+		store.unread.set(DIRECT_ID, 1);
+		store.messages.set(DIRECT_ID, [{ ...message("m1"), sentAt: 100 }]);
+
+		await session.markRead(DIRECT_ID);
+
+		expect(session.errors).toEqual(["receipt: receipt rejected"]);
 	});
 
 	test("stop unsubscribes before stopping the backend", async () => {
