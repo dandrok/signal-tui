@@ -34,13 +34,13 @@
 	"scripts": {
 		"start": "bun run src/cli.tsx",
 		"dev": "bun run src/cli.tsx",
+		"link": "bun run src/link.ts",
 		"test": "bun test",
 		"typecheck": "bun check",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"verify": "bun run typecheck && bun run lint && bun test",
-		"setup": "bun run scripts/setup-hooks.ts",
-		"link": "bun run src/link.ts"
+		"setup": "bun run scripts/setup-hooks.ts"
 	},
 	"dependencies": {
 		"ink": "^8.0.0",
