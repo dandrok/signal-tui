@@ -10,13 +10,20 @@ const conversation = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("InMemoryStore", () => {
-	test("does not return deleted messages from search", async () => {
+	test("does not return a deleted message that still has its text", async () => {
 		const store = new InMemoryStore();
-		await store.markMessageDeleted("signal-devs", "seed-1");
+		// A deleted row that keeps its body: the only way the filter is load-bearing.
+		await store.saveMessage({
+			id: "deleted-hit",
+			conversationId: "signal-devs",
+			author: "Alice",
+			body: "purple elephants",
+			sentAt: 1,
+			isOutgoing: false,
+			isDeleted: true,
+		});
 
-		const hits = await store.search("seed");
-
-		expect(hits.every((entry) => !entry.isDeleted)).toBe(true);
+		expect(await store.search("purple")).toEqual([]);
 	});
 
 	test("keeps the name, unread count and activity monotonic", async () => {

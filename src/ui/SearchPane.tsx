@@ -72,8 +72,11 @@ export function SearchPane({ search, width, height }: SearchPaneProps) {
 				);
 			})}
 
-			{search.results.length > capacity ? (
-				<Text dimColor>+{search.results.length - window.start - window.count} more</Text>
+			{search.results.length > window.count ? (
+				<Text dimColor>
+					{search.results.length - window.count} other result
+					{search.results.length - window.count === 1 ? "" : "s"}
+				</Text>
 			) : null}
 
 			<Text dimColor>{HINTS}</Text>
