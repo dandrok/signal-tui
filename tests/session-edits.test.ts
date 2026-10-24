@@ -3,11 +3,15 @@ import { createSession } from "../src/app/session";
 import { DIRECT_ID, FakeBackend, message, RecordingStore } from "./helpers/session-fakes";
 
 describe("createSession edits", () => {
-	test("an edit replaces the cached body and wakes the UI", async () => {
+	test("an edit replaces the targeted message and wakes the UI", async () => {
 		const store = new RecordingStore();
 		const backend = new FakeBackend();
 		const session = createSession({ store, backend });
-		store.messages.set(DIRECT_ID, [{ ...message(), body: "typo here", sentAt: 100 }]);
+		// Two messages in the same conversation: only the one the edit targets changes.
+		store.messages.set(DIRECT_ID, [
+			{ ...message(), id: "m1", sentAt: 100, body: "typo here" },
+			{ ...message(), id: "m2", sentAt: 200, body: "untouched" },
+		]);
 
 		let changes = 0;
 		session.onChange(() => {
@@ -22,8 +26,11 @@ describe("createSession edits", () => {
 		});
 		await session.flush();
 
-		expect(store.messages.get(DIRECT_ID)?.[0]?.body).toBe("typo fixed");
-		expect(store.ops).toEqual([`applyEdit:${DIRECT_ID}:100:typo fixed`]);
+		const [targeted, other] = store.messages.get(DIRECT_ID) ?? [];
+		expect(targeted?.body).toBe("typo fixed");
+		expect(targeted?.isEdited).toBe(true);
+		expect(other?.body).toBe("untouched");
+		expect(other?.isEdited).toBeUndefined();
 		expect(changes).toBe(1);
 	});
 

@@ -100,7 +100,12 @@ export class InMemoryStore implements MessageStore {
 		// not "this message has none" — the rule the SQLite adapter already applies,
 		// or a partial update would silently drop files the store had.
 		const attachments = message.attachments ?? existing.attachments;
-		this.#messages[index] = attachments === undefined ? message : { ...message, attachments };
+		// And once a message is edited, a redelivered original must not overwrite the
+		// correction: the two adapters have to agree, or demo mode and the tests lie
+		// about what the cache keeps.
+		const base: Message =
+			existing.isEdited === true ? { ...message, body: existing.body, isEdited: true } : message;
+		this.#messages[index] = attachments === undefined ? base : { ...base, attachments };
 		return { inserted: false };
 	}
 

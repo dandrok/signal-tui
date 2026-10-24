@@ -130,16 +130,22 @@ const captionOf = (data: Textual): string | null => {
 	return null;
 };
 
-const bodyOf = (data: Textual): string => {
+/** The text a message actually carries: its body, or a file's caption. */
+const textOf = (data: Textual): string => {
 	if (data.message !== undefined && data.message !== null && data.message.length > 0) {
 		return data.message;
 	}
 	// A photo sent with text puts that text in the attachment's caption, so without
 	// this the message would show only a filename. It also keeps captions searchable.
-	const caption = captionOf(data);
-	if (caption !== null) {
-		return caption;
+	return captionOf(data) ?? "";
+};
+
+const bodyOf = (data: Textual): string => {
+	const text = textOf(data);
+	if (text.length > 0) {
+		return text;
 	}
+	// Files with no text at all still deserve a row of their own.
 	return (data.attachments?.length ?? 0) > 0 ? ATTACHMENT_PLACEHOLDER : "";
 };
 
@@ -171,7 +177,10 @@ function mapEdit(envelope: Envelope, edit: EditMessage): MappedEnvelope {
 	const data = parsed?.success === true ? parsed.data : undefined;
 	const target =
 		data?.groupInfo === undefined ? conversationTarget(envelope) : groupTarget(data.groupInfo);
-	const body = data === undefined ? "" : bodyOf(data);
+	// Only real text may replace a body. `bodyOf` would answer "[attachment]" for a
+	// data message that carries files and nothing else, which would replace the
+	// message's text with a placeholder.
+	const body = data === undefined ? "" : textOf(data);
 
 	if (target === null || body.length === 0) {
 		return target === null ? EMPTY : { ...EMPTY, conversationKind: target.kind };

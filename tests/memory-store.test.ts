@@ -48,6 +48,29 @@ describe("InMemoryStore", () => {
 		expect(await store.search("here")).toHaveLength(0);
 	});
 
+	test("a redelivered original does not undo an edit", async () => {
+		const store = new InMemoryStore();
+		await store.upsertConversation(conversation());
+		const original = {
+			id: "m1",
+			conversationId: "uuid-x",
+			author: "Alice",
+			body: "original",
+			sentAt: 1_000,
+			isOutgoing: false,
+			isDeleted: false,
+		};
+		await store.saveMessage(original);
+		await store.applyEdit("uuid-x", 1_000, "corrected");
+
+		// A reconnect replays the envelope that carried the original body.
+		expect(await store.saveMessage(original)).toEqual({ inserted: false });
+
+		const [saved] = await store.listMessages("uuid-x");
+		expect(saved?.body).toBe("corrected");
+		expect(saved?.isEdited).toBe(true);
+	});
+
 	test("an edit for an unknown or deleted message changes nothing", async () => {
 		const store = new InMemoryStore();
 		await store.upsertConversation(conversation());
