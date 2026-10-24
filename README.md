@@ -38,7 +38,7 @@ both. Install and verify `signal-cli` first; the TUI is useless without it.
 | **A Signal account on your phone** | this computer becomes a *linked device* | Signal → Settings → Linked devices |
 | **`signal-cli` 0.14+** on `PATH` | speaks the protocol | the GraalVM native build needs no Java |
 | **Bun 1.4.3+** | the TUI runs on Bun, not Node | `curl -fsSL https://bun.sh/install \| bash` |
-| `qrencode` *(optional)* | renders the linking QR as a PNG | only for `bun run link` |
+| **`qrencode`** | turns the link URI into a scannable code | both linking routes use it; no text fallback |
 
 Step-by-step instructions for each platform, including verifying the `signal-cli`
 download before you run it: **[SETUP.md](./SETUP.md)**.

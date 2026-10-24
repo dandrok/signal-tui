@@ -10,7 +10,7 @@ linked device by itself. `signal-cli` does both, so it comes first.
 |---|---|---|
 | 1 | Bun 1.4.3+ | running `signal-tui` at all |
 | 2 | `signal-cli` 0.14+ | live mode: talking to Signal |
-| 3 | `qrencode` | linking from the command line (optional if you clone the repo) |
+| 3 | `qrencode` | linking: it is what turns the URI into something a phone can scan |
 | 4 | Linking this computer | live mode: a device on your account |
 
 ---
@@ -34,7 +34,7 @@ Java runtime, and it starts faster.
 | Build | Asset | Needs Java |
 |---|---|---|
 | native (GraalVM) | `signal-cli-<version>-Linux-native.tar.gz` | no |
-| JVM | `signal-cli-<version>.tar.gz` / `-Linux-client.tar.gz` | Java 21+ |
+| JVM | `signal-cli-<version>.tar.gz` / `-Linux-client.tar.gz` | Java 25+ |
 
 ### Download and verify
 
@@ -71,9 +71,11 @@ If the signature does not verify, stop. Do not run the binary.
 ### Install
 
 ```sh
-mkdir -p ~/.local/opt ~/.local/bin
-tar -xzf "signal-cli-$VERSION-Linux-native.tar.gz" -C ~/.local/opt
-ln -sf ~/.local/opt/signal-cli-$VERSION/bin/signal-cli ~/.local/bin/signal-cli
+mkdir -p ~/.local/opt/signal-cli-$VERSION ~/.local/bin
+# The archive holds exactly one file — the binary itself, ~400 MB unpacked — and
+# no bin/ or lib/ tree, so extract it into a versioned directory of its own.
+tar -xzf "signal-cli-$VERSION-Linux-native.tar.gz" -C ~/.local/opt/signal-cli-$VERSION
+ln -sf ~/.local/opt/signal-cli-$VERSION/signal-cli ~/.local/bin/signal-cli
 
 # ~/.local/bin must be on PATH; most distros already do this
 signal-cli --version
@@ -83,16 +85,23 @@ On Arch, the AUR package tracks the same version if you would rather have a
 package: `signal-cli` in `yay`/`paru` (`0.14.9-1`, ~35 votes). Check what it
 installs before trusting it the same way you would the archive.
 
-**JVM build instead?** Then you need Java 21 or newer on `PATH`:
+**JVM build instead?** `0.14.9` needs **Java 25** or newer on `PATH` — its README says
+"at least JRE 25", so 21 compiles nothing and runs nothing here:
 
 ```sh
-java --version         # 21+
+java --version         # 25 or newer
 ```
 
-## 3. qrencode (optional)
+## 3. qrencode
 
-Only needed if you link from the command line. The repo's `bun run link` renders
-the PNG itself with this too, so it is worth having.
+Both linking routes use it, and neither has a text fallback: without `qrencode`,
+`bun run link` prints the raw URI plus install instructions and stops — no PNG,
+nothing to scan. Route A (`qrencode -t ANSIUTF8`) draws the code straight into the
+terminal, so nothing touches the filesystem.
+
+You *can* link without it, by rendering that URI yourself — but the URI is a
+credential: anyone who scans or reads it can attach to your account. Use a local QR
+app, not a website. Installing `qrencode` is the shorter path.
 
 ```sh
 # Debian / Ubuntu
@@ -170,7 +179,7 @@ Signal does not backfill it to a new linked device.
 | `~/.local/share/signal-cli/` | account keys, and downloaded attachments | your `$HOME` |
 | `~/.local/share/signal-cli/attachments/` | files received (this app never downloads them) | your `$HOME` |
 | `~/.local/share/signal-tui/cache.db` | decrypted message cache + search index | `0600` in a `0700` directory |
-| `~/.local/opt/signal-cli-<version>/` | the engine | your `$HOME` |
+| `~/.local/opt/signal-cli-<version>/signal-cli` | the engine (one 400 MB binary) | your `$HOME` |
 
 All of it is plaintext: full-disk encryption is what protects it at rest. `--db`
 lets you move the cache, and it refuses a directory other users can write to.
@@ -180,7 +189,7 @@ lets you move the cache, and it refuses a directory other users can write to.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `signal-cli not found` | not on `PATH` | `ln -sf … ~/.local/bin`, ensure `~/.local/bin` is on `PATH` |
-| `Error: could not find or load main class` | JVM build without Java | install Java 21+, or use the native build |
+| `Error: could not find or load main class` | JVM build without Java | install Java 25+, or use the native build |
 | QR is a grid of `?` | native build's US-ASCII charset | render the `sgnl://` URI with `qrencode` (route A) |
 | `ExceptionInInitializerError`, `No space left on device` | signal-cli unpacks libsignal into `/tmp` | `-Djava.io.tmpdir=/some/roomy/dir` (JVM build) |
 | links fine, but the TUI shows nothing | no `--account`, or wrong number | `signal-cli listAccounts` |
