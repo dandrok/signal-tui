@@ -128,3 +128,38 @@ describe("SqliteMessageStore conversation timer", () => {
 		expect(await store.expiresInSeconds("uuid-nobody")).toBeUndefined();
 	});
 });
+
+/** A replay is the other way text can come back from the dead. */
+describe("SqliteMessageStore replay after expiry", () => {
+	test("a replay does not refill a message the timer emptied", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+		const original = message({
+			body: "gone in an hour",
+			expiresAt: 2_000,
+			attachments: [
+				{
+					id: "a1",
+					contentType: "image/png",
+					filename: "x.png",
+					size: 1,
+					caption: null,
+					isVoiceNote: false,
+				},
+			],
+		});
+		await store.saveMessage(original);
+		await store.purgeExpired(2_500);
+
+		// A reconnect replays the envelope that carried the text. The timer already ran,
+		// so neither the body nor the files may come back — and the sweep will not clean
+		// them up a second time.
+		await store.saveMessage(original);
+
+		const [replayed] = await store.listMessages("uuid-alice");
+		expect(replayed?.body).toBe("");
+		expect(replayed?.attachments).toEqual([]);
+		expect(replayed?.isExpired).toBe(true);
+		expect(await store.purgeExpired(9_000)).toBe(0);
+	});
+});

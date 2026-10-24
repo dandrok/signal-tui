@@ -173,15 +173,15 @@ export class SqliteMessageStore implements MessageStore {
 			if (changes === 0) {
 				this.#db
 					.query<null, SaveParams>(
-						// Two rules, both about replays. A correction outranks the original
-						// text, so once a message is edited only another edit changes its
-						// body. And deletion is one-way: Signal has no undelete, so a
-						// redelivered envelope must not bring a deleted message back — nor
-						// restore the body that the delete cleared.
+						// One rule with three faces: once a message is gone or corrected,
+						// a redelivered envelope must not put the old text back. Deletion
+						// (Signal has no undelete), expiry (the timer already ran), and an
+						// edit (a correction outranks the original) all freeze the body.
 						`UPDATE messages SET author = ?3,
 						        author_id = COALESCE(?4, author_id),
 						        body = CASE
 						                 WHEN is_deleted = 1 THEN body
+						                 WHEN is_expired = 1 THEN body
 						                 WHEN is_edited = 1 THEN body
 						                 ELSE ?5
 						               END,
@@ -193,12 +193,14 @@ export class SqliteMessageStore implements MessageStore {
 					.run(...params);
 			}
 
-			// Attachments follow the same rule: a deleted message keeps none, or a replay
-			// would put the file rows back on a tombstone.
+			// Files follow the same rule: a tombstone keeps none, whether it was deleted or
+			// expired, or a replay would put the rows back on a message that is gone.
 			const row = this.#db
-				.query<{ is_deleted: number }, [string]>("SELECT is_deleted FROM messages WHERE id = ?1")
+				.query<{ is_deleted: number; is_expired: number }, [string]>(
+					"SELECT is_deleted, is_expired FROM messages WHERE id = ?1",
+				)
 				.get(message.id);
-			if (row?.is_deleted !== 1) {
+			if (row === null || (row.is_deleted !== 1 && row.is_expired !== 1)) {
 				replaceAttachments(this.#db, message);
 			}
 			return changes;

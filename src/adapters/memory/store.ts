@@ -118,12 +118,16 @@ export class InMemoryStore implements MessageStore {
 		// correction outranks the original text, and deletion is one-way — Signal has no
 		// undelete, so a redelivered envelope must not revive a tombstone.
 		const deleted = existing.isDeleted === true || message.isDeleted === true;
-		const frozen = existing.isDeleted === true || existing.isEdited === true;
+		// Deleted, expired, or corrected: in all three the stored body is the newer truth.
+		const frozen =
+			existing.isDeleted === true || existing.isExpired === true || existing.isEdited === true;
 		const base: Message = {
 			...message,
 			isDeleted: deleted,
 			body: frozen ? existing.body : message.body,
 			...(existing.isEdited === true ? { isEdited: true } : {}),
+			// Same for expiry: the flag lives in the row, not in the payload.
+			...(existing.isExpired === true ? { isExpired: true } : {}),
 			// A replay that carries no author id says nothing about the sender, not that
 			// there is none: dropping the stored one would silently downgrade the row to
 			// label matching, which the SQLite adapter avoids with COALESCE.
@@ -131,7 +135,7 @@ export class InMemoryStore implements MessageStore {
 				? { authorId: existing.authorId }
 				: {}),
 		};
-		const kept = deleted ? [] : attachments;
+		const kept = deleted || existing.isExpired === true ? [] : attachments;
 		this.#messages[index] = kept === undefined ? base : { ...base, attachments: kept };
 		return { inserted: false };
 	}
