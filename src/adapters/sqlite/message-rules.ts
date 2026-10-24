@@ -38,25 +38,41 @@ export function applyEditRow(
 	return updated.length > 0;
 }
 
-export function purgeExpiredRows(db: Database, now: number): number {
-	// One transaction: the files go with the text, or a reader could still open a
-	// message that was supposed to be gone. The FTS triggers on `messages` reindex
-	// the emptied body, so search forgets it at the same time.
-	return db.transaction(() => {
-		db.query<null, [number]>(
-			`DELETE FROM attachments WHERE message_id IN (
-			   SELECT id FROM messages
-			    WHERE expires_at IS NOT NULL AND expires_at <= ?1 AND is_expired = 0
-			 )`,
-		).run(now);
+/** Rows per statement. Small enough to bound memory, large enough to stay cheap. */
+const PURGE_BATCH = 500;
 
-		const purged = db
-			.query<{ id: string }, [number]>(
-				`UPDATE messages SET body = '', is_expired = 1
-				 WHERE expires_at IS NOT NULL AND expires_at <= ?1 AND is_expired = 0
-				 RETURNING id`,
-			)
-			.all(now);
-		return purged.length;
+export function purgeExpiredRows(db: Database, now: number, batch = PURGE_BATCH): number {
+	// One transaction for the whole sweep, but each statement handles at most `batch`
+	// rows. A backlog that built up while the app was closed can be tens of thousands
+	// of messages, and both `RETURNING` (buffered by SQLite) and `.all()` (an array)
+	// hold everything a statement produces — `iterate()` does not change that.
+	const due = `SELECT rowid FROM messages
+	              WHERE expires_at IS NOT NULL AND expires_at <= ?1 AND is_expired = 0
+	              ORDER BY expires_at
+	              LIMIT ?2`;
+
+	return db.transaction(() => {
+		let purged = 0;
+		for (;;) {
+			// Same subquery for both statements, so a batch's files go with its text.
+			db.query<null, [number, number]>(
+				`DELETE FROM attachments
+				  WHERE message_id IN (SELECT id FROM messages WHERE rowid IN (${due}))`,
+			).run(now, batch);
+
+			const updated = db
+				.query<{ id: string }, [number, number]>(
+					`UPDATE messages SET body = '', is_expired = 1
+					 WHERE rowid IN (${due})
+					 RETURNING id`,
+				)
+				.all(now, batch);
+
+			purged += updated.length;
+			// A short page means the backlog is done.
+			if (updated.length < batch) {
+				return purged;
+			}
+		}
 	})();
 }
