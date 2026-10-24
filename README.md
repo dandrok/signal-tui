@@ -72,8 +72,12 @@ instead of block characters), so render the URI yourself:
 
 ```sh
 signal-cli link -n signal-tui | grep -o 'sgnl://[^ ]*' \
-  | xargs -I{} qrencode -t ANSIUTF8 {}     # scan the QR with your phone
+  | tr -d '\n' | qrencode -t ANSIUTF8       # scan the QR with your phone
 ```
+
+The URI goes in on **stdin**, never as an argument: a command line is readable by
+every user on the machine through `/proc/<pid>/cmdline` while `qrencode` runs, and a
+device-link URI is a credential.
 
 Then **Signal → Settings → Linked devices → Link new device**. `signal-cli`
 confirms with `Associated with: +48…`.
@@ -95,7 +99,7 @@ signal-tui --account +48123456789
 | Flag | Meaning |
 |---|---|
 | `--account <number>` | the linked account to act as |
-| `--db <path>` | cache location (default `~/.local/share/signal-tui/cache.db`) |
+| `--db <path>` | cache location (default `$XDG_DATA_HOME/signal-tui/cache.db`, else `~/.local/share/signal-tui/cache.db`) |
 | `--demo` | sample data, no account |
 | `--version`, `--help` | what they say |
 
@@ -179,7 +183,8 @@ size, not where it sits on disk.
 
 - Linking makes this computer a **device on your account**: `signal-cli` stores the
   account keys under `~/.local/share/signal-cli`, and this TUI stores decrypted
-  messages in `~/.local/share/signal-tui/cache.db`. Both are plaintext on disk, so
+  messages in `$XDG_DATA_HOME/signal-tui/cache.db` (`~/.local/share` when that is
+  unset). Both are plaintext on disk, so
   full-disk encryption is what protects them at rest.
 - The cache is created `0600` inside a `0700` directory, and `--db` refuses a
   location other users can write to.

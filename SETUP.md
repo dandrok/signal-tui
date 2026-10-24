@@ -129,8 +129,12 @@ that is a known upstream quirk, not your terminal. Render the URI yourself:
 
 ```sh
 signal-cli link -n signal-tui | grep -o 'sgnl://[^ ]*' \
-  | xargs -I{} qrencode -t ANSIUTF8 {}
+  | tr -d '\n' | qrencode -t ANSIUTF8
 ```
+
+The URI arrives on **stdin**, not as an argument — `qrencode` reads it from there when
+handed no file. That matters: a command line is readable by every user on the machine
+through `/proc/<pid>/cmdline`, and a device-link URI is a credential.
 
 Then on your phone: **Signal → Settings → Linked devices → Link new device**, and
 scan it.
@@ -187,7 +191,7 @@ Signal does not backfill it to a new linked device.
 |---|---|---|
 | `~/.local/share/signal-cli/` | account keys, and downloaded attachments | your `$HOME` |
 | `~/.local/share/signal-cli/attachments/` | files received (this app never downloads them) | your `$HOME` |
-| `~/.local/share/signal-tui/cache.db` | decrypted message cache + search index | `0600` in a `0700` directory |
+| `$XDG_DATA_HOME/signal-tui/cache.db`, or `~/.local/share/signal-tui/cache.db` when it is unset | decrypted message cache + search index | `0600` in a `0700` directory |
 | `~/.local/opt/signal-cli-<version>/signal-cli` | the engine (one 400 MB binary) | your `$HOME` |
 
 All of it is plaintext: full-disk encryption is what protects it at rest. `--db`

@@ -124,7 +124,7 @@ Usage:
 
 Options:
   --account <number>   account to act as; requires signal-cli on PATH
-  --db <path>          cache location (default: ~/.local/share/signal-tui/cache.db)
+  --db <path>          cache location (default: $XDG_DATA_HOME/signal-tui/cache.db)
 
 Live mode needs signal-cli 0.14+ on PATH, linked to your phone.
 Setup guide: https://github.com/dandrok/signal-tui/blob/main/SETUP.md
