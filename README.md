@@ -170,7 +170,8 @@ the last second of typing.
 - `doctor` and `link` are only reachable from a clone, not from the published package
 
 Attachments themselves are never downloaded by this app: `signal-cli` stores them
-under `~/.local/share/signal-cli/attachments`, and the pane shows the path it reports.
+under `~/.local/share/signal-cli/attachments`, and the pane shows the file's name and
+size, not where it sits on disk.
 
 ## Security notes
 
@@ -195,12 +196,15 @@ under `~/.local/share/signal-cli/attachments`, and the pane shows the path it re
 | `signal-cli not found` | not on `PATH` | install it, or add its directory to `PATH` (`SETUP.md`) |
 | one actionable line, exit 1 | no account linked, or `--account` wrong | `signal-cli listAccounts` |
 | QR shows `?` blocks | native build's US-ASCII charset | render the `sgnl://` URI with `qrencode` |
-| `ExceptionInInitializerError`, `No space left on device` | signal-cli unpacks libsignal into `/tmp` | run with `-Djava.io.tmpdir=<dir with space>` |
+| `ExceptionInInitializerError`, `No space left on device` | signal-cli unpacks libsignal into `/tmp` | `JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=/roomy/dir" signal-cli listAccounts` (JVM build; swap in the command you run) |
 | messages arrive but the pane is empty | cache opened elsewhere | check `--db`; the cache is per path |
 | several `signal-tui` windows | one `signal-cli` per account | run one TUI at a time |
 
-`bun run doctor -- --account +48…` checks the engine, the account, the cache and its
-permissions — **from a clone**, since the published package exposes only the TUI.
+`bun run doctor -- --account +48123456789` checks the engine, the account, the cache
+and its permissions. It runs from a clone *or* from the installed package directory
+(`~/.bun/install/global/node_modules/signal-tui` for a Bun global install), because
+the tarball ships `src/` and `package.json`. What it does **not** offer is a
+`signal-tui doctor` subcommand — only `signal-tui` itself is a global binary.
 
 ## From source
 
@@ -209,7 +213,7 @@ git clone https://github.com/dandrok/signal-tui && cd signal-tui
 bun install
 bun run setup          # enables the tracked git hooks
 bun run link           # link this machine (QR as a PNG)
-bun start              # demo mode
+bun start --demo       # demo mode; with no flag it prints usage and exits
 bun test               # unit, adapter and ink render tests
 bun run verify         # typecheck + lint + tests: the gate CI runs
 ```

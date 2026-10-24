@@ -191,8 +191,8 @@ lets you move the cache, and it refuses a directory other users can write to.
 | `signal-cli not found` | not on `PATH` | `ln -sf … ~/.local/bin`, ensure `~/.local/bin` is on `PATH` |
 | `Error: could not find or load main class` | JVM build without Java | install Java 25+, or use the native build |
 | QR is a grid of `?` | native build's US-ASCII charset | render the `sgnl://` URI with `qrencode` (route A) |
-| `ExceptionInInitializerError`, `No space left on device` | signal-cli unpacks libsignal into `/tmp` | `-Djava.io.tmpdir=/some/roomy/dir` (JVM build) |
+| `ExceptionInInitializerError`, `No space left on device` | signal-cli unpacks libsignal into `/tmp` | `JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=/some/roomy/dir" signal-cli listAccounts` (JVM build; swap `listAccounts` for the command you run) |
 | links fine, but the TUI shows nothing | no `--account`, or wrong number | `signal-cli listAccounts` |
 | `you are already linked` | device already registered | `listAccounts`, or remove the old device in Signal |
 | incoming messages never appear | a second process holds the account | run one `signal-cli`/`signal-tui` per account |
-| `unknown option: doctor` | `doctor` lives in a clone, not the package | run it from a checkout: `bun run doctor -- --account +48…` |
+| `unknown option: doctor` | `doctor` is not a subcommand — it is a script | `bun run doctor -- --account +48123456789` from a clone or from the installed package directory (`~/.bun/install/global/node_modules/signal-tui`) |
