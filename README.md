@@ -81,6 +81,9 @@ directory, and `--db` refuses a directory other users can write to.
   full-disk encryption is what protects them at rest.
 - The cache is created `0600` in a `0700` directory, and `--db` refuses a location
   other users can write to.
+- Message text is drawn into your terminal, so it is stripped of escape sequences,
+  bidi overrides and zero-width characters at the display boundary: a message cannot
+  recolour the pane, hide its own text, or reorder what it says.
 - Nothing is sent anywhere by this project: the TUI has no network code and only
   talks to `signal-cli` over stdio. Signal's servers see what they always see.
 - Remove the device any time under **Signal → Settings → Linked devices**.

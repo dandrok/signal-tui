@@ -1,4 +1,5 @@
 import wrapAnsi from "wrap-ansi";
+import { displayLine, displayText } from "./display";
 import type { Attachment, Conversation, Message } from "./types";
 
 /**
@@ -30,17 +31,20 @@ export function truncate(text: string, width: number): string {
 /** Author label for messages you sent, wherever they are rendered. */
 export const SELF_LABEL = "You";
 
-/** Who to show above a message body. */
+/**
+ * Who to show above a message body, with terminal directives removed: an author
+ * name is drawn on one row, so a name cannot smuggle in colour or a line break.
+ */
 export function describeAuthor(message: Message): string {
 	if (message.isDeleted) {
 		return "deleted";
 	}
-	return message.isOutgoing ? SELF_LABEL : message.author;
+	return message.isOutgoing ? SELF_LABEL : displayLine(message.author);
 }
 
 /** Body text safe to render, honouring deletions. */
 export function describeBody(message: Message): string {
-	return message.isDeleted ? "message deleted" : message.body;
+	return message.isDeleted ? "message deleted" : displayText(message.body);
 }
 
 /**
@@ -268,13 +272,13 @@ export function formatBytes(bytes: number): string {
  */
 export function describeAttachment(attachment: Attachment): string {
 	const path = attachment.filename ?? "";
-	const name = path.split("/").pop() ?? "";
+	const name = displayLine(path.split("/").pop() ?? "");
 	const label =
 		name.length > 0
 			? name
 			: attachment.isVoiceNote
 				? "voice note"
-				: (attachment.contentType ?? "attachment");
+				: displayLine(attachment.contentType ?? "attachment");
 	const size = attachment.size === null ? "" : ` (${formatBytes(attachment.size)})`;
 	return `${label}${size}`;
 }
@@ -285,6 +289,7 @@ export function describeAttachment(attachment: Attachment): string {
  * than an empty row.
  */
 export function displayName(conversation: Conversation): string {
-	const name = conversation.name.trim();
+	// A group name comes from whoever administers the group: same rule as an author.
+	const name = displayLine(conversation.name);
 	return name.length > 0 ? name : conversation.id;
 }

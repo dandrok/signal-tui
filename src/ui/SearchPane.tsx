@@ -1,5 +1,6 @@
 import { Box, Text } from "ink";
 import type { SearchState } from "../app/state";
+import { displayLine } from "../domain/display";
 import { describeAuthor, describeBody, truncate } from "../domain/format";
 import type { Message } from "../domain/types";
 
@@ -51,7 +52,7 @@ export function SearchPane({ search, width, height }: SearchPaneProps) {
 			paddingX={1}
 		>
 			<Text bold color="cyan">
-				{`Search  ${search.query.length > 0 ? search.query : "…"}`}
+				{`Search  ${search.query.length > 0 ? displayLine(search.query) : "…"}`}
 			</Text>
 
 			{search.ran && search.results.length === 0 ? <Text dimColor>no matches</Text> : null}
