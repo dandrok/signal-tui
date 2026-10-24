@@ -1,16 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { render } from "ink-testing-library";
 import { draftTail } from "../src/domain/format";
 import { COMPOSER_HEIGHT, Composer } from "../src/ui/Composer";
+import { frameOf as renderFrame } from "./helpers/frame";
 
-const frameOf = (draft: string, isFocused: boolean, width = 40): string => {
-	const { lastFrame, unmount } = render(
-		<Composer draft={draft} isFocused={isFocused} width={width} />,
-	);
-	const frame = lastFrame() ?? "";
-	unmount();
-	return frame;
-};
+const frameOf = (draft: string, isFocused: boolean, width = 40): string =>
+	renderFrame(<Composer draft={draft} isFocused={isFocused} width={width} />);
 
 describe("Composer", () => {
 	test("shows the typing prompt and cursor while focused", () => {

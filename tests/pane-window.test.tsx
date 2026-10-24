@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { render } from "ink-testing-library";
 import type { Clock } from "../src/domain/format";
 import { attachmentsForDisplay, bodyForDisplay, messageRowCount } from "../src/domain/format";
 import type { Conversation, Message } from "../src/domain/types";
 import { ConversationList, listWindowStart } from "../src/ui/ConversationList";
 import { visibleWindow } from "../src/ui/MessagePane";
+import { frameOf } from "./helpers/frame";
 
 /** A fixed clock keeps row arithmetic independent of the host timezone. */
 const clock: Clock = () => "10:00";
@@ -53,7 +53,7 @@ describe("ConversationList", () => {
 	const conversations = Array.from({ length: 12 }, (_unused, index) => conversation(index));
 
 	test("renders the selection even when it is far below the fold", () => {
-		const { lastFrame, unmount } = render(
+		const frame = frameOf(
 			<ConversationList
 				conversations={conversations}
 				selectedIndex={11}
@@ -62,30 +62,24 @@ describe("ConversationList", () => {
 				isFocused
 			/>,
 		);
-		const frame = lastFrame() ?? "";
-		unmount();
 
 		expect(frame).toContain("Person 11");
 		expect(frame).not.toContain("Person 0");
 	});
 
 	test("counts what is hidden above and below", () => {
-		const { lastFrame, unmount } = render(
+		const frame = frameOf(
 			<ConversationList conversations={conversations} selectedIndex={2} width={30} height={6} />,
 		);
-		const frame = lastFrame() ?? "";
-		unmount();
 
 		expect(frame).toContain("↑2");
 		expect(frame).toContain("↓7");
 	});
 
 	test("stays on the last page when the cursor reaches the bottom", () => {
-		const { lastFrame, unmount } = render(
+		const frame = frameOf(
 			<ConversationList conversations={conversations} selectedIndex={11} width={30} height={6} />,
 		);
-		const frame = lastFrame() ?? "";
-		unmount();
 
 		expect(frame).toContain("↑9");
 		expect(frame).not.toContain("↓");

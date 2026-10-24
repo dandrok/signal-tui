@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { render } from "ink-testing-library";
 import { InMemoryStore } from "../src/adapters/memory/store";
 import { Root } from "../src/ui/Root";
+import { plain } from "./helpers/frame";
 
 const tick = (ms = 120): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -20,7 +21,7 @@ describe("search through the real store", () => {
 		stdin.write("dinner");
 		await tick();
 
-		const frame = lastFrame() ?? "";
+		const frame = plain(lastFrame() ?? "");
 		expect(frame).toContain("Search  dinner");
 		// The actual demo message, not just the query echoed in the header: this fails
 		// if the store-to-results path is broken.
@@ -37,7 +38,7 @@ describe("search through the real store", () => {
 		stdin.write("zzzzzznotfound");
 		await tick();
 
-		expect(lastFrame() ?? "").toContain("no matches");
+		expect(plain(lastFrame() ?? "")).toContain("no matches");
 		unmount();
 	});
 
@@ -47,12 +48,12 @@ describe("search through the real store", () => {
 
 		stdin.write("/");
 		await tick();
-		expect(lastFrame() ?? "").toContain("Search");
+		expect(plain(lastFrame() ?? "")).toContain("Search");
 
 		stdin.write("\u001B");
 		await tick();
 
-		expect(lastFrame() ?? "").toContain("Conversations");
+		expect(plain(lastFrame() ?? "")).toContain("Conversations");
 		unmount();
 	});
 });
