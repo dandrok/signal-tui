@@ -52,9 +52,13 @@ export class RecordingStore implements MessageStore {
 	}
 
 	readonly saved = new Set<string>();
+	/** What the session actually handed the store, in order. */
+	readonly savedMessages: Message[] = [];
+
 	async saveMessage(entry: Message): Promise<{ inserted: boolean }> {
 		const inserted = !this.saved.has(entry.id);
 		this.saved.add(entry.id);
+		this.savedMessages.push(entry);
 		this.#record(`message:${entry.id}`);
 		return { inserted };
 	}

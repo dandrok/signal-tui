@@ -128,6 +128,33 @@ describe("InMemoryStore", () => {
 		expect(saved?.body).toBe("Alice wrote this");
 	});
 
+	test("a replay without an author id keeps the stored one", async () => {
+		const store = new InMemoryStore();
+		await store.upsertConversation(conversation());
+		const withId = {
+			id: "m1",
+			conversationId: "uuid-x",
+			author: "Alice",
+			authorId: "uuid-alice",
+			body: "hello",
+			sentAt: 1_000,
+			isOutgoing: false,
+			isDeleted: false,
+		};
+		await store.saveMessage(withId);
+
+		// A partial update says nothing about the sender; it must not clear the id and
+		// drop the row back to label matching.
+		const { authorId: _dropped, ...withoutId } = withId;
+		await store.saveMessage(withoutId);
+
+		expect((await store.listMessages("uuid-x"))[0]?.authorId).toBe("uuid-alice");
+		// a different author who happens to share the label is still refused
+		expect(await store.applyEdit("uuid-x", 1_000, { id: "uuid-bob", label: "Alice" }, "x")).toBe(
+			false,
+		);
+	});
+
 	test("a row without an author id is matched on its label", async () => {
 		const store = new InMemoryStore();
 		await store.upsertConversation(conversation());

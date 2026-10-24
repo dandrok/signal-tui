@@ -128,6 +128,21 @@ describe("createSession", () => {
 		expect(changes).toBe(1);
 	});
 
+	test("a sent message records whose it is", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		const session = createSession({ store, backend });
+
+		await session.send(DIRECT_ID, "hello from here");
+		await session.flush();
+
+		const [saved] = store.savedMessages;
+		// Without an id the row would only match edits by the label "You", which a peer
+		// in a group can adopt for itself.
+		expect(saved?.authorId).toBe("self");
+		expect(saved?.author).toBe("You");
+	});
+
 	test("does not echo a message the backend refused to send", async () => {
 		const store = new RecordingStore();
 		const backend = new FakeBackend();

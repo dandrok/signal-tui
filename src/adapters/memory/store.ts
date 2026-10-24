@@ -116,6 +116,12 @@ export class InMemoryStore implements MessageStore {
 			isDeleted: deleted,
 			body: frozen ? existing.body : message.body,
 			...(existing.isEdited === true ? { isEdited: true } : {}),
+			// A replay that carries no author id says nothing about the sender, not that
+			// there is none: dropping the stored one would silently downgrade the row to
+			// label matching, which the SQLite adapter avoids with COALESCE.
+			...(message.authorId === undefined && existing.authorId !== undefined
+				? { authorId: existing.authorId }
+				: {}),
 		};
 		const kept = deleted ? [] : attachments;
 		this.#messages[index] = kept === undefined ? base : { ...base, attachments: kept };
