@@ -94,6 +94,21 @@ describe("SqliteMessageStore expiry", () => {
 		expect(saved.find((entry) => entry.id === "uuid-alice:2")?.isExpired).toBeUndefined();
 	});
 
+	test("reports the number of messages it emptied, not a running total", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+		// Three due, one not: a driver that reports cumulative changes would answer
+		// something larger than three here and hide the mistake in a passing 0/1 test.
+		for (const [index, expiresAt] of [2_000, 2_100, 2_200, 9_000].entries()) {
+			await store.saveMessage(
+				message({ id: `uuid-alice:${index}`, sentAt: 1_000 + index, body: `m${index}`, expiresAt }),
+			);
+		}
+
+		expect(await store.purgeExpired(2_500)).toBe(3);
+		expect(await store.purgeExpired(2_500)).toBe(0);
+	});
+
 	test("an edit cannot refill a message that expired", async () => {
 		const store = open();
 		await store.upsertConversation(conversation());

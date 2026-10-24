@@ -124,14 +124,17 @@ export class SqliteMessageStore implements MessageStore {
 	}
 
 	async markConversationRead(conversationId: ConversationId): Promise<boolean> {
-		const result = this.#db
-			.query<null, [string]>(
-				// The guard makes the result meaningful: an already-read conversation
-				// reports no change, which is what stops the UI feedback loop.
-				"UPDATE conversations SET unread_count = 0 WHERE id = ?1 AND unread_count > 0",
+		// The guard makes the result meaningful: an already-read conversation reports no
+		// change, which is what stops the UI feedback loop. RETURNING states that
+		// exactly, without leaning on the driver's change counter.
+		const updated = this.#db
+			.query<{ id: string }, [string]>(
+				`UPDATE conversations SET unread_count = 0
+				 WHERE id = ?1 AND unread_count > 0
+				 RETURNING id`,
 			)
-			.run(conversationId);
-		return result.changes > 0;
+			.all(conversationId);
+		return updated.length > 0;
 	}
 
 	async saveMessage(message: Message): Promise<{ readonly inserted: boolean }> {
@@ -162,13 +165,19 @@ export class SqliteMessageStore implements MessageStore {
 		// replay or an edit falls through to the update. The transaction keeps the
 		// message and its attachment rows from ever disagreeing.
 		const inserted = this.#db.transaction(() => {
-			const changes = this.#db
-				.query<null, SaveParams>(
+			// `ON CONFLICT DO NOTHING RETURNING id` answers "was it inserted" exactly: a
+			// conflict returns no row, an insert returns one. A change counter would make
+			// an existing message look new on some builds, which skips the update below
+			// and loses whatever the replay was carrying.
+			const insertedRows = this.#db
+				.query<{ id: string }, SaveParams>(
 					`INSERT INTO messages (id, conversation_id, author, author_id, body, sent_at, is_outgoing, is_deleted, is_edited, expires_at)
 					 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, ?9)
-					 ON CONFLICT(id) DO NOTHING`,
+					 ON CONFLICT(id) DO NOTHING
+					 RETURNING id`,
 				)
-				.run(...params).changes;
+				.all(...params);
+			const changes = insertedRows.length;
 
 			if (changes === 0) {
 				this.#db
