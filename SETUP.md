@@ -94,10 +94,10 @@ java --version         # 25 or newer
 
 ## 3. qrencode
 
-Both linking routes use it, and neither has a text fallback: without `qrencode`,
-`bun run link` prints the raw URI plus install instructions and stops — no PNG,
-nothing to scan. Route A (`qrencode -t ANSIUTF8`) draws the code straight into the
-terminal, so nothing touches the filesystem.
+Both linking routes need it to draw anything. Without `qrencode`, neither produces a
+code: `bun run link` prints the raw URI plus install instructions and stops, and
+Route A has nothing to pipe into. Route A (`qrencode -t ANSIUTF8`) draws the code
+straight into the terminal, so nothing touches the filesystem.
 
 You *can* link without it, by rendering that URI yourself — but the URI is a
 credential: anyone who scans or reads it can attach to your account. Use a local QR

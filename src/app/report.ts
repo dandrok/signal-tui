@@ -11,12 +11,12 @@ export function formatStartupFailure(account: string, error: unknown): string {
 	if (/ENOENT|not found/i.test(raw)) {
 		lines.push("signal-cli was not found on PATH — install 0.14 or newer, then link your account");
 	}
-	// `doctor` ships as a file, not as a subcommand, so it is only reachable from a
-	// clone; the setup guide is the one pointer that works for an installed copy too.
+	// `doctor` is a script, not a subcommand: it runs with Bun from a clone or from the
+	// installed package directory, so the hint is not qualified by location.
 	lines.push(
 		`setup guide: https://github.com/dandrok/signal-tui/blob/main/SETUP.md#troubleshooting`,
 	);
-	lines.push(`from a clone, diagnostics: bun run doctor -- --account ${account}`);
+	lines.push(`diagnostics: bun run doctor -- --account ${account}`);
 
 	return lines.join("\n");
 }

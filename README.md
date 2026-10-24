@@ -84,7 +84,9 @@ confirms with `Associated with: +48…`.
 
 If you have the package — cloned or installed — `bun run link` does the same thing
 and writes a PNG instead, which is easier to scan from a phone. Run it from a clone,
-or from the installed package directory (`~/.bun/install/global/node_modules/signal-tui`):
+or from the installed package directory (`~/.bun/install/global/node_modules/signal-tui`).
+It needs `qrencode` for that; without it the script prints the URI and install help
+and stops, exactly like the one-liner above:
 
 ```sh
 bun run link
