@@ -62,10 +62,25 @@ export function showsBody(message: Message): boolean {
 }
 
 /**
- * Rows a message occupies in a pane whose text area is `innerWidth` columns:
- * one for the author line, the wrapped body, and one per file. The message pane
- * fits a window in rows, so counting messages instead of rows silently clips the
- * newest ones — and those are the ones being read.
+ * The author row exactly as the pane draws it: clock, space, author label. Kept
+ * here so the row count measures the string that actually gets rendered.
+ */
+export function headerLine(message: Message): string {
+	return `${formatClock(message.sentAt)} ${describeAuthor(message)}`;
+}
+
+/** One attachment exactly as the pane draws it. */
+export function attachmentLine(attachment: Attachment): string {
+	return `📎 ${describeAttachment(attachment)}`;
+}
+
+/**
+ * Rows a message occupies in a pane whose text area is `innerWidth` columns: the
+ * header line, the wrapped body, and the rows each file line wraps onto. Every
+ * part is measured with the wrap ink will apply, because a long author name or
+ * filename wraps too. The message pane fits a window in rows, so counting
+ * messages instead of rows silently clips the newest ones — and those are the
+ * ones being read.
  *
  * Wrapping is delegated to the same options ink uses for `<Text>`, because a
  * hand-rolled `length / width` gets both explicit newlines and wide characters
@@ -78,9 +93,36 @@ export function messageRowCount(message: Message, innerWidth: number, maxRows = 
 	// `rows` tall; measuring further would let one pathological body — the wire
 	// allows up to 8 MiB — stall a render for no gain.
 	const body = describeBody(message).slice(0, rows * width);
-	const bodyRows = showsBody(message) ? Math.min(rows, wrappedRows(body, width)) : 0;
-	const fileRows = message.isDeleted ? 0 : attachmentsOf(message).length;
-	return 1 + bodyRows + fileRows;
+	const headerRows = wrappedRows(headerLine(message), width);
+	const bodyRows = showsBody(message) ? wrappedRows(body, width) : 0;
+	const fileRows = message.isDeleted
+		? 0
+		: attachmentsOf(message).reduce(
+				(total, attachment) => total + wrappedRows(attachmentLine(attachment), width),
+				0,
+			);
+	return Math.min(rows, headerRows + bodyRows + fileRows);
+}
+
+/** What the pane draws for a body, and whether anything was left out. */
+export interface DisplayBody {
+	readonly text: string;
+	readonly truncated: boolean;
+}
+
+/**
+ * Body text limited to the rows the window can draw. The count above already caps
+ * how tall a message looks; this caps the string handed to ink, so one oversized
+ * message is not re-wrapped in full on every frame. The rest is not reachable
+ * until the pane can scroll by line rather than by message.
+ */
+export function bodyForDisplay(message: Message, maxRows: number, innerWidth: number): DisplayBody {
+	const limit = Math.max(1, maxRows) * Math.max(1, innerWidth);
+	const full = describeBody(message);
+	if (full.length <= limit) {
+		return { text: full, truncated: false };
+	}
+	return { text: `${full.slice(0, Math.max(0, limit - 1))}…`, truncated: true };
 }
 
 /** The options ink's own `wrap` mode uses; matching them keeps the count honest. */
@@ -99,9 +141,19 @@ export interface DraftTail {
 	readonly truncated: boolean;
 }
 
+/**
+ * Chars examined from the end of a draft. Two lines' worth is enough to find the
+ * last line break, and it keeps the work per keystroke bounded: wrapping is O(n),
+ * and a pasted message is n = its whole length on every character typed.
+ */
+const TAIL_WINDOW = 2;
+
 export function draftTail(draft: string, width: number): DraftTail {
-	const lines = wrapAnsi(draft, Math.max(1, width), WRAP).split("\n");
-	return { text: lines[lines.length - 1] ?? "", truncated: lines.length > 1 };
+	const cells = Math.max(1, width);
+	const limit = Math.max(1, cells * TAIL_WINDOW);
+	const cut = draft.length > limit;
+	const lines = wrapAnsi(cut ? draft.slice(-limit) : draft, cells, WRAP).split("\n");
+	return { text: lines[lines.length - 1] ?? "", truncated: cut || lines.length > 1 };
 }
 
 /** Attachments of a message, without every caller repeating `?? []`. */

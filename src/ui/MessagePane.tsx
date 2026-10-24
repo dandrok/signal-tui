@@ -1,9 +1,9 @@
 import { Box, Text } from "ink";
 import {
+	attachmentLine,
 	attachmentsOf,
-	describeAttachment,
+	bodyForDisplay,
 	describeAuthor,
-	describeBody,
 	displayName,
 	formatClock,
 	messageRowCount,
@@ -107,30 +107,37 @@ export function MessagePane({
 						<Text dimColor>{formatClock(message.sentAt)} </Text>
 						<Text bold>{describeAuthor(message)}</Text>
 					</Text>
-					<MessageBody message={message} />
+					<MessageBody message={message} maxRows={contentRows} innerWidth={innerWidth} />
 				</Box>
 			))}
 		</Box>
 	);
 }
 
-function MessageBody({ message }: { readonly message: Message }) {
+function MessageBody({
+	message,
+	maxRows,
+	innerWidth,
+}: {
+	readonly message: Message;
+	readonly maxRows: number;
+	readonly innerWidth: number;
+}) {
 	const attachments = attachmentsOf(message);
 	// A message that only carried files has a stand-in body: showing both
 	// "[attachment]" and the file itself would say the same thing twice. A deleted
 	// message always shows its notice, whatever its body used to be.
+	const body = bodyForDisplay(message, maxRows, innerWidth);
 
 	return (
 		<>
-			{showsBody(message) ? (
-				<Text dimColor={message.isDeleted}>{describeBody(message)}</Text>
-			) : null}
+			{showsBody(message) ? <Text dimColor={message.isDeleted}>{body.text}</Text> : null}
 			{message.isDeleted
 				? null
 				: attachments.map((attachment, index) => (
 						// biome-ignore lint/suspicious/noArrayIndexKey: files render in the order signal-cli listed them and are replaced as a set, so a position is a stable key here
 						<Text key={`${message.id}:${index}`} dimColor>
-							📎 {describeAttachment(attachment)}
+							{attachmentLine(attachment)}
 						</Text>
 					))}
 		</>

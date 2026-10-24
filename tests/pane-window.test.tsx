@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { render } from "ink-testing-library";
-import { messageRowCount } from "../src/domain/format";
+import { bodyForDisplay, messageRowCount } from "../src/domain/format";
 import type { Conversation, Message } from "../src/domain/types";
 import { ConversationList, listWindowStart } from "../src/ui/ConversationList";
 import { MessagePane, visibleWindow } from "../src/ui/MessagePane";
@@ -122,8 +122,29 @@ describe("messageRowCount", () => {
 	});
 
 	test("stops measuring a body past the tallest possible window", () => {
-		// Bounded by `maxRows` so an 8 MiB body cannot be wrapped for a 5-row pane.
-		expect(messageRowCount(message(0, { body: "x".repeat(100_000) }), 20, 5)).toBe(6);
+		// A message can never count taller than the pane it is drawn in, and only
+		// the rows' worth of text is wrapped: an 8 MiB body must not be measured in
+		// full for a 5-row window.
+		expect(messageRowCount(message(0, { body: "x".repeat(100_000) }), 20, 5)).toBe(5);
+	});
+
+	test("charges the extra row a long author name wraps onto", () => {
+		// Header is "10:04 " + author; a 30-character name needs two rows at width 20.
+		expect(messageRowCount(message(0, { author: "a".repeat(30), body: "" }), 20)).toBe(2);
+	});
+
+	test("charges the extra row a long filename wraps onto", () => {
+		const longName = {
+			id: "a1",
+			contentType: "image/png",
+			filename: `/${"n".repeat(60)}.png`,
+			size: 1024,
+			caption: null,
+			isVoiceNote: false,
+		};
+		// "📎 " + a 64-character name + " (1.0 KB)" is 76 cells: four file rows at
+		// width 20, plus the header, where charging one row would have said two.
+		expect(messageRowCount(message(0, { body: "", attachments: [longName] }), 20)).toBe(5);
 	});
 
 	test("ignores files on a deleted message", () => {
@@ -164,6 +185,24 @@ describe("visibleWindow", () => {
 	test("always renders one message, even when it is taller than the pane", () => {
 		const tall = [message(0, { body: "x".repeat(400) })];
 		expect(visibleWindow(tall, 3, 0, 20)).toEqual({ start: 0, end: 1, hiddenAbove: 0 });
+	});
+});
+
+describe("bodyForDisplay", () => {
+	test("leaves a body that fits alone", () => {
+		expect(bodyForDisplay(message(0, { body: "short" }), 10, 40)).toEqual({
+			text: "short",
+			truncated: false,
+		});
+	});
+
+	test("cuts a body to the rows the pane can draw and says so", () => {
+		const body = `${"x".repeat(500)}TAIL`;
+		const shown = bodyForDisplay(message(0, { body }), 3, 20);
+		// Three rows of twenty cells, minus one for the ellipsis.
+		expect(shown.text).toHaveLength(60);
+		expect(shown.text.endsWith("…")).toBe(true);
+		expect(shown.truncated).toBe(true);
 	});
 });
 
@@ -220,5 +259,20 @@ describe("MessagePane window", () => {
 		expect(frame).toContain("↑ 7 older");
 		expect(frame).toContain("body-7");
 		expect(frame).not.toContain("body-6");
+	});
+
+	test("draws only the rows a single oversized message can fill", () => {
+		// ink wraps whatever string it is given, on every frame: a body far taller
+		// than the pane is cut, and the cut is visible rather than silent.
+		const huge = [message(0, { body: `START${"x".repeat(4000)}ENDTAG` })];
+		const { lastFrame, unmount } = render(
+			<MessagePane conversation={conversation(0)} messages={huge} height={8} width={60} />,
+		);
+		const frame = lastFrame() ?? "";
+		unmount();
+
+		expect(frame).toContain("START");
+		expect(frame).toContain("…");
+		expect(frame).not.toContain("ENDTAG");
 	});
 });
