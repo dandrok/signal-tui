@@ -1,4 +1,6 @@
+import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
+import { purgeExpiredRows } from "../src/adapters/sqlite/message-rules";
 import { SqliteMessageStore } from "../src/adapters/sqlite/store";
 import type { Conversation, Message } from "../src/domain/types";
 
@@ -92,6 +94,21 @@ describe("SqliteMessageStore expiry", () => {
 		const saved = await store.listMessages("uuid-alice");
 		expect(saved.find((entry) => entry.id === "uuid-alice:2")?.body).toBe("forever");
 		expect(saved.find((entry) => entry.id === "uuid-alice:2")?.isExpired).toBeUndefined();
+	});
+
+	test("reports the number of messages it emptied, not a running total", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+		// Three due, one not: a driver that reports cumulative changes would answer
+		// something larger than three here and hide the mistake in a passing 0/1 test.
+		for (const [index, expiresAt] of [2_000, 2_100, 2_200, 9_000].entries()) {
+			await store.saveMessage(
+				message({ id: `uuid-alice:${index}`, sentAt: 1_000 + index, body: `m${index}`, expiresAt }),
+			);
+		}
+
+		expect(await store.purgeExpired(2_500)).toBe(3);
+		expect(await store.purgeExpired(2_500)).toBe(0);
 	});
 
 	test("an edit cannot refill a message that expired", async () => {
@@ -193,5 +210,56 @@ describe("SqliteMessageStore deadline on replay", () => {
 
 		await store.saveMessage(message({ body: "no timer at first", expiresAt: 900_000 }));
 		expect((await store.listMessages("uuid-alice"))[0]?.expiresAt).toBe(5_000);
+	});
+});
+
+/**
+ * A backlog can be tens of thousands of rows, so the sweep works in pages of at most
+ * `batch` rows. These tests pin the loop's contract — every row counted, files going
+ * with their text, termination on an exact page boundary — but they cannot observe
+ * the bound itself: a single statement would produce the same rows. The bound is
+ * structural, `LIMIT ?2` in the statement, and is reviewed rather than asserted.
+ */
+describe("purgeExpiredRows batching", () => {
+	const withDue = (total: number): Database => {
+		const db = new Database(":memory:");
+		db.run(
+			"CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT, body TEXT, sent_at INTEGER, expires_at INTEGER, is_expired INTEGER NOT NULL DEFAULT 0)",
+		);
+		db.run("CREATE TABLE attachments (message_id TEXT, attachment_id TEXT)");
+		for (let index = 0; index < total; index++) {
+			db.run(
+				"INSERT INTO messages (id, conversation_id, body, sent_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+				[`m${index}`, "c1", `body ${index}`, 1_000 + index, 2_000 + index],
+			);
+			db.run("INSERT INTO attachments (message_id, attachment_id) VALUES (?1, ?2)", [
+				`m${index}`,
+				`a${index}`,
+			]);
+		}
+		return db;
+	};
+
+	test("sweeps a backlog in pages and still counts every row", () => {
+		const db = withDue(5);
+
+		expect(purgeExpiredRows(db, 3_000, 2)).toBe(5);
+
+		const left = db
+			.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM messages WHERE is_expired = 0")
+			.get();
+		expect(left?.n).toBe(0);
+		const files = db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM attachments").get();
+		expect(files?.n).toBe(0);
+		db.close();
+	});
+
+	test("a page that lands exactly on the batch boundary does not loop forever", () => {
+		const db = withDue(4);
+
+		expect(purgeExpiredRows(db, 3_000, 2)).toBe(4);
+		// and a second sweep has nothing left
+		expect(purgeExpiredRows(db, 3_000, 2)).toBe(0);
+		db.close();
 	});
 });
