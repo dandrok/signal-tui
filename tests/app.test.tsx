@@ -66,8 +66,32 @@ describe("App", () => {
 		stdin.write("\u001b");
 		await tick();
 		const frame = lastFrame() ?? "";
-		expect(frame).toContain("j/k move");
+		// Back to the message pane, which is where you look after writing.
+		expect(frame).toContain("j/k scroll");
 		expect(frame).toContain("draft one");
+	});
+
+	test("tab moves the keyboard to the message pane", async () => {
+		const { lastFrame, stdin } = render(<Harness initial={seededState()} />);
+		await tick();
+
+		stdin.write("	");
+		await tick();
+		expect(lastFrame() ?? "").toContain("j/k scroll");
+
+		// j belongs to the message pane now: the selection must not follow it.
+		stdin.write("j");
+		await tick();
+		expect(lastFrame() ?? "").toContain("pushed the fix, ptal");
+	});
+
+	test("shift-tab walks back to the composer", async () => {
+		const { lastFrame, stdin } = render(<Harness initial={seededState()} />);
+		await tick();
+
+		stdin.write("\u001b[Z");
+		await tick();
+		expect(lastFrame() ?? "").toContain("⏎ send");
 	});
 });
 

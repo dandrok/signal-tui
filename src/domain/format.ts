@@ -43,8 +43,36 @@ export function describeBody(message: Message): string {
 	return message.isDeleted ? "message deleted" : message.body;
 }
 
-/** Stand-in body for a message that carried only files. */
+/**
+ * Stand-in body for a message that carried only files.
+ */
 export const ATTACHMENT_BODY_PLACEHOLDER = "[attachment]";
+
+/** Whether the body line is worth a row of its own. */
+export function showsBody(message: Message): boolean {
+	if (message.isDeleted) {
+		return true;
+	}
+	const attachments = attachmentsOf(message);
+	return (
+		message.body.length > 0 &&
+		!(attachments.length > 0 && message.body === ATTACHMENT_BODY_PLACEHOLDER)
+	);
+}
+
+/**
+ * Rows a message occupies in a pane whose text area is `innerWidth` columns:
+ * one for the author line, the wrapped body, and one per file. The message pane
+ * fits a window in rows, so counting messages instead of rows silently clips the
+ * newest ones — and those are the ones being read.
+ */
+export function messageRowCount(message: Message, innerWidth: number): number {
+	const width = Math.max(1, innerWidth);
+	const body = describeBody(message);
+	const bodyRows = showsBody(message) ? Math.max(1, Math.ceil(body.length / width)) : 0;
+	const fileRows = message.isDeleted ? 0 : attachmentsOf(message).length;
+	return 1 + bodyRows + fileRows;
+}
 
 /** Attachments of a message, without every caller repeating `?? []`. */
 export function attachmentsOf(message: Message): readonly Attachment[] {
