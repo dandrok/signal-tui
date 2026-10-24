@@ -222,17 +222,32 @@ export class SqliteMessageStore implements MessageStore {
 			if (changes === 0) {
 				this.#db
 					.query<null, SaveParams>(
-						// A redelivered original must not overwrite a correction: once a
-						// message is edited, only another edit changes its body.
+						// Two rules, both about replays. A correction outranks the original
+						// text, so once a message is edited only another edit changes its
+						// body. And deletion is one-way: Signal has no undelete, so a
+						// redelivered envelope must not bring a deleted message back — nor
+						// restore the body that the delete cleared.
 						`UPDATE messages SET author = ?3,
-						        body = CASE WHEN is_edited = 1 THEN body ELSE ?4 END,
-						        sent_at = ?5, is_outgoing = ?6, is_deleted = ?7
+						        body = CASE
+						                 WHEN is_deleted = 1 THEN body
+						                 WHEN is_edited = 1 THEN body
+						                 ELSE ?4
+						               END,
+						        sent_at = ?5, is_outgoing = ?6,
+						        is_deleted = is_deleted | ?7
 						 WHERE id = ?1 AND conversation_id = ?2`,
 					)
 					.run(...params);
 			}
 
-			replaceAttachments(this.#db, message);
+			// Attachments follow the same rule: a deleted message keeps none, or a replay
+			// would put the file rows back on a tombstone.
+			const row = this.#db
+				.query<{ is_deleted: number }, [string]>("SELECT is_deleted FROM messages WHERE id = ?1")
+				.get(message.id);
+			if (row?.is_deleted !== 1) {
+				replaceAttachments(this.#db, message);
+			}
 			return changes;
 		})();
 

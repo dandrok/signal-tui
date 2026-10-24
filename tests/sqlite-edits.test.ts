@@ -80,6 +80,36 @@ describe("SqliteMessageStore edits", () => {
 		expect(saved?.isEdited).toBe(true);
 	});
 
+	test("a replay does not resurrect a deleted message", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+		const original = message({
+			id: "uuid-alice:1000",
+			body: "say that again",
+			attachments: [
+				{
+					id: "a1",
+					contentType: "image/png",
+					filename: "x.png",
+					size: 1,
+					caption: null,
+					isVoiceNote: false,
+				},
+			],
+		});
+		await store.saveMessage(original);
+		await store.markMessageDeleted("uuid-alice", "uuid-alice:1000");
+
+		// Signal has no undelete: a redelivered envelope must not revive the row, its
+		// text or its files.
+		await store.saveMessage(original);
+
+		const [saved] = await store.listMessages("uuid-alice");
+		expect(saved?.isDeleted).toBe(true);
+		expect(saved?.body).toBe("");
+		expect(saved?.attachments).toEqual([]);
+	});
+
 	test("does not resurrect a deleted message", async () => {
 		const store = open();
 		await store.upsertConversation(conversation());

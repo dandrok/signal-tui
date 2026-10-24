@@ -100,12 +100,19 @@ export class InMemoryStore implements MessageStore {
 		// not "this message has none" — the rule the SQLite adapter already applies,
 		// or a partial update would silently drop files the store had.
 		const attachments = message.attachments ?? existing.attachments;
-		// And once a message is edited, a redelivered original must not overwrite the
-		// correction: the two adapters have to agree, or demo mode and the tests lie
-		// about what the cache keeps.
-		const base: Message =
-			existing.isEdited === true ? { ...message, body: existing.body, isEdited: true } : message;
-		this.#messages[index] = attachments === undefined ? base : { ...base, attachments };
+		// Two rules, both about replays, and both mirrored in the SQLite adapter: a
+		// correction outranks the original text, and deletion is one-way — Signal has no
+		// undelete, so a redelivered envelope must not revive a tombstone.
+		const deleted = existing.isDeleted === true || message.isDeleted === true;
+		const frozen = existing.isDeleted === true || existing.isEdited === true;
+		const base: Message = {
+			...message,
+			isDeleted: deleted,
+			body: frozen ? existing.body : message.body,
+			...(existing.isEdited === true ? { isEdited: true } : {}),
+		};
+		const kept = deleted ? [] : attachments;
+		this.#messages[index] = kept === undefined ? base : { ...base, attachments: kept };
 		return { inserted: false };
 	}
 

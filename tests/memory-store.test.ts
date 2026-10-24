@@ -71,6 +71,40 @@ describe("InMemoryStore", () => {
 		expect(saved?.isEdited).toBe(true);
 	});
 
+	test("a replay does not resurrect a deleted message", async () => {
+		const store = new InMemoryStore();
+		await store.upsertConversation(conversation());
+		const original = {
+			id: "m1",
+			conversationId: "uuid-x",
+			author: "Alice",
+			body: "say that again",
+			sentAt: 1_000,
+			isOutgoing: false,
+			isDeleted: false,
+			attachments: [
+				{
+					id: "a1",
+					filename: "x.png",
+					contentType: "image/png",
+					size: 1,
+					caption: null,
+					isVoiceNote: false,
+				},
+			],
+		};
+		await store.saveMessage(original);
+		await store.markMessageDeleted("uuid-x", "m1");
+
+		// Signal has no undelete, so the redelivered envelope changes nothing.
+		await store.saveMessage(original);
+
+		const [saved] = await store.listMessages("uuid-x");
+		expect(saved?.isDeleted).toBe(true);
+		expect(saved?.body).toBe("");
+		expect(saved?.attachments).toEqual([]);
+	});
+
 	test("an edit for an unknown or deleted message changes nothing", async () => {
 		const store = new InMemoryStore();
 		await store.upsertConversation(conversation());
