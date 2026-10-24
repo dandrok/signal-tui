@@ -10,6 +10,12 @@ describe("clockFor", () => {
 		expect(clockFor("UTC")(Date.UTC(2026, 9, 22, 0, 0))).toBe("00:00");
 	});
 
+	test("renders midnight as 00:00, never 24:00", () => {
+		// Some ICU builds answer 24:00 for midnight; a wall clock in a chat must not.
+		expect(clockFor("UTC")(0)).toBe("00:00");
+		expect(clockFor("Europe/Warsaw")(Date.UTC(2026, 9, 23, 22, 0))).toBe("00:00");
+	});
+
 	test("shifts with the zone instead of the host clock", () => {
 		// 07:04 UTC is 09:04 in Warsaw and 03:04 in New York; a formatter reading the
 		// host timezone could only ever produce one of the three.

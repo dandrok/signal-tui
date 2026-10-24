@@ -20,7 +20,13 @@ export function clockFor(timeZone: string): Clock {
 		formatters.set(timeZone, formatter);
 	}
 	const cached = formatter;
-	return (timestampMs: number): string => cached.format(timestampMs);
+	return (timestampMs: number): string => {
+		const text = cached.format(timestampMs);
+		// Some ICU builds render midnight as 24:00 even with hourCycle "h23". A chat
+		// timestamp has no 24th hour, and the difference is invisible on the machines
+		// that get it right — so normalise rather than depend on the ICU version.
+		return text.startsWith("24:") ? `00:${text.slice(3)}` : text;
+	};
 }
 
 /** The zone the terminal user lives in; resolved once per app start. */
