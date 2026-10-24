@@ -41,6 +41,19 @@ export interface MessageWriter {
 		editor: EditAuthor,
 		body: string,
 	): Promise<boolean>;
+	/**
+	 * The conversation's disappearing-message timer in seconds, or undefined when the
+	 * cache was never told. Our own messages are the reason this exists: Signal does not
+	 * echo them back, so the only place their timer can come from is the conversation.
+	 */
+	expiresInSeconds(conversationId: ConversationId): Promise<number | undefined>;
+	/**
+	 * Clears the body and files of every message whose disappearing-message timer has
+	 * run out, keeping the rows so the thread keeps its shape. Returns how many were
+	 * purged. Expiry has to be enforced on the body, not only in the renderer: text
+	 * that survives in the cache is text that can be read out of the file.
+	 */
+	purgeExpired(now: number): Promise<number>;
 	/** Marks a message as deleted; a no-op when the message is not cached. */
 	markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void>;
 }

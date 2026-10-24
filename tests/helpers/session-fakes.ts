@@ -59,6 +59,16 @@ export class RecordingStore implements MessageStore {
 		const inserted = !this.saved.has(entry.id);
 		this.saved.add(entry.id);
 		this.savedMessages.push(entry);
+		// Read it back the way a real store would: tests that assert on stored state
+		// after a save should not have to seed the map themselves.
+		const existing = this.messages.get(entry.conversationId) ?? [];
+		const index = existing.findIndex((candidate) => candidate.id === entry.id);
+		this.messages.set(
+			entry.conversationId,
+			index === -1
+				? [...existing, entry]
+				: [...existing.slice(0, index), entry, ...existing.slice(index + 1)],
+		);
 		this.#record(`message:${entry.id}`);
 		return { inserted };
 	}
@@ -91,6 +101,32 @@ export class RecordingStore implements MessageStore {
 			...existing.slice(index + 1),
 		]);
 		return true;
+	}
+
+	readonly purges: number[] = [];
+
+	readonly timers = new Map<string, number>();
+
+	async expiresInSeconds(conversationId: string): Promise<number | undefined> {
+		return this.timers.get(conversationId);
+	}
+
+	async purgeExpired(now: number): Promise<number> {
+		this.purges.push(now);
+		let purged = 0;
+		for (const [conversationId, entries] of this.messages) {
+			this.messages.set(
+				conversationId,
+				entries.map((entry) => {
+					if (entry.expiresAt === undefined || entry.expiresAt > now || entry.isExpired === true) {
+						return entry;
+					}
+					purged += 1;
+					return { ...entry, body: "", attachments: [], isExpired: true };
+				}),
+			);
+		}
+		return purged;
 	}
 
 	async markMessageDeleted(_conversationId: string, messageId: string): Promise<void> {

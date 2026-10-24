@@ -44,7 +44,12 @@ export function describeAuthor(message: Message): string {
 
 /** Body text safe to render, honouring deletions. */
 export function describeBody(message: Message): string {
-	return message.isDeleted ? "message deleted" : displayText(message.body);
+	if (message.isDeleted) {
+		return "message deleted";
+	}
+	// The body is already empty by the time this renders; the label is what tells a
+	// reader the message was there and is not something they can recover.
+	return message.isExpired === true ? "message expired" : displayText(message.body);
 }
 
 /**

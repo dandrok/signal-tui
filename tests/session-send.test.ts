@@ -61,4 +61,31 @@ describe("createSession sending", () => {
 		expect(saved?.authorId).toBe("self");
 		expect(saved?.author).toBe("You");
 	});
+
+	test("a sent message inherits the conversation's disappearing timer", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		store.timers.set(DIRECT_ID, 3_600);
+		const session = createSession({ store, backend, clock: () => 1_000 });
+
+		await session.send(DIRECT_ID, "gone in an hour");
+		await session.flush();
+
+		const [saved] = store.messages.get(DIRECT_ID) ?? [];
+		// Relative to the timestamp the backend actually used, not to the test clock.
+		expect(saved?.expiresAt).toBe((saved?.sentAt ?? 0) + 3_600_000);
+	});
+
+	test("a conversation without a timer leaves the message alone", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		store.timers.set(DIRECT_ID, 0);
+		const session = createSession({ store, backend, clock: () => 1_000 });
+
+		await session.send(DIRECT_ID, "kept");
+		await session.flush();
+
+		const [saved] = store.messages.get(DIRECT_ID) ?? [];
+		expect(saved?.expiresAt).toBeUndefined();
+	});
 });

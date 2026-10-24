@@ -68,12 +68,20 @@ export class InMemoryStore implements MessageStore {
 		// list; same rule as the SQLite upsert. The unread count is owned by
 		// incrementUnread/markConversationRead, so metadata updates leave it alone.
 		const lastActivityAt = Math.max(existing.lastActivityAt, conversation.lastActivityAt);
+		// Same rule as the SQLite upsert: an update that says nothing about the timer
+		// must not switch the timer off.
+		const expiresInSeconds = conversation.expiresInSeconds ?? existing.expiresInSeconds;
 		this.#conversations[index] = {
 			...conversation,
 			name,
 			lastActivityAt,
 			unreadCount: existing.unreadCount,
+			...(expiresInSeconds === undefined ? {} : { expiresInSeconds }),
 		};
+	}
+
+	async expiresInSeconds(conversationId: ConversationId): Promise<number | undefined> {
+		return this.#conversations.find((entry) => entry.id === conversationId)?.expiresInSeconds;
 	}
 
 	async incrementUnread(conversationId: ConversationId, by: number): Promise<void> {
@@ -110,12 +118,21 @@ export class InMemoryStore implements MessageStore {
 		// correction outranks the original text, and deletion is one-way — Signal has no
 		// undelete, so a redelivered envelope must not revive a tombstone.
 		const deleted = existing.isDeleted === true || message.isDeleted === true;
-		const frozen = existing.isDeleted === true || existing.isEdited === true;
+		// Deleted, expired, or corrected: in all three the stored body is the newer truth.
+		const frozen =
+			existing.isDeleted === true || existing.isExpired === true || existing.isEdited === true;
 		const base: Message = {
 			...message,
 			isDeleted: deleted,
 			body: frozen ? existing.body : message.body,
 			...(existing.isEdited === true ? { isEdited: true } : {}),
+			// Same for expiry: the flag lives in the row, not in the payload.
+			...(existing.isExpired === true ? { isExpired: true } : {}),
+			// The stored deadline wins. A replay can supply one where none was known,
+			// never replace one: extending it would outlive what the sender promised.
+			...((existing.expiresAt ?? message.expiresAt) === undefined
+				? {}
+				: { expiresAt: (existing.expiresAt ?? message.expiresAt) as number }),
 			// A replay that carries no author id says nothing about the sender, not that
 			// there is none: dropping the stored one would silently downgrade the row to
 			// label matching, which the SQLite adapter avoids with COALESCE.
@@ -123,7 +140,7 @@ export class InMemoryStore implements MessageStore {
 				? { authorId: existing.authorId }
 				: {}),
 		};
-		const kept = deleted ? [] : attachments;
+		const kept = deleted || existing.isExpired === true ? [] : attachments;
 		this.#messages[index] = kept === undefined ? base : { ...base, attachments: kept };
 		return { inserted: false };
 	}
@@ -147,11 +164,31 @@ export class InMemoryStore implements MessageStore {
 					: entry.authorId === editor.id),
 		);
 		const existing = this.#messages[index];
-		if (existing === undefined || existing.isDeleted) {
+		// An expired message is gone on purpose, and a deleted one is gone for everyone;
+		// neither may be refilled by an edit that arrives late.
+		if (existing === undefined || existing.isDeleted || existing.isExpired === true) {
 			return false;
 		}
 		this.#messages[index] = { ...existing, body, isEdited: true };
 		return true;
+	}
+
+	async purgeExpired(now: number): Promise<number> {
+		let purged = 0;
+		this.#messages = this.#messages.map((message) => {
+			if (
+				message.expiresAt === undefined ||
+				message.expiresAt > now ||
+				message.isExpired === true
+			) {
+				return message;
+			}
+			purged += 1;
+			// Text and files both go: a message that is gone should not still name the
+			// path of the photo it carried.
+			return { ...message, body: "", attachments: [], isExpired: true };
+		});
+		return purged;
 	}
 
 	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {

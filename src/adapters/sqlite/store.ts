@@ -8,54 +8,14 @@ import type {
 } from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
 import { deleteAttachments, loadAttachments, replaceAttachments } from "./attachments";
-import { toFtsQuery } from "./fts";
+import { applyEditRow, purgeExpiredRows } from "./message-rules";
 import { migrations } from "./migrations";
 import { restrictCachePermissions } from "./private-cache";
+import { readAllMessages, readConversations, readMessages, searchMessages } from "./read-messages";
+import { toConversation, toMessage } from "./rows";
 
 const DEFAULT_MESSAGE_LIMIT = 50;
 const DEFAULT_SEARCH_LIMIT = 20;
-
-interface MessageRow {
-	id: string;
-	conversation_id: string;
-	author: string;
-	author_id: string | null;
-	body: string;
-	sent_at: number;
-	is_outgoing: number;
-	is_deleted: number;
-	is_edited: number;
-}
-
-interface ConversationRow {
-	id: string;
-	name: string;
-	unread_count: number;
-	last_activity_at: number;
-}
-
-export function toMessage(row: MessageRow): Message {
-	return {
-		id: row.id,
-		conversationId: row.conversation_id,
-		author: row.author,
-		...(row.author_id === null ? {} : { authorId: row.author_id }),
-		body: row.body,
-		sentAt: row.sent_at,
-		isOutgoing: row.is_outgoing === 1,
-		isDeleted: row.is_deleted === 1,
-		isEdited: row.is_edited === 1,
-	};
-}
-
-export function toConversation(row: ConversationRow): Conversation {
-	return {
-		id: row.id,
-		name: row.name,
-		unreadCount: row.unread_count,
-		lastActivityAt: row.last_activity_at,
-	};
-}
 
 export interface SqliteStoreOptions {
 	/** File path, or ":memory:" for tests. */
@@ -104,14 +64,7 @@ export class SqliteMessageStore implements MessageStore {
 	}
 
 	async listConversations(): Promise<readonly Conversation[]> {
-		const rows = this.#db
-			.query<ConversationRow, []>(
-				`SELECT id, name, unread_count, last_activity_at
-				 FROM conversations
-				 ORDER BY last_activity_at DESC, id ASC`,
-			)
-			.all();
-		return rows.map(toConversation);
+		return readConversations(this.#db).map(toConversation);
 	}
 
 	async listMessages(
@@ -121,67 +74,45 @@ export class SqliteMessageStore implements MessageStore {
 		if (limit <= 0) {
 			return [];
 		}
-		// Newest N, then flipped back into reading order.
-		const rows = this.#db
-			.query<MessageRow, [string, number]>(
-				`SELECT * FROM (
-					SELECT id, conversation_id, author, author_id, body, sent_at, is_outgoing, is_deleted, is_edited
-					FROM messages
-					WHERE conversation_id = ?1
-					ORDER BY sent_at DESC, id DESC
-					LIMIT ?2
-				 ) ORDER BY sent_at ASC, id ASC`,
-			)
-			.all(conversationId, limit);
-		return this.#withAttachments(rows.map(toMessage));
+		return this.#withAttachments(readMessages(this.#db, conversationId, limit).map(toMessage));
 	}
 
 	async listAllMessages(conversationId: ConversationId): Promise<readonly Message[]> {
-		const rows = this.#db
-			.query<MessageRow, [string]>(
-				`SELECT id, conversation_id, author, author_id, body, sent_at, is_outgoing, is_deleted, is_edited
-				 FROM messages
-				 WHERE conversation_id = ?1
-				 ORDER BY sent_at ASC, id ASC`,
-			)
-			.all(conversationId);
-		return this.#withAttachments(rows.map(toMessage));
+		return this.#withAttachments(readAllMessages(this.#db, conversationId).map(toMessage));
 	}
 
 	async search(query: string, limit = this.#searchLimit): Promise<readonly Message[]> {
-		const ftsQuery = toFtsQuery(query);
-		if (ftsQuery === null || limit <= 0) {
-			return [];
-		}
-		const rows = this.#db
-			.query<MessageRow, [string, number]>(
-				`SELECT m.id, m.conversation_id, m.author, m.author_id, m.body, m.sent_at, m.is_outgoing, m.is_deleted, m.is_edited
-				 FROM messages_fts
-				 JOIN messages m ON m.rowid = messages_fts.rowid
-				 WHERE messages_fts MATCH ?1
-				   AND m.is_deleted = 0
-				 ORDER BY bm25(messages_fts), m.sent_at DESC
-				 LIMIT ?2`,
-			)
-			.all(ftsQuery, limit);
-		return this.#withAttachments(rows.map(toMessage));
+		return this.#withAttachments(searchMessages(this.#db, query, limit).map(toMessage));
 	}
 
 	async upsertConversation(conversation: Conversation): Promise<void> {
 		this.#db
-			.query<null, [string, string, number, number]>(
-				`INSERT INTO conversations (id, name, unread_count, last_activity_at)
-				 VALUES (?1, ?2, ?3, ?4)
+			.query<null, [string, string, number, number, number | null]>(
+				// A payload that carries no timer says nothing about the timer, so the stored
+				// one survives: COALESCE, not a default of zero.
+				`INSERT INTO conversations (id, name, unread_count, last_activity_at, expires_in_seconds)
+				 VALUES (?1, ?2, ?3, ?4, ?5)
 				 ON CONFLICT(id) DO UPDATE SET
 					name = CASE WHEN TRIM(excluded.name) = '' THEN conversations.name ELSE excluded.name END,
-					last_activity_at = MAX(conversations.last_activity_at, excluded.last_activity_at)`,
+					last_activity_at = MAX(conversations.last_activity_at, excluded.last_activity_at),
+					expires_in_seconds = COALESCE(excluded.expires_in_seconds, conversations.expires_in_seconds)`,
 			)
 			.run(
 				conversation.id,
 				conversation.name,
 				conversation.unreadCount,
 				conversation.lastActivityAt,
+				conversation.expiresInSeconds ?? null,
 			);
+	}
+
+	async expiresInSeconds(conversationId: ConversationId): Promise<number | undefined> {
+		const row = this.#db
+			.query<{ expires_in_seconds: number | null }, [string]>(
+				"SELECT expires_in_seconds FROM conversations WHERE id = ?1",
+			)
+			.get(conversationId);
+		return row?.expires_in_seconds ?? undefined;
 	}
 
 	async incrementUnread(conversationId: ConversationId, by: number): Promise<void> {
@@ -204,7 +135,17 @@ export class SqliteMessageStore implements MessageStore {
 	}
 
 	async saveMessage(message: Message): Promise<{ readonly inserted: boolean }> {
-		type SaveParams = [string, string, string, string | null, string, number, number, number];
+		type SaveParams = [
+			string,
+			string,
+			string,
+			string | null,
+			string,
+			number,
+			number,
+			number,
+			number | null,
+		];
 		const params: SaveParams = [
 			message.id,
 			message.conversationId,
@@ -214,6 +155,7 @@ export class SqliteMessageStore implements MessageStore {
 			message.sentAt,
 			message.isOutgoing ? 1 : 0,
 			message.isDeleted ? 1 : 0,
+			message.expiresAt ?? null,
 		];
 
 		// One write on the common path: a message seen once is inserted, and only a
@@ -222,8 +164,8 @@ export class SqliteMessageStore implements MessageStore {
 		const inserted = this.#db.transaction(() => {
 			const changes = this.#db
 				.query<null, SaveParams>(
-					`INSERT INTO messages (id, conversation_id, author, author_id, body, sent_at, is_outgoing, is_deleted, is_edited)
-					 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0)
+					`INSERT INTO messages (id, conversation_id, author, author_id, body, sent_at, is_outgoing, is_deleted, is_edited, expires_at)
+					 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, ?9)
 					 ON CONFLICT(id) DO NOTHING`,
 				)
 				.run(...params).changes;
@@ -231,31 +173,38 @@ export class SqliteMessageStore implements MessageStore {
 			if (changes === 0) {
 				this.#db
 					.query<null, SaveParams>(
-						// Two rules, both about replays. A correction outranks the original
-						// text, so once a message is edited only another edit changes its
-						// body. And deletion is one-way: Signal has no undelete, so a
-						// redelivered envelope must not bring a deleted message back — nor
-						// restore the body that the delete cleared.
+						// One rule with three faces: once a message is gone or corrected,
+						// a redelivered envelope must not put the old text back. Deletion
+						// (Signal has no undelete), expiry (the timer already ran), and an
+						// edit (a correction outranks the original) all freeze the body.
 						`UPDATE messages SET author = ?3,
 						        author_id = COALESCE(?4, author_id),
 						        body = CASE
 						                 WHEN is_deleted = 1 THEN body
+						                 WHEN is_expired = 1 THEN body
 						                 WHEN is_edited = 1 THEN body
 						                 ELSE ?5
 						               END,
 						        sent_at = ?6, is_outgoing = ?7,
-						        is_deleted = is_deleted | ?8
+						        is_deleted = is_deleted | ?8,
+					        -- The deadline is the promise made when the message was stored.
+					        -- A replay may supply one where none was known (NULL), and may
+					        -- never push out one that exists: that would extend the lifetime
+					        -- of a message the sender already expected to be gone.
+					        expires_at = COALESCE(expires_at, ?9)
 						 WHERE id = ?1 AND conversation_id = ?2`,
 					)
 					.run(...params);
 			}
 
-			// Attachments follow the same rule: a deleted message keeps none, or a replay
-			// would put the file rows back on a tombstone.
+			// Files follow the same rule: a tombstone keeps none, whether it was deleted or
+			// expired, or a replay would put the rows back on a message that is gone.
 			const row = this.#db
-				.query<{ is_deleted: number }, [string]>("SELECT is_deleted FROM messages WHERE id = ?1")
+				.query<{ is_deleted: number; is_expired: number }, [string]>(
+					"SELECT is_deleted, is_expired FROM messages WHERE id = ?1",
+				)
 				.get(message.id);
-			if (row?.is_deleted !== 1) {
+			if (row === null || (row.is_deleted !== 1 && row.is_expired !== 1)) {
 				replaceAttachments(this.#db, message);
 			}
 			return changes;
@@ -270,21 +219,11 @@ export class SqliteMessageStore implements MessageStore {
 		editor: EditAuthor,
 		body: string,
 	): Promise<boolean> {
-		// The FTS triggers on `messages` re-index the new body, so search follows the
-		// edit without a second write. A deleted message keeps its blank body.
-		//
-		// The author check is the point of this query: a timestamp identifies a message
-		// within a conversation, not an author, so without it an edit from one member
-		// of a group could rewrite another member's message. Rows cached before schema
-		// v4 have no author_id and are matched on the label they were stored with.
-		const result = this.#db
-			.query<null, [string, number, string | null, string, string]>(
-				`UPDATE messages SET body = ?5, is_edited = 1
-				 WHERE conversation_id = ?1 AND sent_at = ?2 AND is_deleted = 0
-				   AND (author_id = ?3 OR (author_id IS NULL AND author = ?4))`,
-			)
-			.run(conversationId, targetSentAt, editor.id, editor.label, body);
-		return result.changes > 0;
+		return applyEditRow(this.#db, conversationId, targetSentAt, editor, body);
+	}
+
+	async purgeExpired(now: number): Promise<number> {
+		return purgeExpiredRows(this.#db, now);
 	}
 
 	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {

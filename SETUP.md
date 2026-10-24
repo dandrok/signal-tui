@@ -194,7 +194,9 @@ Signal does not backfill it to a new linked device.
 | `$XDG_DATA_HOME/signal-tui/cache.db`, or `~/.local/share/signal-tui/cache.db` when it is unset | decrypted message cache + search index | `0600` in a `0700` directory |
 | `~/.local/opt/signal-cli-<version>/signal-cli` | the engine (one 400 MB binary) | your `$HOME` |
 
-All of it is plaintext: full-disk encryption is what protects it at rest. `--db`
+All of it is plaintext: full-disk encryption is what protects it at rest. A
+disappearing message's text is deleted from the cache when its timer runs out — on
+startup, and after every message that arrives while the app is open. `--db`
 lets you move the cache, and it refuses a directory other users can write to.
 
 ## Troubleshooting
