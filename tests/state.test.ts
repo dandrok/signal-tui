@@ -124,6 +124,26 @@ describe("scroll", () => {
 		state = reduce(state, { type: "move-selection", delta: 1 });
 		expect(state.scroll).toBe(0);
 	});
+
+	test("a reload that keeps the list in order keeps the offset", () => {
+		const scrolled = reduce(loaded(), { type: "scroll-moved", delta: 5 });
+		const reloaded = reduce(scrolled, {
+			type: "conversations-loaded",
+			conversations: [...demoConversations],
+		});
+		expect(reloaded.scroll).toBe(5);
+	});
+
+	test("a reload that reorders the list drops a stale offset", () => {
+		const scrolled = reduce(loaded(), { type: "scroll-moved", delta: 5 });
+		const reordered = reduce(scrolled, {
+			type: "conversations-loaded",
+			conversations: [...demoConversations].reverse(),
+		});
+		// Same index, different conversation: keeping the offset would open the
+		// new conversation mid-history.
+		expect(reordered.scroll).toBe(0);
+	});
 });
 
 describe("search mode", () => {

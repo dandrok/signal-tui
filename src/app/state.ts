@@ -75,10 +75,16 @@ export function reduce(state: AppState, action: Action): AppState {
 	switch (action.type) {
 		case "conversations-loaded": {
 			const lastIndex = Math.max(0, action.conversations.length - 1);
+			const nextIndex = Math.min(state.selectedIndex, lastIndex);
+			// A reload can reorder the list, so the same index may now be a different
+			// conversation: keeping the old scroll offset would open it mid-history.
+			const before = state.conversations[state.selectedIndex]?.id;
+			const after = action.conversations[nextIndex]?.id;
 			return {
 				...state,
 				conversations: action.conversations,
-				selectedIndex: Math.min(state.selectedIndex, lastIndex),
+				selectedIndex: nextIndex,
+				scroll: before === after ? state.scroll : 0,
 			};
 		}
 		case "messages-loaded":

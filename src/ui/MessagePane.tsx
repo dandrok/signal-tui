@@ -29,6 +29,10 @@ const CHROME_ROWS = 3;
  * The slice of history that fits: starts at the newest visible message and walks
  * backwards while rows last. `hiddenAbove` is what the user could still scroll
  * into, so the pane can say so instead of looking like the start of the thread.
+ *
+ * A scroll past the oldest message clamps there rather than emptying the window:
+ * `scroll` is only bounded in the reducer, and a key repeat must not turn a
+ * conversation into "no messages yet".
  */
 export function visibleWindow(
 	messages: readonly Message[],
@@ -36,26 +40,27 @@ export function visibleWindow(
 	scroll: number,
 	innerWidth: number,
 ): { readonly start: number; readonly end: number; readonly hiddenAbove: number } {
-	const end = Math.max(0, messages.length - Math.max(0, scroll));
+	if (messages.length === 0) {
+		return { start: 0, end: 0, hiddenAbove: 0 };
+	}
+	const end = Math.min(messages.length, Math.max(1, messages.length - Math.max(0, scroll)));
 	let start = end;
 	let used = 0;
-	// At least one message always renders: an empty-looking pane that says nothing
-	// is wrong when a single message is taller than the box.
+	// At least one message always renders: a pane showing nothing looks broken
+	// when a single message is simply taller than the box.
 	while (start > 0) {
 		const previous = messages[start - 1];
 		if (previous === undefined) {
 			break;
 		}
-		const cost = messageRowCount(previous, innerWidth);
+		const cost = messageRowCount(previous, innerWidth, rows);
 		if (used + cost > rows) {
 			break;
 		}
 		used += cost;
 		start -= 1;
 	}
-	// At least one message always renders: a pane showing nothing looks broken
-	// when a single message is simply taller than the box.
-	const anchoredStart = start === end && end > 0 ? end - 1 : start;
+	const anchoredStart = start === end ? end - 1 : start;
 	return { start: anchoredStart, end, hiddenAbove: anchoredStart };
 }
 
@@ -68,13 +73,15 @@ export function MessagePane({
 	isFocused = false,
 }: MessagePaneProps) {
 	const innerWidth = Math.max(8, width - 4);
-	const { start, end, hiddenAbove } = visibleWindow(
-		messages,
-		Math.max(1, height - CHROME_ROWS),
-		scroll,
-		innerWidth,
-	);
-	const visible = messages.slice(start, end);
+	const contentRows = Math.max(1, height - CHROME_ROWS);
+	// The "older" label costs a row of its own, so the window is measured again
+	// once it is known to be needed — otherwise the pane renders one row more
+	// than it has and ink clips the newest message, which is the one being read.
+	let window = visibleWindow(messages, contentRows, scroll, innerWidth);
+	if (window.hiddenAbove > 0) {
+		window = visibleWindow(messages, Math.max(1, contentRows - 1), scroll, innerWidth);
+	}
+	const visible = messages.slice(window.start, window.end);
 
 	return (
 		<Box
@@ -92,7 +99,7 @@ export function MessagePane({
 				{conversation ? displayName(conversation) : "—"}
 				{messages.length > 0 ? ` (${messages.length})` : ""}
 			</Text>
-			{hiddenAbove > 0 ? <Text dimColor>↑ {hiddenAbove} older</Text> : null}
+			{window.hiddenAbove > 0 ? <Text dimColor>↑ {window.hiddenAbove} older</Text> : null}
 			{visible.length === 0 ? <Text dimColor>no messages yet</Text> : null}
 			{visible.map((message) => (
 				<Box key={message.id} flexDirection="column">

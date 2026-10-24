@@ -1,3 +1,4 @@
+import wrapAnsi from "wrap-ansi";
 import type { Attachment, Conversation, Message } from "./types";
 
 /** Two-digit 24h clock in the local timezone, e.g. 09:04. */
@@ -65,13 +66,42 @@ export function showsBody(message: Message): boolean {
  * one for the author line, the wrapped body, and one per file. The message pane
  * fits a window in rows, so counting messages instead of rows silently clips the
  * newest ones — and those are the ones being read.
+ *
+ * Wrapping is delegated to the same options ink uses for `<Text>`, because a
+ * hand-rolled `length / width` gets both explicit newlines and wide characters
+ * (CJK, emoji) wrong, and a window that over-selects hides the newest message.
  */
-export function messageRowCount(message: Message, innerWidth: number): number {
+export function messageRowCount(message: Message, innerWidth: number, maxRows = 60): number {
 	const width = Math.max(1, innerWidth);
-	const body = describeBody(message);
-	const bodyRows = showsBody(message) ? Math.max(1, Math.ceil(body.length / width)) : 0;
+	const rows = Math.max(1, maxRows);
+	// Only the first `rows * width` cells can add rows to a window that is at most
+	// `rows` tall; measuring further would let one pathological body — the wire
+	// allows up to 8 MiB — stall a render for no gain.
+	const body = describeBody(message).slice(0, rows * width);
+	const bodyRows = showsBody(message) ? Math.min(rows, wrappedRows(body, width)) : 0;
 	const fileRows = message.isDeleted ? 0 : attachmentsOf(message).length;
 	return 1 + bodyRows + fileRows;
+}
+
+/** The options ink's own `wrap` mode uses; matching them keeps the count honest. */
+const WRAP = { trim: false, hard: true } as const;
+
+/** Rows `text` occupies when rendered into `width` cells. */
+function wrappedRows(text: string, width: number): number {
+	return wrapAnsi(text, width, WRAP).split("\n").length;
+}
+
+/** The end of a draft that fits one row, so the cursor is never scrolled away. */
+export interface DraftTail {
+	/** Text of the last wrapped line. */
+	readonly text: string;
+	/** True when earlier lines were dropped, so the caller can say so. */
+	readonly truncated: boolean;
+}
+
+export function draftTail(draft: string, width: number): DraftTail {
+	const lines = wrapAnsi(draft, Math.max(1, width), WRAP).split("\n");
+	return { text: lines[lines.length - 1] ?? "", truncated: lines.length > 1 };
 }
 
 /** Attachments of a message, without every caller repeating `?? []`. */

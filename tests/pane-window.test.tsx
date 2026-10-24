@@ -110,6 +110,22 @@ describe("messageRowCount", () => {
 		expect(messageRowCount(message(0, { body: "x".repeat(85) }), 40)).toBe(4);
 	});
 
+	test("counts explicit newlines as their own rows", () => {
+		// Two lines inside one string: ink renders two rows, so the window must
+		// charge two — measuring string length would charge one.
+		expect(messageRowCount(message(0, { body: "first\nsecond" }), 40)).toBe(3);
+	});
+
+	test("counts a wide character as the two cells it occupies", () => {
+		// 40 CJK characters are 80 cells: two rows in a 40-column pane.
+		expect(messageRowCount(message(0, { body: "字".repeat(40) }), 40)).toBe(3);
+	});
+
+	test("stops measuring a body past the tallest possible window", () => {
+		// Bounded by `maxRows` so an 8 MiB body cannot be wrapped for a 5-row pane.
+		expect(messageRowCount(message(0, { body: "x".repeat(100_000) }), 20, 5)).toBe(6);
+	});
+
 	test("ignores files on a deleted message", () => {
 		const deleted = message(0, {
 			isDeleted: true,
@@ -140,7 +156,9 @@ describe("visibleWindow", () => {
 	});
 
 	test("a scroll past the start clamps to the oldest message", () => {
-		expect(visibleWindow(many(8), 5, 99, 40)).toEqual({ start: 0, end: 0, hiddenAbove: 0 });
+		// Not an empty window: the reducer only clamps at zero, so a held `k` or a
+		// page-up must not turn the conversation into "no messages yet".
+		expect(visibleWindow(many(8), 5, 99, 40)).toEqual({ start: 0, end: 1, hiddenAbove: 0 });
 	});
 
 	test("always renders one message, even when it is taller than the pane", () => {
@@ -187,5 +205,20 @@ describe("MessagePane window", () => {
 		unmount();
 
 		expect(frame).not.toContain("older");
+	});
+
+	test("reserves a row for the older label instead of clipping the newest message", () => {
+		// Four content rows. Two messages plus the label would be five, so the
+		// window has to give up a message — otherwise ink clips the bottom line,
+		// which is the newest message's body.
+		const { lastFrame, unmount } = render(
+			<MessagePane conversation={conversation(0)} messages={many(8)} height={7} width={60} />,
+		);
+		const frame = lastFrame() ?? "";
+		unmount();
+
+		expect(frame).toContain("↑ 7 older");
+		expect(frame).toContain("body-7");
+		expect(frame).not.toContain("body-6");
 	});
 });

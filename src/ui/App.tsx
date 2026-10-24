@@ -65,6 +65,15 @@ export function App({ state, dispatch }: AppProps) {
 			return;
 		}
 
+		// Tab walks the panes whether or not one of them is "active": the border
+		// colour is the only thing that says where the keyboard is pointing. It is
+		// handled before the composer so Tab moves on instead of being typed into
+		// the draft.
+		if (key.tab) {
+			dispatch({ type: key.shift ? "focus-prev" : "focus-next" });
+			return;
+		}
+
 		if (isComposing) {
 			if (key.return) {
 				dispatch({ type: "draft-submitted" });
@@ -79,13 +88,6 @@ export function App({ state, dispatch }: AppProps) {
 				return;
 			}
 			dispatch({ type: "draft-changed", value: state.draft + input });
-			return;
-		}
-
-		// Tab walks the panes whether or not one of them is "active": the border
-		// colour is the only thing that says where the keyboard is pointing.
-		if (key.tab) {
-			dispatch({ type: key.shift ? "focus-prev" : "focus-next" });
 			return;
 		}
 
@@ -151,7 +153,7 @@ export function App({ state, dispatch }: AppProps) {
 							scroll={state.scroll}
 							isFocused={state.focus === "messages"}
 						/>
-						<Composer draft={state.draft} isFocused={isComposing} />
+						<Composer draft={state.draft} isFocused={isComposing} width={messageWidth} />
 					</Box>
 				</Box>
 			)}
