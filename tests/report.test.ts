@@ -7,6 +7,7 @@ describe("formatStartupFailure", () => {
 
 		expect(message).toContain("+48123456789");
 		expect(message).toContain("subscribeReceive failed");
+		expect(message).toContain("SETUP.md");
 		expect(message).toContain("bun run doctor");
 	});
 

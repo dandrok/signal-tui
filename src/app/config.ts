@@ -126,5 +126,6 @@ Options:
   --account <number>   account to act as; requires signal-cli on PATH
   --db <path>          cache location (default: ~/.local/share/signal-tui/cache.db)
 
-Live mode needs signal-cli linked to your phone. Check your setup with:
-  bun run doctor -- --account +48123456789`;
+Live mode needs signal-cli 0.14+ on PATH, linked to your phone.
+Setup guide: https://github.com/dandrok/signal-tui/blob/main/SETUP.md
+From a clone, diagnostics: bun run doctor -- --account +481****6789`;
