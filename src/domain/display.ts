@@ -28,6 +28,27 @@ const UNTERMINATED_CSI =
 	// biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point
 	/\u001B\[[0-?]*[ -/]*/g;
 
+/**
+ * The 8-bit C1 forms of the same introducers (ECMA-48 lets a peer send either).
+ * They are rewritten to their two-byte ESC forms first, so one pattern reads both
+ * and a C1 string terminator still closes a string instead of eating what follows.
+ */
+const C1_REWRITES: Readonly<Record<string, string>> = {
+	"\u0090": "\u001BP", // DCS
+	"\u0098": "\u001BX", // SOS
+	"\u009B": "\u001B[", // CSI
+	"\u009C": "\u001B\\", // ST: terminates a string, nothing to print
+	"\u009D": "\u001B]", // OSC
+	"\u009E": "\u001B^", // PM
+	"\u009F": "\u001B_", // APC
+};
+
+const C1_INTRODUCERS = /[\u0090\u0098\u009B-\u009F]/g;
+
+function rewriteC1(raw: string): string {
+	return raw.replace(C1_INTRODUCERS, (character) => C1_REWRITES[character] ?? character);
+}
+
 /** C0 and C1 controls except tab, newline and carriage return, handled separately. */
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point
 const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
@@ -46,7 +67,7 @@ const TABS_AND_BREAKS = /[\t\r\n\v\f]+/g;
  * row arithmetic stays true.
  */
 export function displayText(raw: string): string {
-	return raw
+	return rewriteC1(raw)
 		.replace(ESCAPE_SEQUENCE, "")
 		.replace(UNTERMINATED_CSI, "")
 		.replace(CONTROL_CHARS, "")

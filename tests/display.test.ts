@@ -48,8 +48,23 @@ describe("displayText", () => {
 		expect(displayText("a\u001b[38")).toBe("a");
 	});
 
+	test("recognises the 8-bit C1 forms of the same sequences", () => {
+		// ECMA-48 allows a peer to send the C1 introducer instead of ESC + byte; a
+		// sanitiser that only knows ESC leaves the parameters behind as text.
+		expect(displayText("\u009b31mRED")).toBe("RED");
+		expect(displayText("a\u0090payload\u009cb")).toBe("ab");
+		expect(displayText("a\u009fpayload\u009cb")).toBe("ab");
+	});
+
+	test("a C1 string terminator closes the string it terminates", () => {
+		// Otherwise the string branch runs on and swallows the text after it.
+		expect(displayText("a\u009d0;title\u009cb")).toBe("ab");
+	});
+
 	test("strips C0 and C1 controls but keeps the text", () => {
-		expect(displayText("a\u0007b\u0008c\u009bd")).toBe("abcd");
+		// \u0091 is a C1 control that introduces nothing, so only the byte goes; the
+		// introducers themselves are covered by the 8-bit test above.
+		expect(displayText("a\u0007b\u0008c\u0091d")).toBe("abcd");
 	});
 
 	test("turns tabs into spaces and normalises line breaks", () => {
