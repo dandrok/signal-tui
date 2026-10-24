@@ -135,12 +135,21 @@ signal-cli link -n signal-tui | grep -o 'sgnl://[^ ]*' \
 Then on your phone: **Signal → Settings → Linked devices → Link new device**, and
 scan it.
 
-### Route B — from a clone (PNG instead of terminal art)
+### Route B — a PNG instead of terminal art
+
+`link` is a script, not a subcommand, so it runs with Bun from a clone **or** from
+the installed package directory — whichever you already have:
 
 ```sh
 git clone https://github.com/dandrok/signal-tui && cd signal-tui
 bun install
 bun run link
+```
+
+With the npm package instead, run the same script from its directory:
+
+```sh
+cd ~/.bun/install/global/node_modules/signal-tui && bun run link
 ```
 
 This writes a PNG in a private temp directory and opens the path for you; scan it

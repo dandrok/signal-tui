@@ -78,8 +78,9 @@ signal-cli link -n signal-tui | grep -o 'sgnl://[^ ]*' \
 Then **Signal → Settings → Linked devices → Link new device**. `signal-cli`
 confirms with `Associated with: +48…`.
 
-If you cloned the repo, `bun run link` does the same thing and writes a PNG
-instead, which is easier to scan from a phone:
+If you have the package — cloned or installed — `bun run link` does the same thing
+and writes a PNG instead, which is easier to scan from a phone. Run it from a clone,
+or from the installed package directory (`~/.bun/install/global/node_modules/signal-tui`):
 
 ```sh
 bun run link
@@ -167,7 +168,8 @@ the last second of typing.
 - opening an attachment from the TUI (`xdg-open`), typing indicators, desktop
   notifications
 - history from before you linked this device
-- `doctor` and `link` are only reachable from a clone, not from the published package
+- `doctor` and `link` are scripts, not subcommands: run them with Bun from a clone or
+  from the installed package directory, since `signal-tui` exposes only the TUI
 
 Attachments themselves are never downloaded by this app: `signal-cli` stores them
 under `~/.local/share/signal-cli/attachments`, and the pane shows the file's name and
