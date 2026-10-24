@@ -26,6 +26,46 @@ describe("InMemoryStore", () => {
 		expect(await store.search("purple")).toEqual([]);
 	});
 
+	test("applies an edit to a cached message and marks it edited", async () => {
+		const store = new InMemoryStore();
+		await store.upsertConversation(conversation());
+		await store.saveMessage({
+			id: "m1",
+			conversationId: "uuid-x",
+			author: "Alice",
+			body: "typo here",
+			sentAt: 1_000,
+			isOutgoing: false,
+			isDeleted: false,
+		});
+
+		expect(await store.applyEdit("uuid-x", 1_000, "typo fixed")).toBe(true);
+
+		const [saved] = await store.listMessages("uuid-x");
+		expect(saved?.body).toBe("typo fixed");
+		expect(saved?.isEdited).toBe(true);
+		expect(await store.search("fixed")).toHaveLength(1);
+		expect(await store.search("here")).toHaveLength(0);
+	});
+
+	test("an edit for an unknown or deleted message changes nothing", async () => {
+		const store = new InMemoryStore();
+		await store.upsertConversation(conversation());
+		await store.saveMessage({
+			id: "m1",
+			conversationId: "uuid-x",
+			author: "Alice",
+			body: "gone",
+			sentAt: 1_000,
+			isOutgoing: false,
+			isDeleted: true,
+		});
+
+		expect(await store.applyEdit("uuid-x", 999, "nope")).toBe(false);
+		expect(await store.applyEdit("uuid-x", 1_000, "back")).toBe(false);
+		expect((await store.listMessages("uuid-x"))[0]?.body).toBe("gone");
+	});
+
 	test("keeps the name, unread count and activity monotonic", async () => {
 		const store = new InMemoryStore();
 		await store.upsertConversation(conversation({ lastActivityAt: 5_000 }));

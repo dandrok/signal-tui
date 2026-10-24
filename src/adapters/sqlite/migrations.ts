@@ -75,4 +75,13 @@ export const migrations: readonly Migration[] = [
 			CREATE INDEX attachments_message ON attachments(message_id);
 		`,
 	},
+	{
+		version: 3,
+		// Edits replace a body that is already cached. The flag is what tells the
+		// renderer the text was corrected, and it also stops a redelivered original
+		// from overwriting the correction (see saveMessage's conflict branch).
+		sql: `
+			ALTER TABLE messages ADD COLUMN is_edited INTEGER NOT NULL DEFAULT 0;
+		`,
+	},
 ];

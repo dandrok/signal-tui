@@ -157,7 +157,8 @@ export class SignalCliBackend implements SignalBackend {
 		}
 
 		const mapped = mapEnvelope(parsed.data.envelope);
-		const conversationId = mapped.conversation?.id ?? mapped.deleted?.conversationId;
+		const conversationId =
+			mapped.conversation?.id ?? mapped.deleted?.conversationId ?? mapped.edited?.conversationId;
 		if (mapped.conversationKind === "group" && conversationId !== undefined) {
 			this.#groupIds.add(conversationId);
 		}
@@ -167,6 +168,14 @@ export class SignalCliBackend implements SignalBackend {
 		}
 		if (mapped.message !== null) {
 			this.#emit({ kind: "message", message: mapped.message });
+		}
+		if (mapped.edited !== null) {
+			this.#emit({
+				kind: "message-edited",
+				conversationId: mapped.edited.conversationId,
+				targetSentAt: mapped.edited.targetSentAt,
+				body: mapped.edited.body,
+			});
 		}
 		if (mapped.deleted !== null) {
 			this.#emit({

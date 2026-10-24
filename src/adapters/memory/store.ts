@@ -7,6 +7,7 @@ const DEFAULT_LIMIT = 200;
 /** Same shape the SQLite adapter returns: always an array, never a missing field. */
 const withFiles = (message: Message): Message => ({
 	...message,
+	isEdited: message.isEdited === true,
 	attachments: message.attachments ?? [],
 });
 
@@ -101,6 +102,22 @@ export class InMemoryStore implements MessageStore {
 		const attachments = message.attachments ?? existing.attachments;
 		this.#messages[index] = attachments === undefined ? message : { ...message, attachments };
 		return { inserted: false };
+	}
+
+	async applyEdit(
+		conversationId: ConversationId,
+		targetSentAt: number,
+		body: string,
+	): Promise<boolean> {
+		const index = this.#messages.findIndex(
+			(entry) => entry.conversationId === conversationId && entry.sentAt === targetSentAt,
+		);
+		const existing = this.#messages[index];
+		if (existing === undefined || existing.isDeleted) {
+			return false;
+		}
+		this.#messages[index] = { ...existing, body, isEdited: true };
+		return true;
 	}
 
 	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {

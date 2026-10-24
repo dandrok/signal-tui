@@ -68,8 +68,19 @@ export function showsBody(message: Message): boolean {
  * The author row exactly as the pane draws it: clock, space, author label. Kept
  * here so the row count measures the string that actually gets rendered.
  */
+/**
+ * Suffix that marks a corrected message. The marker belongs to the header rather
+ * than to the body: appended to the body it would read as the sender's text, and
+ * on its own row it would cost a row of the window for every edited message.
+ *
+ * The renderer and the row measurement both call this, so what is measured is
+ * what is drawn.
+ */
+export const editedMarker = (message: Message): string =>
+	message.isEdited === true ? " · edited" : "";
+
 export function headerLine(message: Message, clock: Clock): string {
-	return `${clock(message.sentAt)} ${describeAuthor(message)}`;
+	return `${clock(message.sentAt)} ${describeAuthor(message)}${editedMarker(message)}`;
 }
 
 /** One attachment exactly as the pane draws it. */

@@ -5,6 +5,7 @@ import {
 	bodyForDisplay,
 	describeAuthor,
 	displayName,
+	editedMarker,
 	headerLine,
 	messageRowCount,
 	showsBody,
@@ -152,6 +153,7 @@ function MessageRow({
 				<Text>
 					<Text dimColor>{clock(message.sentAt)} </Text>
 					<Text bold>{describeAuthor(message)}</Text>
+					{editedMarker(message) === "" ? null : <Text dimColor>{editedMarker(message)}</Text>}
 				</Text>
 			) : (
 				<Text>{header.text}</Text>

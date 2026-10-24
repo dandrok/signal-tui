@@ -29,6 +29,12 @@ export interface MessageWriter {
 	markConversationRead(conversationId: ConversationId): Promise<boolean>;
 	/** Upserts a message; `inserted` is false when it was already cached. */
 	saveMessage(message: Message): Promise<{ readonly inserted: boolean }>;
+	/**
+	 * Replaces the body of a cached message, identified by the timestamp the edit
+	 * targets. Resolves false when that message is not cached — an edit can arrive
+	 * for history this device never stored.
+	 */
+	applyEdit(conversationId: ConversationId, targetSentAt: number, body: string): Promise<boolean>;
 	/** Marks a message as deleted; a no-op when the message is not cached. */
 	markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void>;
 }

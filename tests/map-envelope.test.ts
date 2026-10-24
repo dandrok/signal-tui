@@ -206,6 +206,53 @@ describe("mapEnvelope", () => {
 		expect(mapEnvelope(envelope).conversation?.name).toBe("");
 	});
 
+	test("maps an edit to the message it replaces", () => {
+		const mapped = mapEnvelope(
+			envelope({
+				editMessage: {
+					targetSentTimestamp: 500,
+					dataMessage: { timestamp: 900, message: "typo fixed" },
+				} as Envelope["editMessage"],
+			}),
+		);
+
+		expect(mapped.edited).toEqual({
+			conversationId: "b5b0c3d2-0000-4000-8000-000000000000",
+			targetSentAt: 500,
+			body: "typo fixed",
+		});
+		// An edit is not a new message: nothing may be inserted for it.
+		expect(mapped.message).toBeNull();
+		expect(mapped.conversation).toBeNull();
+	});
+
+	test("takes the group from the edit's own data message", () => {
+		const mapped = mapEnvelope(
+			envelope({
+				editMessage: {
+					targetSentTimestamp: 500,
+					dataMessage: { timestamp: 900, message: "fixed", groupInfo: groupData("x").groupInfo },
+				} as Envelope["editMessage"],
+			}),
+		);
+
+		expect(mapped.edited?.conversationId).toBe("group-1");
+		expect(mapped.conversationKind).toBe("group");
+	});
+
+	test("ignores an edit that carries no replacement text", () => {
+		const mapped = mapEnvelope(
+			envelope({
+				editMessage: {
+					targetSentTimestamp: 500,
+					dataMessage: { timestamp: 900 },
+				} as Envelope["editMessage"],
+			}),
+		);
+
+		expect(mapped.edited).toBeNull();
+	});
+
 	test("ignores a sync transcript without a destination", () => {
 		const envelope: Envelope = {
 			timestamp: 1,
@@ -216,6 +263,7 @@ describe("mapEnvelope", () => {
 			conversation: null,
 			conversationKind: "direct",
 			deleted: null,
+			edited: null,
 		});
 	});
 
@@ -226,6 +274,7 @@ describe("mapEnvelope", () => {
 			conversation: null,
 			conversationKind: "direct",
 			deleted: null,
+			edited: null,
 		});
 	});
 
@@ -236,6 +285,7 @@ describe("mapEnvelope", () => {
 			conversation: null,
 			conversationKind: "direct",
 			deleted: null,
+			edited: null,
 		});
 	});
 });

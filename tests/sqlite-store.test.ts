@@ -78,6 +78,7 @@ describe("SqliteMessageStore", () => {
 			attachments: [],
 			isOutgoing: true,
 			isDeleted: true,
+			isEdited: false,
 		});
 	});
 
@@ -225,7 +226,7 @@ describe("SqliteMessageStore", () => {
 	});
 
 	test("started at the current schema version", async () => {
-		expect(open().schemaVersion).toBe(2);
+		expect(open().schemaVersion).toBe(3);
 	});
 
 	test.skipIf(process.platform !== "linux")(
