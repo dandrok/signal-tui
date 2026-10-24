@@ -84,4 +84,14 @@ export const migrations: readonly Migration[] = [
 			ALTER TABLE messages ADD COLUMN is_edited INTEGER NOT NULL DEFAULT 0;
 		`,
 	},
+	{
+		version: 4,
+		// An edit has to be checked against the author of the message it targets,
+		// not just the timestamp: within one group the sent time alone would let a
+		// peer's edit land on somebody else's message. Rows cached before this
+		// column existed stay NULL and fall back to the stored label.
+		sql: `
+			ALTER TABLE messages ADD COLUMN author_id TEXT;
+		`,
+	},
 ];

@@ -39,7 +39,9 @@ describe("InMemoryStore", () => {
 			isDeleted: false,
 		});
 
-		expect(await store.applyEdit("uuid-x", 1_000, "typo fixed")).toBe(true);
+		expect(
+			await store.applyEdit("uuid-x", 1_000, { id: "uuid-alice", label: "Alice" }, "typo fixed"),
+		).toBe(true);
 
 		const [saved] = await store.listMessages("uuid-x");
 		expect(saved?.body).toBe("typo fixed");
@@ -61,7 +63,7 @@ describe("InMemoryStore", () => {
 			isDeleted: false,
 		};
 		await store.saveMessage(original);
-		await store.applyEdit("uuid-x", 1_000, "corrected");
+		await store.applyEdit("uuid-x", 1_000, { id: "uuid-alice", label: "Alice" }, "corrected");
 
 		// A reconnect replays the envelope that carried the original body.
 		expect(await store.saveMessage(original)).toEqual({ inserted: false });
@@ -105,6 +107,48 @@ describe("InMemoryStore", () => {
 		expect(saved?.attachments).toEqual([]);
 	});
 
+	test("an edit from another author does not land", async () => {
+		const store = new InMemoryStore();
+		await store.upsertConversation(conversation());
+		await store.saveMessage({
+			id: "m1",
+			conversationId: "uuid-x",
+			author: "Alice",
+			authorId: "uuid-alice",
+			body: "Alice wrote this",
+			sentAt: 1_000,
+			isOutgoing: false,
+			isDeleted: false,
+		});
+
+		expect(await store.applyEdit("uuid-x", 1_000, { id: "uuid-bob", label: "Bob" }, "nope")).toBe(
+			false,
+		);
+		const [saved] = await store.listMessages("uuid-x");
+		expect(saved?.body).toBe("Alice wrote this");
+	});
+
+	test("a row without an author id is matched on its label", async () => {
+		const store = new InMemoryStore();
+		await store.upsertConversation(conversation());
+		await store.saveMessage({
+			id: "m1",
+			conversationId: "uuid-x",
+			author: "Alice",
+			body: "older row",
+			sentAt: 1_000,
+			isOutgoing: false,
+			isDeleted: false,
+		});
+
+		expect(await store.applyEdit("uuid-x", 1_000, { id: null, label: "Alice" }, "fixed")).toBe(
+			true,
+		);
+		expect(await store.applyEdit("uuid-x", 1_000, { id: null, label: "Bob" }, "hijacked")).toBe(
+			false,
+		);
+	});
+
 	test("an edit for an unknown or deleted message changes nothing", async () => {
 		const store = new InMemoryStore();
 		await store.upsertConversation(conversation());
@@ -118,8 +162,12 @@ describe("InMemoryStore", () => {
 			isDeleted: true,
 		});
 
-		expect(await store.applyEdit("uuid-x", 999, "nope")).toBe(false);
-		expect(await store.applyEdit("uuid-x", 1_000, "back")).toBe(false);
+		expect(await store.applyEdit("uuid-x", 999, { id: "uuid-alice", label: "Alice" }, "nope")).toBe(
+			false,
+		);
+		expect(
+			await store.applyEdit("uuid-x", 1_000, { id: "uuid-alice", label: "Alice" }, "back"),
+		).toBe(false);
 		expect((await store.listMessages("uuid-x"))[0]?.body).toBe("gone");
 	});
 

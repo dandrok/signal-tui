@@ -3,9 +3,11 @@ import type {
 	Attachment,
 	Conversation,
 	ConversationId,
+	EditAuthor,
 	Message,
 	MessageId,
 } from "../../domain/types";
+import { SELF_AUTHOR_ID } from "../../domain/types";
 import type { DataMessage, EditMessage, Envelope, SentMessage } from "./schemas";
 import { dataMessageSchema } from "./schemas";
 
@@ -24,6 +26,8 @@ export interface DeletedMessage {
 export interface EditedMessage {
 	readonly conversationId: ConversationId;
 	readonly targetSentAt: number;
+	/** The peer that asked for the change; only their own message may be rewritten. */
+	readonly editor: EditAuthor;
 	readonly body: string;
 }
 
@@ -194,6 +198,9 @@ function mapEdit(envelope: Envelope, edit: EditMessage): MappedEnvelope {
 		edited: {
 			conversationId: target.id,
 			targetSentAt: edit.targetSentTimestamp,
+			// The envelope sender is the editor: Signal refuses an edit from anyone
+			// else, so a mismatch means the cache should not apply it.
+			editor: { id: peerId(envelope), label: peerName(envelope) },
 			body,
 		},
 	};
@@ -227,6 +234,7 @@ function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
 			id: `${target.id}:${data.timestamp}`,
 			conversationId: target.id,
 			author: peerName(envelope),
+			...(peerId(envelope) === null ? {} : { authorId: peerId(envelope) as string }),
 			body: bodyOf(data),
 			sentAt: data.timestamp,
 			isOutgoing: false,
@@ -276,6 +284,7 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 			id: `${target.id}:${sent.timestamp}`,
 			conversationId: target.id,
 			author: SELF_LABEL,
+			authorId: SELF_AUTHOR_ID,
 			body: bodyOf(sent),
 			sentAt: sent.timestamp,
 			isOutgoing: true,

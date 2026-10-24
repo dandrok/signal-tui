@@ -1,4 +1,4 @@
-import type { Conversation, Message } from "../../src/domain/types";
+import type { Conversation, EditAuthor, Message } from "../../src/domain/types";
 import type { BackendEvent, SignalBackend } from "../../src/ports/backend";
 import type { MessageStore } from "../../src/ports/store";
 
@@ -59,13 +59,24 @@ export class RecordingStore implements MessageStore {
 		return { inserted };
 	}
 
-	async applyEdit(conversationId: string, targetSentAt: number, body: string): Promise<boolean> {
+	async applyEdit(
+		conversationId: string,
+		targetSentAt: number,
+		editor: EditAuthor,
+		body: string,
+	): Promise<boolean> {
 		if (this.failOn === "applyEdit") {
 			throw new Error("applyEdit failed");
 		}
 		this.ops.push(`applyEdit:${conversationId}:${targetSentAt}:${body}`);
 		const existing = this.messages.get(conversationId) ?? [];
-		const index = existing.findIndex((entry) => entry.sentAt === targetSentAt);
+		const index = existing.findIndex(
+			(entry) =>
+				entry.sentAt === targetSentAt &&
+				(entry.authorId === undefined
+					? entry.author === editor.label
+					: entry.authorId === editor.id),
+		);
 		const found = existing[index];
 		if (found === undefined) {
 			return false;

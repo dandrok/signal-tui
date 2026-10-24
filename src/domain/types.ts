@@ -13,6 +13,15 @@ export interface Conversation {
  * which for a received attachment is the path it downloaded to; rendering uses
  * the last path segment, so the label stays readable either way.
  */
+/** Who asked for a change, as both a stable id and the label shown on screen. */
+export interface EditAuthor {
+	readonly id: string | null;
+	readonly label: string;
+}
+
+/** Stable identity for our own messages, which no peer can claim. */
+export const SELF_AUTHOR_ID = "self";
+
 export interface Attachment {
 	readonly id: string | null;
 	readonly contentType: string | null;
@@ -26,6 +35,16 @@ export interface Message {
 	readonly id: MessageId;
 	readonly conversationId: ConversationId;
 	readonly author: string;
+	/**
+	 * Stable identity of the sender — a uuid where Signal gives one, a phone number
+	 * otherwise, and `SELF_AUTHOR_ID` for our own messages. `author` is the display
+	 * label and can be changed by the peer at any time, so it must never be the key
+	 * an edit is matched on.
+	 *
+	 * Absent on rows cached before schema v4; `applyEdit` falls back to the label
+	 * for those and to nothing else.
+	 */
+	readonly authorId?: string;
 	readonly body: string;
 	readonly sentAt: number;
 	readonly isOutgoing: boolean;

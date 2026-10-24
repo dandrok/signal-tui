@@ -1,4 +1,10 @@
-import type { Conversation, ConversationId, Message, MessageId } from "../../domain/types";
+import type {
+	Conversation,
+	ConversationId,
+	EditAuthor,
+	Message,
+	MessageId,
+} from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
 import { demoConversations, demoMessages } from "./demo-data";
 
@@ -119,10 +125,20 @@ export class InMemoryStore implements MessageStore {
 	async applyEdit(
 		conversationId: ConversationId,
 		targetSentAt: number,
+		editor: EditAuthor,
 		body: string,
 	): Promise<boolean> {
+		// A timestamp identifies a message within a conversation, not an author, so the
+		// author has to match too — otherwise one member's edit could rewrite another
+		// member's message. Rows stored before schema v4 have no id: they fall back to
+		// the label they were cached with, exactly as the SQLite adapter does.
 		const index = this.#messages.findIndex(
-			(entry) => entry.conversationId === conversationId && entry.sentAt === targetSentAt,
+			(entry) =>
+				entry.conversationId === conversationId &&
+				entry.sentAt === targetSentAt &&
+				(entry.authorId === undefined
+					? entry.author === editor.label
+					: entry.authorId === editor.id),
 		);
 		const existing = this.#messages[index];
 		if (existing === undefined || existing.isDeleted) {

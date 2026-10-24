@@ -14,6 +14,7 @@ const message = (overrides: Partial<Message> = {}): Message => ({
 	id: "m1",
 	conversationId: "uuid-alice",
 	author: "Alice",
+	authorId: "uuid-alice",
 	body: "hello",
 	sentAt: 1_000,
 	isOutgoing: false,
@@ -41,7 +42,14 @@ describe("SqliteMessageStore edits", () => {
 		await store.upsertConversation(conversation());
 		await store.saveMessage(message({ body: "typo here" }));
 
-		expect(await store.applyEdit("uuid-alice", 1_000, "typo fixed")).toBe(true);
+		expect(
+			await store.applyEdit(
+				"uuid-alice",
+				1_000,
+				{ id: "uuid-alice", label: "Alice" },
+				"typo fixed",
+			),
+		).toBe(true);
 
 		const [saved] = await store.listMessages("uuid-alice");
 		expect(saved?.body).toBe("typo fixed");
@@ -53,24 +61,73 @@ describe("SqliteMessageStore edits", () => {
 		await store.upsertConversation(conversation());
 		await store.saveMessage(message({ body: "meeting at noon" }));
 
-		await store.applyEdit("uuid-alice", 1_000, "meeting at three");
+		await store.applyEdit(
+			"uuid-alice",
+			1_000,
+			{ id: "uuid-alice", label: "Alice" },
+			"meeting at three",
+		);
 
 		expect(await store.search("three")).toHaveLength(1);
 		expect(await store.search("noon")).toHaveLength(0);
+	});
+
+	test("an edit from another author does not land", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+		await store.saveMessage(message({ body: "Alice wrote this" }));
+
+		// Same conversation, same timestamp, different author: inside a group the
+		// timestamp alone does not identify whose message it is.
+		const applied = await store.applyEdit(
+			"uuid-alice",
+			1_000,
+			{ id: "uuid-bob", label: "Bob" },
+			"Bob wrote this",
+		);
+
+		expect(applied).toBe(false);
+		const [saved] = await store.listMessages("uuid-alice");
+		expect(saved?.body).toBe("Alice wrote this");
+		expect(saved?.isEdited).toBe(false);
+	});
+
+	test("a row cached before schema v4 is matched on its label", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+		// No authorId: this is what every row written by an older build looks like.
+		await store.saveMessage({
+			id: "m1",
+			conversationId: "uuid-alice",
+			author: "Alice",
+			body: "older row",
+			sentAt: 1_000,
+			isOutgoing: false,
+			isDeleted: false,
+		});
+
+		expect(await store.applyEdit("uuid-alice", 1_000, { id: null, label: "Alice" }, "fixed")).toBe(
+			true,
+		);
+		expect(await store.applyEdit("uuid-alice", 1_000, { id: null, label: "Bob" }, "hijacked")).toBe(
+			false,
+		);
 	});
 
 	test("an edit for a message it does not have is a no-op", async () => {
 		const store = open();
 		await store.upsertConversation(conversation());
 
-		expect(await store.applyEdit("uuid-alice", 999, "whatever")).toBe(false);
+		expect(
+			await store.applyEdit("uuid-alice", 999, { id: "uuid-alice", label: "Alice" }, "whatever"),
+		).toBe(false);
 	});
 
 	test("a redelivered original does not undo an edit", async () => {
 		const store = open();
 		await store.upsertConversation(conversation());
 		await store.saveMessage(message({ body: "original" }));
-		await store.applyEdit("uuid-alice", 1_000, "corrected");
+		await store.applyEdit("uuid-alice", 1_000, { id: "uuid-alice", label: "Alice" }, "corrected");
 
 		// A reconnect replays the envelope that carried the original body.
 		expect(await store.saveMessage(message({ body: "original" }))).toEqual({ inserted: false });
@@ -116,7 +173,14 @@ describe("SqliteMessageStore edits", () => {
 		await store.saveMessage(message({ body: "gone" }));
 		await store.markMessageDeleted("uuid-alice", "m1");
 
-		expect(await store.applyEdit("uuid-alice", 1_000, "back again")).toBe(false);
+		expect(
+			await store.applyEdit(
+				"uuid-alice",
+				1_000,
+				{ id: "uuid-alice", label: "Alice" },
+				"back again",
+			),
+		).toBe(false);
 		expect((await store.listMessages("uuid-alice"))[0]?.body).toBe("");
 	});
 });

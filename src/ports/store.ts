@@ -1,4 +1,4 @@
-import type { Conversation, ConversationId, Message, MessageId } from "../domain/types";
+import type { Conversation, ConversationId, EditAuthor, Message, MessageId } from "../domain/types";
 
 /**
  * Read model for the local cache. Implementations: memory (tests/demo) and
@@ -31,10 +31,16 @@ export interface MessageWriter {
 	saveMessage(message: Message): Promise<{ readonly inserted: boolean }>;
 	/**
 	 * Replaces the body of a cached message, identified by the timestamp the edit
-	 * targets. Resolves false when that message is not cached — an edit can arrive
-	 * for history this device never stored.
+	 * targets and the author it belongs to. Resolves false when that message is not
+	 * cached, or when the edit comes from somebody other than its author — a peer must
+	 * not be able to rewrite another participant's message by guessing its timestamp.
 	 */
-	applyEdit(conversationId: ConversationId, targetSentAt: number, body: string): Promise<boolean>;
+	applyEdit(
+		conversationId: ConversationId,
+		targetSentAt: number,
+		editor: EditAuthor,
+		body: string,
+	): Promise<boolean>;
 	/** Marks a message as deleted; a no-op when the message is not cached. */
 	markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void>;
 }
