@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { demoConversations, demoMessages } from "../src/adapters/memory/demo-data";
 import type { AppState } from "../src/app/state";
-import { emptyState, reduce, selectedConversation, selectedMessages } from "../src/app/state";
+import {
+	emptyState,
+	FOCUS_ORDER,
+	reduce,
+	selectedConversation,
+	selectedMessages,
+} from "../src/app/state";
 
 const loaded = () =>
 	reduce(emptyState, { type: "conversations-loaded", conversations: demoConversations });
@@ -75,6 +81,98 @@ describe("reduce", () => {
 	test("setting the same focus returns the same object", () => {
 		const state = loaded();
 		expect(reduce(state, { type: "focus", focus: "conversations" })).toBe(state);
+	});
+});
+
+describe("pane focus", () => {
+	test("tab cycles every pane and wraps", () => {
+		let state = loaded();
+		const seen: string[] = [state.focus];
+		for (let step = 0; step < FOCUS_ORDER.length; step += 1) {
+			state = reduce(state, { type: "focus-next" });
+			seen.push(state.focus);
+		}
+		expect(seen).toEqual(["conversations", "messages", "composer", "conversations"]);
+	});
+
+	test("shift-tab walks the same list backwards", () => {
+		let state = loaded();
+		state = reduce(state, { type: "focus-prev" });
+		expect(state.focus).toBe("composer");
+		state = reduce(state, { type: "focus-prev" });
+		expect(state.focus).toBe("messages");
+	});
+
+	test("a focus that is already current is an identity", () => {
+		const state = reduce(loaded(), { type: "focus", focus: "messages" });
+		expect(reduce(state, { type: "focus-next" })).not.toBe(state);
+		expect(reduce(reduce(state, { type: "focus-next" }), { type: "focus-prev" })).toEqual(state);
+	});
+});
+
+describe("scroll", () => {
+	/** The selected conversation, loaded with `count` messages. */
+	const withThread = (count: number): AppState => {
+		const messages = Array.from({ length: count }, (_unused, index) => ({
+			id: `m-${index}`,
+			conversationId: "c-signal-devs",
+			author: "Marta",
+			body: `body-${index}`,
+			sentAt: index,
+			isOutgoing: false,
+			isDeleted: false,
+		}));
+		return reduce(loaded(), {
+			type: "messages-loaded",
+			conversationId: "c-signal-devs",
+			messages,
+		});
+	};
+
+	test("scrolling up counts hidden messages and never goes negative", () => {
+		let state = reduce(withThread(10), { type: "scroll-moved", delta: 3 });
+		expect(state.scroll).toBe(3);
+		state = reduce(state, { type: "scroll-moved", delta: -10 });
+		expect(state.scroll).toBe(0);
+		expect(reduce(state, { type: "scroll-moved", delta: -1 })).toBe(state);
+	});
+
+	test("stops at the oldest message so a held key cannot run away", () => {
+		// Without the upper bound a held `k` counts past the start, and every press
+		// back then lands in that dead range instead of moving the pane.
+		const state = reduce(withThread(3), { type: "scroll-moved", delta: 99 });
+		expect(state.scroll).toBe(2);
+		expect(reduce(state, { type: "scroll-moved", delta: -1 }).scroll).toBe(1);
+	});
+
+	test("a thread with no messages cannot be scrolled", () => {
+		expect(reduce(loaded(), { type: "scroll-moved", delta: 3 }).scroll).toBe(0);
+	});
+
+	test("changing conversation returns to the newest message", () => {
+		let state = reduce(withThread(10), { type: "scroll-moved", delta: 7 });
+		state = reduce(state, { type: "move-selection", delta: 1 });
+		expect(state.scroll).toBe(0);
+	});
+
+	test("a reload that keeps the list in order keeps the offset", () => {
+		const scrolled = reduce(withThread(10), { type: "scroll-moved", delta: 5 });
+		const reloaded = reduce(scrolled, {
+			type: "conversations-loaded",
+			conversations: [...demoConversations],
+		});
+		expect(reloaded.scroll).toBe(5);
+	});
+
+	test("a reload that reorders the list drops a stale offset", () => {
+		const scrolled = reduce(withThread(10), { type: "scroll-moved", delta: 5 });
+		const reordered = reduce(scrolled, {
+			type: "conversations-loaded",
+			conversations: [...demoConversations].reverse(),
+		});
+		// Same index, different conversation: keeping the offset would open the
+		// new conversation mid-history.
+		expect(reordered.scroll).toBe(0);
 	});
 });
 

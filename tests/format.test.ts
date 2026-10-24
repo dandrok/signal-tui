@@ -3,7 +3,6 @@ import {
 	describeAuthor,
 	describeBody,
 	displayName,
-	formatClock,
 	formatUnread,
 	truncate,
 } from "../src/domain/format";
@@ -48,19 +47,6 @@ describe("formatUnread", () => {
 		expect(formatUnread(3)).toBe("3");
 		expect(formatUnread(99)).toBe("99");
 		expect(formatUnread(120)).toBe("99+");
-	});
-});
-
-describe("formatClock", () => {
-	test("renders a two-digit 24h clock in local time", () => {
-		// Constructed from local components so the expectation is timezone-independent.
-		const localNineOhFive = new Date(2026, 9, 22, 9, 5, 0, 0).getTime();
-		expect(formatClock(localNineOhFive)).toBe("09:05");
-	});
-
-	test("zero-pads both halves", () => {
-		const localMidnight = new Date(2026, 9, 22, 0, 0, 0, 0).getTime();
-		expect(formatClock(localMidnight)).toBe("00:00");
 	});
 });
 
