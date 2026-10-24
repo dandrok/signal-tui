@@ -128,6 +128,11 @@ export class InMemoryStore implements MessageStore {
 			...(existing.isEdited === true ? { isEdited: true } : {}),
 			// Same for expiry: the flag lives in the row, not in the payload.
 			...(existing.isExpired === true ? { isExpired: true } : {}),
+			// The stored deadline wins. A replay can supply one where none was known,
+			// never replace one: extending it would outlive what the sender promised.
+			...((existing.expiresAt ?? message.expiresAt) === undefined
+				? {}
+				: { expiresAt: (existing.expiresAt ?? message.expiresAt) as number }),
 			// A replay that carries no author id says nothing about the sender, not that
 			// there is none: dropping the stored one would silently downgrade the row to
 			// label matching, which the SQLite adapter avoids with COALESCE.

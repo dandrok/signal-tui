@@ -163,3 +163,35 @@ describe("SqliteMessageStore replay after expiry", () => {
 		expect(await store.purgeExpired(9_000)).toBe(0);
 	});
 });
+
+/** A replay must not extend the promise the sender made. */
+describe("SqliteMessageStore deadline on replay", () => {
+	test("keeps the deadline it stored, even when the replay names a later one", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+		await store.saveMessage(message({ body: "gone at 2s", expiresAt: 2_000 }));
+
+		// A second copy of the same message claiming a much later deadline would let the
+		// text outlive the timer it was sent under.
+		await store.saveMessage(message({ body: "gone at 2s", expiresAt: 9_000_000 }));
+
+		expect((await store.listMessages("uuid-alice"))[0]?.expiresAt).toBe(2_000);
+		expect(await store.purgeExpired(3_000)).toBe(1);
+		expect((await store.listMessages("uuid-alice"))[0]?.body).toBe("");
+	});
+
+	test("fills a deadline that was never known, then keeps it", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+		// First sighting carried no timer.
+		await store.saveMessage(message({ body: "no timer at first" }));
+
+		// A later envelope knows the timer: filling NULL can only shorten the life of the
+		// message, never extend it, so it is allowed.
+		await store.saveMessage(message({ body: "no timer at first", expiresAt: 5_000 }));
+		expect((await store.listMessages("uuid-alice"))[0]?.expiresAt).toBe(5_000);
+
+		await store.saveMessage(message({ body: "no timer at first", expiresAt: 900_000 }));
+		expect((await store.listMessages("uuid-alice"))[0]?.expiresAt).toBe(5_000);
+	});
+});

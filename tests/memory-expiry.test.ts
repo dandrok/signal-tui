@@ -113,3 +113,46 @@ describe("InMemoryStore replay after expiry", () => {
 		expect(await store.purgeExpired(9_000)).toBe(0);
 	});
 });
+
+describe("InMemoryStore deadline on replay", () => {
+	const saved = (overrides: Record<string, unknown> = {}) => ({
+		id: "m1",
+		conversationId: "uuid-x",
+		author: "Alice",
+		body: "gone at 2s",
+		sentAt: 1_000,
+		isOutgoing: false,
+		isDeleted: false,
+		...overrides,
+	});
+
+	test("a replay without a deadline keeps the stored one", async () => {
+		const store = new InMemoryStore();
+		await store.upsertConversation(conversation());
+		await store.saveMessage(saved({ expiresAt: 2_000 }));
+
+		// Signal omits expiresInSeconds when there is nothing to say about it.
+		await store.saveMessage(saved());
+
+		expect((await store.listMessages("uuid-x"))[0]?.expiresAt).toBe(2_000);
+		expect(await store.purgeExpired(3_000)).toBe(1);
+	});
+
+	test("a later deadline does not push out the stored one", async () => {
+		const store = new InMemoryStore();
+		await store.upsertConversation(conversation());
+		await store.saveMessage(saved({ expiresAt: 2_000 }));
+		await store.saveMessage(saved({ expiresAt: 9_000_000 }));
+
+		expect((await store.listMessages("uuid-x"))[0]?.expiresAt).toBe(2_000);
+	});
+
+	test("a deadline that was never known can be filled", async () => {
+		const store = new InMemoryStore();
+		await store.upsertConversation(conversation());
+		await store.saveMessage(saved());
+		await store.saveMessage(saved({ expiresAt: 5_000 }));
+
+		expect((await store.listMessages("uuid-x"))[0]?.expiresAt).toBe(5_000);
+	});
+});

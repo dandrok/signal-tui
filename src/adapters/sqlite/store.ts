@@ -187,7 +187,11 @@ export class SqliteMessageStore implements MessageStore {
 						               END,
 						        sent_at = ?6, is_outgoing = ?7,
 						        is_deleted = is_deleted | ?8,
-						        expires_at = COALESCE(?9, expires_at)
+					        -- The deadline is the promise made when the message was stored.
+					        -- A replay may supply one where none was known (NULL), and may
+					        -- never push out one that exists: that would extend the lifetime
+					        -- of a message the sender already expected to be gone.
+					        expires_at = COALESCE(expires_at, ?9)
 						 WHERE id = ?1 AND conversation_id = ?2`,
 					)
 					.run(...params);
