@@ -1,6 +1,7 @@
 import { Box, Text, useApp, useInput } from "ink";
 import type { Action, AppState } from "../app/state";
 import { selectedConversation, selectedMessages } from "../app/state";
+import { COMPOSER_HEIGHT, Composer } from "./Composer";
 import { ConversationList } from "./ConversationList";
 import { useTerminalSize } from "./hooks/useTerminalSize";
 import { MessagePane } from "./MessagePane";
@@ -11,8 +12,16 @@ export interface AppProps {
 	readonly dispatch: (action: Action) => void;
 }
 
-const NORMAL_HINTS = "j/k move · i or ⏎ compose · / search · q quit";
-const COMPOSER_HINTS = "⏎ send · esc back";
+/** Rows a page of `j`/`k` covers while the message pane owns the keyboard. */
+const SCROLL_STEP = 10;
+
+const hintsFor = (isComposing: boolean, focus: AppState["focus"]): string => {
+	if (isComposing) {
+		return "⏎ send · esc back · tab panes";
+	}
+	const panes = "tab panes · i compose · / search · q quit";
+	return focus === "messages" ? `j/k scroll · ⇞/⇟ page · ${panes}` : `j/k move · ${panes}`;
+};
 
 export function App({ state, dispatch }: AppProps) {
 	const { exit } = useApp();
@@ -20,8 +29,8 @@ export function App({ state, dispatch }: AppProps) {
 
 	const conversation = selectedConversation(state);
 	const messages = selectedMessages(state);
-	const isComposing = state.focus === "composer" && state.search === null;
 	const isSearching = state.search !== null;
+	const isComposing = state.focus === "composer" && !isSearching;
 
 	useInput((input, key) => {
 		if (key.ctrl && input === "c") {
@@ -56,13 +65,22 @@ export function App({ state, dispatch }: AppProps) {
 			return;
 		}
 
+		// Tab walks the panes whether or not one of them is "active": the border
+		// colour is the only thing that says where the keyboard is pointing. It is
+		// handled before the composer so Tab moves on instead of being typed into
+		// the draft.
+		if (key.tab) {
+			dispatch({ type: key.shift ? "focus-prev" : "focus-next" });
+			return;
+		}
+
 		if (isComposing) {
 			if (key.return) {
 				dispatch({ type: "draft-submitted" });
 				return;
 			}
 			if (key.escape) {
-				dispatch({ type: "focus", focus: "conversations" });
+				dispatch({ type: "focus", focus: "messages" });
 				return;
 			}
 			if (key.backspace || key.delete) {
@@ -77,31 +95,49 @@ export function App({ state, dispatch }: AppProps) {
 			exit();
 			return;
 		}
-		if (input === "j") {
-			dispatch({ type: "move-selection", delta: 1 });
-			return;
-		}
-		if (input === "k") {
-			dispatch({ type: "move-selection", delta: -1 });
-			return;
-		}
 		if (input === "/") {
 			dispatch({ type: "search-opened" });
 			return;
 		}
 		if (input === "i" || key.return) {
 			dispatch({ type: "focus", focus: "composer" });
+			return;
+		}
+
+		const inMessages = state.focus === "messages";
+		if (inMessages && key.pageUp) {
+			dispatch({ type: "scroll-moved", delta: SCROLL_STEP });
+			return;
+		}
+		if (inMessages && key.pageDown) {
+			dispatch({ type: "scroll-moved", delta: -SCROLL_STEP });
+			return;
+		}
+		if (input === "j") {
+			dispatch(
+				inMessages ? { type: "scroll-moved", delta: -1 } : { type: "move-selection", delta: 1 },
+			);
+			return;
+		}
+		if (input === "k") {
+			dispatch(
+				inMessages ? { type: "scroll-moved", delta: 1 } : { type: "move-selection", delta: -1 },
+			);
 		}
 	});
 
+	// The domain never reads the host timezone, so the UI resolves it once and
+	// hands it to the pane that renders clocks.
+	const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 	const listWidth = Math.max(22, Math.min(32, Math.floor(columns * 0.3)));
-	const chromeRows = 3;
-	const bodyHeight = Math.max(6, rows - chromeRows);
+	const bodyHeight = Math.max(8, rows - 1);
+	const messageHeight = Math.max(5, bodyHeight - COMPOSER_HEIGHT);
+	const messageWidth = Math.max(20, columns - listWidth);
 
 	return (
 		<Box flexDirection="column" width={columns} height={rows}>
-			{state.search !== null ? (
-				<SearchPane search={state.search} width={columns} height={rows - 2} />
+			{isSearching && state.search !== null ? (
+				<SearchPane search={state.search} width={columns} height={bodyHeight} />
 			) : (
 				<Box flexDirection="row" height={bodyHeight}>
 					<ConversationList
@@ -109,20 +145,26 @@ export function App({ state, dispatch }: AppProps) {
 						selectedIndex={state.selectedIndex}
 						width={listWidth}
 						height={bodyHeight}
+						isFocused={state.focus === "conversations"}
 					/>
-					<MessagePane conversation={conversation} messages={messages} height={bodyHeight} />
+					<Box flexDirection="column" flexGrow={1}>
+						<MessagePane
+							conversation={conversation}
+							messages={messages}
+							width={messageWidth}
+							height={messageHeight}
+							scroll={state.scroll}
+							isFocused={state.focus === "messages"}
+							timeZone={timeZone}
+						/>
+						<Composer draft={state.draft} isFocused={isComposing} width={messageWidth} />
+					</Box>
 				</Box>
 			)}
 
 			<Box paddingX={1}>
-				<Text dimColor>{isComposing ? COMPOSER_HINTS : NORMAL_HINTS}</Text>
+				<Text dimColor>{hintsFor(isComposing, state.focus)}</Text>
 				{state.notice ? <Text color="green"> · {state.notice.text}</Text> : null}
-			</Box>
-
-			<Box paddingX={1}>
-				<Text color={isComposing ? "green" : "gray"}>{isComposing ? "› " : "  "}</Text>
-				<Text>{state.draft}</Text>
-				{isComposing ? <Text color="green">▌</Text> : null}
 			</Box>
 		</Box>
 	);

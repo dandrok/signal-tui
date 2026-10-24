@@ -23,9 +23,18 @@ function seededState(): AppState {
 	return state;
 }
 
-function Harness({ initial }: { readonly initial: AppState }) {
+function Harness({
+	initial,
+	onAction,
+}: {
+	readonly initial: AppState;
+	readonly onAction?: (action: Action) => void;
+}) {
 	const [state, setState] = useState<AppState>(initial);
-	const dispatch = (action: Action): void => setState((current) => reduce(current, action));
+	const dispatch = (action: Action): void => {
+		onAction?.(action);
+		setState((current) => reduce(current, action));
+	};
 	return <App state={state} dispatch={dispatch} />;
 }
 
@@ -66,8 +75,58 @@ describe("App", () => {
 		stdin.write("\u001b");
 		await tick();
 		const frame = lastFrame() ?? "";
-		expect(frame).toContain("j/k move");
+		// Back to the message pane, which is where you look after writing.
+		expect(frame).toContain("j/k scroll");
 		expect(frame).toContain("draft one");
+	});
+
+	test("tab moves the keyboard to the message pane", async () => {
+		const actions: Action[] = [];
+		const { lastFrame, stdin, unmount } = render(
+			<Harness initial={seededState()} onAction={(action) => actions.push(action)} />,
+		);
+		await tick();
+
+		stdin.write("	");
+		await tick();
+		expect(lastFrame() ?? "").toContain("j/k scroll");
+
+		// j belongs to the message pane now. Asserting the dispatched action
+		// rather than the frame: from `scroll: 0` a `scroll-moved` of -1 clamps to
+		// zero, so the frame looks identical whether or not j was routed anywhere.
+		actions.length = 0;
+		stdin.write("j");
+		await tick();
+		expect(actions).toEqual([{ type: "scroll-moved", delta: -1 }]);
+		unmount();
+	});
+
+	test("tab leaves the composer instead of typing a tab into the draft", async () => {
+		const actions: Action[] = [];
+		const { stdin, unmount } = render(
+			<Harness initial={seededState()} onAction={(action) => actions.push(action)} />,
+		);
+		await tick();
+
+		stdin.write("i");
+		await tick();
+		stdin.write("hi");
+		await tick();
+		actions.length = 0;
+		stdin.write("	");
+		await tick();
+
+		expect(actions).toEqual([{ type: "focus-next" }]);
+		unmount();
+	});
+
+	test("shift-tab walks back to the composer", async () => {
+		const { lastFrame, stdin } = render(<Harness initial={seededState()} />);
+		await tick();
+
+		stdin.write("\u001b[Z");
+		await tick();
+		expect(lastFrame() ?? "").toContain("⏎ send");
 	});
 });
 

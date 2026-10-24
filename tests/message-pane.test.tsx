@@ -33,7 +33,7 @@ const message = (overrides: Partial<Message> = {}): Message => ({
 
 const frameOf = (messages: readonly Message[]): string => {
 	const { lastFrame, unmount } = render(
-		<MessagePane conversation={conversation} messages={messages} height={20} />,
+		<MessagePane conversation={conversation} messages={messages} height={20} timeZone="UTC" />,
 	);
 	const frame = lastFrame() ?? "";
 	unmount();

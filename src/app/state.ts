@@ -1,6 +1,12 @@
 import type { Conversation, ConversationId, Message } from "../domain/types";
 
-export type Focus = "conversations" | "composer";
+export type Focus = "conversations" | "messages" | "composer";
+
+/**
+ * Tab order for the panes. Cycling reads this list rather than a chain of `if`s,
+ * so a fourth pane is one array entry plus its own key handling.
+ */
+export const FOCUS_ORDER: readonly Focus[] = ["conversations", "messages", "composer"];
 
 /** Notices are typed so a transient send confirmation is never confused with an error. */
 export type NoticeKind = "queued" | "info";
@@ -24,6 +30,8 @@ export interface AppState {
 	readonly messagesByConversation: Readonly<Record<ConversationId, readonly Message[]>>;
 	readonly selectedIndex: number;
 	readonly focus: Focus;
+	/** Messages hidden above the window; `0` is pinned to the newest. */
+	readonly scroll: number;
 	readonly draft: string;
 	readonly notice: Notice | null;
 	readonly search: SearchState | null;
@@ -38,6 +46,9 @@ export type Action =
 	  }
 	| { readonly type: "move-selection"; readonly delta: number }
 	| { readonly type: "focus"; readonly focus: Focus }
+	| { readonly type: "focus-next" }
+	| { readonly type: "focus-prev" }
+	| { readonly type: "scroll-moved"; readonly delta: number }
 	| { readonly type: "draft-changed"; readonly value: string }
 	| { readonly type: "draft-submitted" }
 	| { readonly type: "notice"; readonly notice: Notice | null }
@@ -53,6 +64,7 @@ export const emptyState: AppState = {
 	messagesByConversation: {},
 	selectedIndex: 0,
 	focus: "conversations",
+	scroll: 0,
 	draft: "",
 	notice: null,
 	search: null,
@@ -63,10 +75,16 @@ export function reduce(state: AppState, action: Action): AppState {
 	switch (action.type) {
 		case "conversations-loaded": {
 			const lastIndex = Math.max(0, action.conversations.length - 1);
+			const nextIndex = Math.min(state.selectedIndex, lastIndex);
+			// A reload can reorder the list, so the same index may now be a different
+			// conversation: keeping the old scroll offset would open it mid-history.
+			const before = state.conversations[state.selectedIndex]?.id;
+			const after = action.conversations[nextIndex]?.id;
 			return {
 				...state,
 				conversations: action.conversations,
-				selectedIndex: Math.min(state.selectedIndex, lastIndex),
+				selectedIndex: nextIndex,
+				scroll: before === after ? state.scroll : 0,
 			};
 		}
 		case "messages-loaded":
@@ -80,10 +98,28 @@ export function reduce(state: AppState, action: Action): AppState {
 		case "move-selection": {
 			const lastIndex = Math.max(0, state.conversations.length - 1);
 			const nextIndex = Math.min(lastIndex, Math.max(0, state.selectedIndex + action.delta));
-			return nextIndex === state.selectedIndex ? state : { ...state, selectedIndex: nextIndex };
+			return nextIndex === state.selectedIndex
+				? state
+				: // A different conversation always starts at its newest message. The
+					// other way round, the pane would open mid-history and look stale.
+					{ ...state, selectedIndex: nextIndex, scroll: 0 };
 		}
 		case "focus":
 			return state.focus === action.focus ? state : { ...state, focus: action.focus };
+		case "focus-next":
+		case "focus-prev": {
+			const step = action.type === "focus-next" ? 1 : -1;
+			const index = FOCUS_ORDER.indexOf(state.focus);
+			const next =
+				FOCUS_ORDER[(index + step + FOCUS_ORDER.length) % FOCUS_ORDER.length] ?? state.focus;
+			return next === state.focus ? state : { ...state, focus: next };
+		}
+		case "scroll-moved": {
+			// Clamped at 0 only: how many messages fit is a rendering fact, so the
+			// upper bound is enforced where the window is built, not here.
+			const next = Math.max(0, state.scroll + action.delta);
+			return next === state.scroll ? state : { ...state, scroll: next };
+		}
 		case "draft-changed": {
 			// Only the transient send confirmation is cleared; other notices survive typing.
 			const nextNotice = state.notice?.kind === "queued" ? null : state.notice;
@@ -153,6 +189,7 @@ export function reduce(state: AppState, action: Action): AppState {
 				...state,
 				search: null,
 				selectedIndex: index === -1 ? state.selectedIndex : index,
+				scroll: 0,
 				focus: "conversations",
 			};
 		}
