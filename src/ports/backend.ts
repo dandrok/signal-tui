@@ -1,4 +1,4 @@
-import type { Conversation, ConversationId, Message, MessageId } from "../domain/types";
+import type { Conversation, ConversationId, EditAuthor, Message, MessageId } from "../domain/types";
 
 export type BackendEvent =
 	| { readonly kind: "message"; readonly message: Message }
@@ -8,6 +8,8 @@ export type BackendEvent =
 			readonly kind: "message-edited";
 			readonly conversationId: ConversationId;
 			readonly targetSentAt: number;
+			/** Who edited: only that author's own message may be rewritten. */
+			readonly editor: EditAuthor;
 			readonly body: string;
 	  }
 	| {

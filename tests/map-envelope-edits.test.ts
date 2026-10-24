@@ -29,6 +29,9 @@ describe("mapEnvelope edits", () => {
 		expect(mapped.edited).toEqual({
 			conversationId: "b5b0c3d2-0000-4000-8000-000000000000",
 			targetSentAt: 500,
+			// The editor travels with the edit: the store checks it against the author
+			// of the message being replaced.
+			editor: { id: "b5b0c3d2-0000-4000-8000-000000000000", label: "Alice" },
 			body: "typo fixed",
 		});
 		// An edit is not a new message: nothing may be inserted for it.

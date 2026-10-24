@@ -49,6 +49,7 @@ describe("signal-cli adapter over a real child process", () => {
 				id: "uuid-alice:1760000000000",
 				conversationId: "uuid-alice",
 				author: "Alice",
+				authorId: "uuid-alice",
 				body: "hello from the fake peer",
 				sentAt: 1_760_000_000_000,
 				isOutgoing: false,
@@ -60,6 +61,9 @@ describe("signal-cli adapter over a real child process", () => {
 				id: "uuid-bob:1760000000001",
 				conversationId: "uuid-bob",
 				author: "You",
+				// Our own messages carry a marker no peer can claim, so a peer cannot
+				// pass its edit off as an edit of our message.
+				authorId: "self",
 				body: "sent from my phone",
 				sentAt: 1_760_000_000_001,
 				isOutgoing: true,

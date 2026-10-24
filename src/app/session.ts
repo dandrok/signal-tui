@@ -1,5 +1,6 @@
 import { SELF_LABEL } from "../domain/format";
 import type { ConversationId } from "../domain/types";
+import { SELF_AUTHOR_ID } from "../domain/types";
 import type { BackendEvent, SignalBackend } from "../ports/backend";
 import type { MessageStore } from "../ports/store";
 
@@ -68,7 +69,7 @@ export function createSession({ store, backend }: SessionDeps): Session {
 				break;
 			}
 			case "message-edited":
-				await store.applyEdit(event.conversationId, event.targetSentAt, event.body);
+				await store.applyEdit(event.conversationId, event.targetSentAt, event.editor, event.body);
 				break;
 			case "message-deleted":
 				await store.markMessageDeleted(event.conversationId, event.messageId);
@@ -148,6 +149,10 @@ export function createSession({ store, backend }: SessionDeps): Session {
 						id: `${conversationId}:${sentAt}`,
 						conversationId,
 						author: SELF_LABEL,
+						// Without this the row has no id and an edit would be matched on the
+						// label alone — a group member whose display name is "You" could
+						// then replace our message at the same timestamp.
+						authorId: SELF_AUTHOR_ID,
 						body,
 						sentAt,
 						isOutgoing: true,

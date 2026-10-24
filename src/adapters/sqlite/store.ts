@@ -1,5 +1,11 @@
 import { Database } from "bun:sqlite";
-import type { Conversation, ConversationId, Message, MessageId } from "../../domain/types";
+import type {
+	Conversation,
+	ConversationId,
+	EditAuthor,
+	Message,
+	MessageId,
+} from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
 import { deleteAttachments, loadAttachments, replaceAttachments } from "./attachments";
 import { toFtsQuery } from "./fts";
@@ -13,6 +19,7 @@ interface MessageRow {
 	id: string;
 	conversation_id: string;
 	author: string;
+	author_id: string | null;
 	body: string;
 	sent_at: number;
 	is_outgoing: number;
@@ -32,6 +39,7 @@ export function toMessage(row: MessageRow): Message {
 		id: row.id,
 		conversationId: row.conversation_id,
 		author: row.author,
+		...(row.author_id === null ? {} : { authorId: row.author_id }),
 		body: row.body,
 		sentAt: row.sent_at,
 		isOutgoing: row.is_outgoing === 1,
@@ -117,7 +125,7 @@ export class SqliteMessageStore implements MessageStore {
 		const rows = this.#db
 			.query<MessageRow, [string, number]>(
 				`SELECT * FROM (
-					SELECT id, conversation_id, author, body, sent_at, is_outgoing, is_deleted, is_edited
+					SELECT id, conversation_id, author, author_id, body, sent_at, is_outgoing, is_deleted, is_edited
 					FROM messages
 					WHERE conversation_id = ?1
 					ORDER BY sent_at DESC, id DESC
@@ -131,7 +139,7 @@ export class SqliteMessageStore implements MessageStore {
 	async listAllMessages(conversationId: ConversationId): Promise<readonly Message[]> {
 		const rows = this.#db
 			.query<MessageRow, [string]>(
-				`SELECT id, conversation_id, author, body, sent_at, is_outgoing, is_deleted, is_edited
+				`SELECT id, conversation_id, author, author_id, body, sent_at, is_outgoing, is_deleted, is_edited
 				 FROM messages
 				 WHERE conversation_id = ?1
 				 ORDER BY sent_at ASC, id ASC`,
@@ -147,7 +155,7 @@ export class SqliteMessageStore implements MessageStore {
 		}
 		const rows = this.#db
 			.query<MessageRow, [string, number]>(
-				`SELECT m.id, m.conversation_id, m.author, m.body, m.sent_at, m.is_outgoing, m.is_deleted, m.is_edited
+				`SELECT m.id, m.conversation_id, m.author, m.author_id, m.body, m.sent_at, m.is_outgoing, m.is_deleted, m.is_edited
 				 FROM messages_fts
 				 JOIN messages m ON m.rowid = messages_fts.rowid
 				 WHERE messages_fts MATCH ?1
@@ -196,11 +204,12 @@ export class SqliteMessageStore implements MessageStore {
 	}
 
 	async saveMessage(message: Message): Promise<{ readonly inserted: boolean }> {
-		type SaveParams = [string, string, string, string, number, number, number];
+		type SaveParams = [string, string, string, string | null, string, number, number, number];
 		const params: SaveParams = [
 			message.id,
 			message.conversationId,
 			message.author,
+			message.authorId ?? null,
 			message.body,
 			message.sentAt,
 			message.isOutgoing ? 1 : 0,
@@ -213,8 +222,8 @@ export class SqliteMessageStore implements MessageStore {
 		const inserted = this.#db.transaction(() => {
 			const changes = this.#db
 				.query<null, SaveParams>(
-					`INSERT INTO messages (id, conversation_id, author, body, sent_at, is_outgoing, is_deleted, is_edited)
-					 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)
+					`INSERT INTO messages (id, conversation_id, author, author_id, body, sent_at, is_outgoing, is_deleted, is_edited)
+					 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0)
 					 ON CONFLICT(id) DO NOTHING`,
 				)
 				.run(...params).changes;
@@ -228,13 +237,14 @@ export class SqliteMessageStore implements MessageStore {
 						// redelivered envelope must not bring a deleted message back — nor
 						// restore the body that the delete cleared.
 						`UPDATE messages SET author = ?3,
+						        author_id = COALESCE(?4, author_id),
 						        body = CASE
 						                 WHEN is_deleted = 1 THEN body
 						                 WHEN is_edited = 1 THEN body
-						                 ELSE ?4
+						                 ELSE ?5
 						               END,
-						        sent_at = ?5, is_outgoing = ?6,
-						        is_deleted = is_deleted | ?7
+						        sent_at = ?6, is_outgoing = ?7,
+						        is_deleted = is_deleted | ?8
 						 WHERE id = ?1 AND conversation_id = ?2`,
 					)
 					.run(...params);
@@ -257,16 +267,23 @@ export class SqliteMessageStore implements MessageStore {
 	async applyEdit(
 		conversationId: ConversationId,
 		targetSentAt: number,
+		editor: EditAuthor,
 		body: string,
 	): Promise<boolean> {
 		// The FTS triggers on `messages` re-index the new body, so search follows the
 		// edit without a second write. A deleted message keeps its blank body.
+		//
+		// The author check is the point of this query: a timestamp identifies a message
+		// within a conversation, not an author, so without it an edit from one member
+		// of a group could rewrite another member's message. Rows cached before schema
+		// v4 have no author_id and are matched on the label they were stored with.
 		const result = this.#db
-			.query<null, [string, number, string]>(
-				`UPDATE messages SET body = ?3, is_edited = 1
-				 WHERE conversation_id = ?1 AND sent_at = ?2 AND is_deleted = 0`,
+			.query<null, [string, number, string | null, string, string]>(
+				`UPDATE messages SET body = ?5, is_edited = 1
+				 WHERE conversation_id = ?1 AND sent_at = ?2 AND is_deleted = 0
+				   AND (author_id = ?3 OR (author_id IS NULL AND author = ?4))`,
 			)
-			.run(conversationId, targetSentAt, body);
+			.run(conversationId, targetSentAt, editor.id, editor.label, body);
 		return result.changes > 0;
 	}
 

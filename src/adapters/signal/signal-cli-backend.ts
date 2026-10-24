@@ -174,6 +174,7 @@ export class SignalCliBackend implements SignalBackend {
 				kind: "message-edited",
 				conversationId: mapped.edited.conversationId,
 				targetSentAt: mapped.edited.targetSentAt,
+				editor: mapped.edited.editor,
 				body: mapped.edited.body,
 			});
 		}
