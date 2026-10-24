@@ -2,6 +2,7 @@ import { Box, Text, useApp, useInput } from "ink";
 import { useMemo } from "react";
 import type { Action, AppState } from "../app/state";
 import { selectedConversation, selectedMessages } from "../app/state";
+import { displayLine } from "../domain/display";
 import { COMPOSER_HEIGHT, Composer } from "./Composer";
 import { ConversationList } from "./ConversationList";
 import { clockFor, localTimeZone } from "./clock";
@@ -166,7 +167,7 @@ export function App({ state, dispatch }: AppProps) {
 
 			<Box paddingX={1}>
 				<Text dimColor>{hintsFor(isComposing, state.focus)}</Text>
-				{state.notice ? <Text color="green"> · {state.notice.text}</Text> : null}
+				{state.notice ? <Text color="green"> · {displayLine(state.notice.text)}</Text> : null}
 			</Box>
 		</Box>
 	);
