@@ -17,6 +17,8 @@ export function isDirectConversationId(conversationId: ConversationId): boolean 
 export interface SessionDeps {
 	readonly store: MessageStore;
 	readonly backend: SignalBackend;
+	/** Milliseconds source; injectable so expiry tests need no sleeps. */
+	readonly clock?: () => number;
 }
 
 /**
@@ -37,7 +39,8 @@ export interface Session {
 	readonly errors: readonly string[];
 }
 
-export function createSession({ store, backend }: SessionDeps): Session {
+export function createSession({ store, backend, clock = Date.now }: SessionDeps): Session {
+	const now = (): number => clock();
 	const listeners = new Set<() => void>();
 	const errors: string[] = [];
 	let queue: Promise<void> = Promise.resolve();
@@ -75,6 +78,10 @@ export function createSession({ store, backend }: SessionDeps): Session {
 				await store.markMessageDeleted(event.conversationId, event.messageId);
 				break;
 		}
+		// Every envelope is a chance to take out what has expired while the app runs.
+		// Without this, a timer would only be honoured when a conversation is opened —
+		// and a message nobody looks at would keep its text on disk indefinitely.
+		await store.purgeExpired(now());
 		notify();
 	};
 
@@ -102,6 +109,9 @@ export function createSession({ store, backend }: SessionDeps): Session {
 
 	return {
 		async start(): Promise<void> {
+			// Nothing purged while the app was closed, so the first thing a start does is
+			// clear whatever expired in the meantime.
+			await store.purgeExpired(now());
 			await backend.start();
 		},
 		async stop(): Promise<void> {
@@ -137,6 +147,9 @@ export function createSession({ store, backend }: SessionDeps): Session {
 			// The server timestamp is the message's identity everywhere else, so a
 			// delete-for-everyone from another device can match it.
 			const sentAt = timestamp ?? Date.now();
+			// Signal never echoes our own message back, so its expiry has to come from
+			// the conversation timer the cache learned from incoming traffic.
+			const timer = await store.expiresInSeconds(conversationId);
 			queue = queue
 				.then(async () => {
 					await store.upsertConversation({
@@ -157,6 +170,7 @@ export function createSession({ store, backend }: SessionDeps): Session {
 						sentAt,
 						isOutgoing: true,
 						isDeleted: false,
+						...(timer === undefined || timer <= 0 ? {} : { expiresAt: sentAt + timer * 1000 }),
 					});
 					notify();
 				})

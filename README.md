@@ -159,6 +159,12 @@ the last second of typing.
 - **read receipts**: the other side sees "read" when you open the chat, not when the
   message arrives
 - delete-for-everyone, reflected in the cache
+- **disappearing messages**: a message whose timer runs out keeps its row so the
+  thread keeps its shape, but its text and file references are deleted from the
+  cache — and from the search index with them. The sweep runs at startup and after
+  every incoming envelope, so a timer is honoured while you are not looking at the
+  conversation. Your own sent messages inherit the conversation's timer, because
+  Signal never echoes them back to the device that wrote them.
 - local full-text search over cached bodies (`/`)
 - files shown by name and size, with the caption when the sender wrote one
 - keyboard-first panes: the message window is measured in terminal rows, so a short
@@ -174,6 +180,8 @@ the last second of typing.
 - opening an attachment from the TUI (`xdg-open`), typing indicators, desktop
   notifications
 - history from before you linked this device
+- **view-once messages are cached like any other** — they are shown and stored
+  instead of being dropped, which is the opposite of what the sender asked for
 - `doctor` and `link` are scripts, not subcommands: run them with Bun from a clone or
   from the installed package directory, since `signal-tui` exposes only the TUI
 

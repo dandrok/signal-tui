@@ -1,4 +1,4 @@
-import { ATTACHMENT_BODY_PLACEHOLDER, SELF_LABEL } from "../../domain/format";
+import { SELF_LABEL } from "../../domain/format";
 import type {
 	Attachment,
 	Conversation,
@@ -10,6 +10,7 @@ import type {
 import { SELF_AUTHOR_ID } from "../../domain/types";
 import type { DataMessage, EditMessage, Envelope, SentMessage } from "./schemas";
 import { dataMessageSchema } from "./schemas";
+import { bodyOf, expiresAtOf, textOf } from "./text";
 
 export type ConversationKind = "direct" | "group";
 
@@ -90,13 +91,6 @@ export function conversationTarget(envelope: Envelope): Target | null {
 	return { id, name: peerName(envelope), kind: "direct" };
 }
 
-const ATTACHMENT_PLACEHOLDER = ATTACHMENT_BODY_PLACEHOLDER;
-
-interface Textual {
-	readonly message?: string | null | undefined;
-	readonly attachments?: readonly unknown[] | undefined;
-}
-
 /**
  * One file from the wire. Everything is optional in signal-cli's output, so each
  * field is narrowed rather than trusted; a null entry (older releases send those)
@@ -122,36 +116,6 @@ function toAttachment(raw: unknown): Attachment | null {
 export function mapAttachments(raw: readonly unknown[] | undefined): readonly Attachment[] {
 	return (raw ?? []).map(toAttachment).filter((entry): entry is Attachment => entry !== null);
 }
-
-/** Caption of the first file that has one; signal-cli keeps it there, not in `message`. */
-const captionOf = (data: Textual): string | null => {
-	for (const raw of data.attachments ?? []) {
-		const caption = (raw as { caption?: unknown } | null)?.caption;
-		if (typeof caption === "string" && caption.length > 0) {
-			return caption;
-		}
-	}
-	return null;
-};
-
-/** The text a message actually carries: its body, or a file's caption. */
-const textOf = (data: Textual): string => {
-	if (data.message !== undefined && data.message !== null && data.message.length > 0) {
-		return data.message;
-	}
-	// A photo sent with text puts that text in the attachment's caption, so without
-	// this the message would show only a filename. It also keeps captions searchable.
-	return captionOf(data) ?? "";
-};
-
-const bodyOf = (data: Textual): string => {
-	const text = textOf(data);
-	if (text.length > 0) {
-		return text;
-	}
-	// Files with no text at all still deserve a row of their own.
-	return (data.attachments?.length ?? 0) > 0 ? ATTACHMENT_PLACEHOLDER : "";
-};
 
 const EMPTY: MappedEnvelope = {
 	message: null,
@@ -239,6 +203,7 @@ function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
 			sentAt: data.timestamp,
 			isOutgoing: false,
 			isDeleted: false,
+			...(expiresAtOf(data) === undefined ? {} : { expiresAt: expiresAtOf(data) as number }),
 			attachments: mapAttachments(data.attachments),
 		},
 		conversation: {
@@ -248,6 +213,11 @@ function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
 			// message, so mapping must not guess a total.
 			unreadCount: 0,
 			lastActivityAt: data.timestamp,
+			// The timer rides on the message; the conversation keeps it so our own
+			// outgoing messages can be stamped without waiting for a transcript.
+			...(data.expiresInSeconds === undefined || data.expiresInSeconds === null
+				? {}
+				: { expiresInSeconds: data.expiresInSeconds }),
 		},
 		conversationKind: target.kind,
 		deleted: null,
@@ -289,6 +259,7 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 			sentAt: sent.timestamp,
 			isOutgoing: true,
 			isDeleted: false,
+			...(expiresAtOf(sent) === undefined ? {} : { expiresAt: expiresAtOf(sent) as number }),
 			attachments: mapAttachments(sent.attachments),
 		},
 		conversation: {
@@ -296,6 +267,9 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 			name: target.name,
 			unreadCount: 0,
 			lastActivityAt: sent.timestamp,
+			...(sent.expiresInSeconds === undefined || sent.expiresInSeconds === null
+				? {}
+				: { expiresInSeconds: sent.expiresInSeconds }),
 		},
 		conversationKind: target.kind,
 		deleted: null,

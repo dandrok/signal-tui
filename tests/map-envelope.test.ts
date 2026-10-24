@@ -128,6 +128,35 @@ describe("mapEnvelope", () => {
 		expect(mapEnvelope(withData({ timestamp: 1 })).message?.body).toBe("");
 	});
 
+	test("stamps a disappearing message with the moment it is due", () => {
+		const mapped = mapEnvelope(
+			withData({ timestamp: 1_000, message: "gone soon", expiresInSeconds: 86_400 }),
+		);
+
+		expect(mapped.message?.expiresAt).toBe(1_000 + 86_400_000);
+	});
+
+	test("the conversation learns the timer its messages carry", () => {
+		const mapped = mapEnvelope(
+			withData({ timestamp: 1_000, message: "hi", expiresInSeconds: 3_600 }),
+		);
+
+		// Our own outgoing messages have no timer of their own — Signal never echoes
+		// them — so the conversation is where the number comes from.
+		expect(mapped.conversation?.expiresInSeconds).toBe(3_600);
+	});
+
+	test("leaves the deadline off when the timer is absent or switched off", () => {
+		expect(mapEnvelope(withData({ timestamp: 1_000, message: "kept" })).message?.expiresAt).toBe(
+			undefined,
+		);
+		// signal-cli reports a cleared timer as zero, not as a missing field.
+		expect(
+			mapEnvelope(withData({ timestamp: 1_000, message: "kept", expiresInSeconds: 0 })).message
+				?.expiresAt,
+		).toBe(undefined);
+	});
+
 	test("maps a remote delete to the message it removes, not to a new one", () => {
 		const mapped = mapEnvelope(
 			withData({ timestamp: 9_000, message: "gone", remoteDelete: { timestamp: 1_000 } }),

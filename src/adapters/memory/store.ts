@@ -68,12 +68,20 @@ export class InMemoryStore implements MessageStore {
 		// list; same rule as the SQLite upsert. The unread count is owned by
 		// incrementUnread/markConversationRead, so metadata updates leave it alone.
 		const lastActivityAt = Math.max(existing.lastActivityAt, conversation.lastActivityAt);
+		// Same rule as the SQLite upsert: an update that says nothing about the timer
+		// must not switch the timer off.
+		const expiresInSeconds = conversation.expiresInSeconds ?? existing.expiresInSeconds;
 		this.#conversations[index] = {
 			...conversation,
 			name,
 			lastActivityAt,
 			unreadCount: existing.unreadCount,
+			...(expiresInSeconds === undefined ? {} : { expiresInSeconds }),
 		};
+	}
+
+	async expiresInSeconds(conversationId: ConversationId): Promise<number | undefined> {
+		return this.#conversations.find((entry) => entry.id === conversationId)?.expiresInSeconds;
 	}
 
 	async incrementUnread(conversationId: ConversationId, by: number): Promise<void> {
@@ -147,11 +155,31 @@ export class InMemoryStore implements MessageStore {
 					: entry.authorId === editor.id),
 		);
 		const existing = this.#messages[index];
-		if (existing === undefined || existing.isDeleted) {
+		// An expired message is gone on purpose, and a deleted one is gone for everyone;
+		// neither may be refilled by an edit that arrives late.
+		if (existing === undefined || existing.isDeleted || existing.isExpired === true) {
 			return false;
 		}
 		this.#messages[index] = { ...existing, body, isEdited: true };
 		return true;
+	}
+
+	async purgeExpired(now: number): Promise<number> {
+		let purged = 0;
+		this.#messages = this.#messages.map((message) => {
+			if (
+				message.expiresAt === undefined ||
+				message.expiresAt > now ||
+				message.isExpired === true
+			) {
+				return message;
+			}
+			purged += 1;
+			// Text and files both go: a message that is gone should not still name the
+			// path of the photo it carried.
+			return { ...message, body: "", attachments: [], isExpired: true };
+		});
+		return purged;
 	}
 
 	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {

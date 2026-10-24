@@ -94,4 +94,18 @@ export const migrations: readonly Migration[] = [
 			ALTER TABLE messages ADD COLUMN author_id TEXT;
 		`,
 	},
+	{
+		version: 5,
+		// Disappearing messages. `expires_at` is computed from the message's own
+		// `expiresInSeconds` at write time, so a message keeps the timer it was sent
+		// under even if the conversation's timer changes later. `is_expired` marks a
+		// row whose text has already been cleared, which is what stops the purge query
+		// from rewriting the same rows forever.
+		sql: `
+			ALTER TABLE messages ADD COLUMN expires_at INTEGER;
+			ALTER TABLE messages ADD COLUMN is_expired INTEGER NOT NULL DEFAULT 0;
+			CREATE INDEX messages_expiry ON messages(expires_at) WHERE expires_at IS NOT NULL;
+			ALTER TABLE conversations ADD COLUMN expires_in_seconds INTEGER;
+		`,
+	},
 ];

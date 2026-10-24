@@ -6,6 +6,12 @@ export interface Conversation {
 	readonly name: string;
 	readonly unreadCount: number;
 	readonly lastActivityAt: number;
+	/**
+	 * The conversation's disappearing-message timer, in seconds; 0 means switched
+	 * off and absent means the cache has not been told. Needed for our own outgoing
+	 * messages, which never come back from Signal and so carry no timer of their own.
+	 */
+	readonly expiresInSeconds?: number;
 }
 
 /**
@@ -54,6 +60,16 @@ export interface Message {
 	 * as text, so the message reads exactly as the edit left it.
 	 */
 	readonly isEdited?: boolean;
+	/**
+	 * When the sender's disappearing-message timer takes this message away, as an
+	 * epoch millisecond stamp. Absent when the conversation has no timer.
+	 */
+	readonly expiresAt?: number;
+	/**
+	 * True once the timer ran out. The row stays so the thread keeps its shape, but
+	 * its body and files are gone — see `purgeExpired`.
+	 */
+	readonly isExpired?: boolean;
 	/**
 	 * Optional so a caller that only cares about text is not forced to spell out
 	 * an empty list; `attachmentsOf` reads it without null checks.

@@ -51,6 +51,14 @@ describe("formatUnread", () => {
 });
 
 describe("describeAuthor / describeBody", () => {
+	test("labels an expired message instead of drawing an empty body", () => {
+		expect(describeBody({ ...message({}), body: "", isExpired: true })).toBe("message expired");
+		// deleted still wins: that is the more specific thing that happened
+		expect(describeBody({ ...message({}), isDeleted: true, isExpired: true })).toBe(
+			"message deleted",
+		);
+	});
+
 	test("marks outgoing messages as You", () => {
 		expect(describeAuthor(message({ isOutgoing: true }))).toBe("You");
 	});
