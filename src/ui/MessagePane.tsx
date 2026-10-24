@@ -1,14 +1,14 @@
 import { Box, Text } from "ink";
+import type { Clock } from "../domain/format";
 import {
-	attachmentLine,
-	attachmentsOf,
+	attachmentsForDisplay,
 	bodyForDisplay,
 	describeAuthor,
 	displayName,
-	formatClock,
-	messageOverheadRows,
+	headerLine,
 	messageRowCount,
 	showsBody,
+	textForDisplay,
 } from "../domain/format";
 import type { Conversation, Message } from "../domain/types";
 
@@ -21,8 +21,8 @@ export interface MessagePaneProps {
 	/** Messages hidden above the window; `0` is pinned to the newest. */
 	readonly scroll?: number;
 	readonly isFocused?: boolean;
-	/** Zone the clock is rendered in; the domain never reads the host timezone. */
-	readonly timeZone: string;
+	/** Renders message timestamps; the domain never reads the host timezone. */
+	readonly clock: Clock;
 }
 
 /** Rows the frame takes: two borders, the title, and the padding rows. */
@@ -34,15 +34,14 @@ const CHROME_ROWS = 3;
  * into, so the pane can say so instead of looking like the start of the thread.
  *
  * A scroll past the oldest message clamps there rather than emptying the window:
- * `scroll` is only bounded in the reducer, and a key repeat must not turn a
- * conversation into "no messages yet".
+ * a held key must not turn a conversation into "no messages yet".
  */
 export function visibleWindow(
 	messages: readonly Message[],
 	rows: number,
 	scroll: number,
 	innerWidth: number,
-	timeZone: string,
+	clock: Clock,
 ): { readonly start: number; readonly end: number; readonly hiddenAbove: number } {
 	if (messages.length === 0) {
 		return { start: 0, end: 0, hiddenAbove: 0 };
@@ -57,7 +56,7 @@ export function visibleWindow(
 		if (previous === undefined) {
 			break;
 		}
-		const cost = messageRowCount(previous, innerWidth, timeZone, rows);
+		const cost = messageRowCount(previous, innerWidth, clock, rows);
 		if (used + cost > rows) {
 			break;
 		}
@@ -75,16 +74,19 @@ export function MessagePane({
 	width = 80,
 	scroll = 0,
 	isFocused = false,
-	timeZone,
+	clock,
 }: MessagePaneProps) {
 	const innerWidth = Math.max(8, width - 4);
 	const contentRows = Math.max(1, height - CHROME_ROWS);
 	// The "older" label costs a row of its own, so the window is measured again
-	// once it is known to be needed — otherwise the pane renders one row more
-	// than it has and ink clips the newest message, which is the one being read.
-	let window = visibleWindow(messages, contentRows, scroll, innerWidth, timeZone);
+	// once it is known to be needed. The same budget then applies to every row
+	// drawn inside: measuring the window tighter than the content is how a message
+	// ends up clipped at the top, where `justifyContent="flex-end"` hides it.
+	let rowBudget = contentRows;
+	let window = visibleWindow(messages, rowBudget, scroll, innerWidth, clock);
 	if (window.hiddenAbove > 0) {
-		window = visibleWindow(messages, Math.max(1, contentRows - 1), scroll, innerWidth, timeZone);
+		rowBudget = Math.max(1, contentRows - 1);
+		window = visibleWindow(messages, rowBudget, scroll, innerWidth, clock);
 	}
 	const visible = messages.slice(window.start, window.end);
 
@@ -106,56 +108,68 @@ export function MessagePane({
 			</Text>
 			{window.hiddenAbove > 0 ? <Text dimColor>↑ {window.hiddenAbove} older</Text> : null}
 			{visible.length === 0 ? <Text dimColor>no messages yet</Text> : null}
-			{visible.map((message) => {
-				// The body only gets the rows the header and files leave behind, so a
-				// long message cannot push its own attachments out of the pane.
-				const overhead = messageOverheadRows(message, innerWidth, timeZone);
-				return (
-					<Box key={message.id} flexDirection="column">
-						<Text>
-							<Text dimColor>{formatClock(message.sentAt, timeZone)} </Text>
-							<Text bold>{describeAuthor(message)}</Text>
-						</Text>
-						<MessageBody
-							message={message}
-							maxRows={Math.max(0, contentRows - overhead)}
-							innerWidth={innerWidth}
-						/>
-					</Box>
-				);
-			})}
+			{visible.map((message) => (
+				<MessageRow
+					key={message.id}
+					message={message}
+					rowBudget={rowBudget}
+					innerWidth={innerWidth}
+					clock={clock}
+				/>
+			))}
 		</Box>
 	);
 }
 
-function MessageBody({
+/**
+ * One message, measured against a shared row budget. The order is deliberate:
+ * the header is drawn first, then the files, and the body gets whatever is left,
+ * so neither a long name nor a long body can hide a peer's filenames.
+ */
+function MessageRow({
 	message,
-	maxRows,
+	rowBudget,
 	innerWidth,
+	clock,
 }: {
 	readonly message: Message;
-	readonly maxRows: number;
+	readonly rowBudget: number;
 	readonly innerWidth: number;
+	readonly clock: Clock;
 }) {
-	const attachments = attachmentsOf(message);
-	// A message that only carried files has a stand-in body: showing both
-	// "[attachment]" and the file itself would say the same thing twice. A deleted
-	// message always shows its notice, whatever its body used to be.
-	const body = bodyForDisplay(message, maxRows, innerWidth);
+	const fullHeader = headerLine(message, clock);
+	const header = textForDisplay(fullHeader, rowBudget, innerWidth);
+	const files = attachmentsForDisplay(message, Math.max(0, rowBudget - header.rows), innerWidth);
+	const body = bodyForDisplay(
+		message,
+		Math.max(0, rowBudget - header.rows - files.rows),
+		innerWidth,
+	);
 
 	return (
-		<>
+		<Box flexDirection="column">
+			{header.text === fullHeader ? (
+				<Text>
+					<Text dimColor>{clock(message.sentAt)} </Text>
+					<Text bold>{describeAuthor(message)}</Text>
+				</Text>
+			) : (
+				<Text>{header.text}</Text>
+			)}
 			{showsBody(message) && body.rows > 0 ? (
 				<Text dimColor={message.isDeleted}>{body.text}</Text>
 			) : null}
-			{message.isDeleted
-				? null
-				: attachments.map((attachment, index) => (
-						// biome-ignore lint/suspicious/noArrayIndexKey: files render in the order signal-cli listed them and are replaced as a set, so a position is a stable key here
-						<Text key={`${message.id}:${index}`} dimColor>
-							{attachmentLine(attachment)}
-						</Text>
-					))}
-		</>
+			{files.lines.map((line, index) => (
+				// biome-ignore lint/suspicious/noArrayIndexKey: files render in the order signal-cli listed them and are replaced as a set, so a position is a stable key here
+				<Text key={`${message.id}:${index}`} dimColor>
+					{line}
+				</Text>
+			))}
+			{files.omitted > 0 ? (
+				<Text dimColor>
+					… +{files.omitted} more {files.omitted === 1 ? "file" : "files"}
+				</Text>
+			) : null}
+		</Box>
 	);
 }

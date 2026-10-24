@@ -111,22 +111,52 @@ describe("pane focus", () => {
 });
 
 describe("scroll", () => {
+	/** The selected conversation, loaded with `count` messages. */
+	const withThread = (count: number): AppState => {
+		const messages = Array.from({ length: count }, (_unused, index) => ({
+			id: `m-${index}`,
+			conversationId: "c-signal-devs",
+			author: "Marta",
+			body: `body-${index}`,
+			sentAt: index,
+			isOutgoing: false,
+			isDeleted: false,
+		}));
+		return reduce(loaded(), {
+			type: "messages-loaded",
+			conversationId: "c-signal-devs",
+			messages,
+		});
+	};
+
 	test("scrolling up counts hidden messages and never goes negative", () => {
-		let state = reduce(loaded(), { type: "scroll-moved", delta: 3 });
+		let state = reduce(withThread(10), { type: "scroll-moved", delta: 3 });
 		expect(state.scroll).toBe(3);
 		state = reduce(state, { type: "scroll-moved", delta: -10 });
 		expect(state.scroll).toBe(0);
 		expect(reduce(state, { type: "scroll-moved", delta: -1 })).toBe(state);
 	});
 
+	test("stops at the oldest message so a held key cannot run away", () => {
+		// Without the upper bound a held `k` counts past the start, and every press
+		// back then lands in that dead range instead of moving the pane.
+		const state = reduce(withThread(3), { type: "scroll-moved", delta: 99 });
+		expect(state.scroll).toBe(2);
+		expect(reduce(state, { type: "scroll-moved", delta: -1 }).scroll).toBe(1);
+	});
+
+	test("a thread with no messages cannot be scrolled", () => {
+		expect(reduce(loaded(), { type: "scroll-moved", delta: 3 }).scroll).toBe(0);
+	});
+
 	test("changing conversation returns to the newest message", () => {
-		let state = reduce(loaded(), { type: "scroll-moved", delta: 7 });
+		let state = reduce(withThread(10), { type: "scroll-moved", delta: 7 });
 		state = reduce(state, { type: "move-selection", delta: 1 });
 		expect(state.scroll).toBe(0);
 	});
 
 	test("a reload that keeps the list in order keeps the offset", () => {
-		const scrolled = reduce(loaded(), { type: "scroll-moved", delta: 5 });
+		const scrolled = reduce(withThread(10), { type: "scroll-moved", delta: 5 });
 		const reloaded = reduce(scrolled, {
 			type: "conversations-loaded",
 			conversations: [...demoConversations],
@@ -135,7 +165,7 @@ describe("scroll", () => {
 	});
 
 	test("a reload that reorders the list drops a stale offset", () => {
-		const scrolled = reduce(loaded(), { type: "scroll-moved", delta: 5 });
+		const scrolled = reduce(withThread(10), { type: "scroll-moved", delta: 5 });
 		const reordered = reduce(scrolled, {
 			type: "conversations-loaded",
 			conversations: [...demoConversations].reverse(),

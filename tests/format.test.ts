@@ -3,7 +3,6 @@ import {
 	describeAuthor,
 	describeBody,
 	displayName,
-	formatClock,
 	formatUnread,
 	truncate,
 } from "../src/domain/format";
@@ -48,25 +47,6 @@ describe("formatUnread", () => {
 		expect(formatUnread(3)).toBe("3");
 		expect(formatUnread(99)).toBe("99");
 		expect(formatUnread(120)).toBe("99+");
-	});
-});
-
-describe("formatClock", () => {
-	test("renders a two-digit 24h clock in the zone it is given", () => {
-		const nineOhFive = Date.UTC(2026, 9, 22, 9, 5, 0, 0);
-		expect(formatClock(nineOhFive, "UTC")).toBe("09:05");
-	});
-
-	test("zero-pads both halves", () => {
-		expect(formatClock(Date.UTC(2026, 9, 22, 0, 0, 0, 0), "UTC")).toBe("00:00");
-	});
-
-	test("shifts with the zone instead of the host clock", () => {
-		// 07:04 UTC is 09:04 in Warsaw and 03:04 in New York; a helper reading the
-		// host timezone could only ever produce one of the three.
-		const instant = Date.UTC(2026, 9, 24, 7, 4, 0, 0);
-		expect(formatClock(instant, "Europe/Warsaw")).toBe("09:04");
-		expect(formatClock(instant, "America/New_York")).toBe("03:04");
 	});
 });
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { render } from "ink-testing-library";
 import type { Attachment, Conversation, Message } from "../src/domain/types";
+import { clockFor } from "../src/ui/clock";
 import { MessagePane } from "../src/ui/MessagePane";
 
 const conversation: Conversation = {
@@ -33,7 +34,12 @@ const message = (overrides: Partial<Message> = {}): Message => ({
 
 const frameOf = (messages: readonly Message[]): string => {
 	const { lastFrame, unmount } = render(
-		<MessagePane conversation={conversation} messages={messages} height={20} timeZone="UTC" />,
+		<MessagePane
+			conversation={conversation}
+			messages={messages}
+			height={20}
+			clock={clockFor("UTC")}
+		/>,
 	);
 	const frame = lastFrame() ?? "";
 	unmount();

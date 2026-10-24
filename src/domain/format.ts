@@ -2,31 +2,11 @@ import wrapAnsi from "wrap-ansi";
 import type { Attachment, Conversation, Message } from "./types";
 
 /**
- * Two-digit 24h clock in an explicit timezone, e.g. 09:04. The zone is a
- * parameter because this lives in the domain: a helper that reads the host
- * timezone renders differently on every machine and cannot be tested.
+ * Renders a timestamp as a clock string. Injected rather than computed here: the
+ * host timezone is a UI concern, and a formatter cache is mutable state that has
+ * no business in the domain layer.
  */
-export function formatClock(timestampMs: number, timeZone: string): string {
-	return clockFormatter(timeZone).format(timestampMs);
-}
-
-/** One formatter per zone; `Intl.DateTimeFormat` construction is the costly part. */
-const clockFormatters = new Map<string, Intl.DateTimeFormat>();
-
-function clockFormatter(timeZone: string): Intl.DateTimeFormat {
-	const cached = clockFormatters.get(timeZone);
-	if (cached !== undefined) {
-		return cached;
-	}
-	const formatter = new Intl.DateTimeFormat("en-GB", {
-		timeZone,
-		hour: "2-digit",
-		minute: "2-digit",
-		hourCycle: "h23",
-	});
-	clockFormatters.set(timeZone, formatter);
-	return formatter;
-}
+export type Clock = (timestampMs: number) => string;
 
 /** Unread badge text: empty for none, capped at 99+. */
 export function formatUnread(count: number): string {
@@ -84,8 +64,8 @@ export function showsBody(message: Message): boolean {
  * The author row exactly as the pane draws it: clock, space, author label. Kept
  * here so the row count measures the string that actually gets rendered.
  */
-export function headerLine(message: Message, timeZone: string): string {
-	return `${formatClock(message.sentAt, timeZone)} ${describeAuthor(message)}`;
+export function headerLine(message: Message, clock: Clock): string {
+	return `${clock(message.sentAt)} ${describeAuthor(message)}`;
 }
 
 /** One attachment exactly as the pane draws it. */
@@ -93,18 +73,68 @@ export function attachmentLine(attachment: Attachment): string {
 	return `📎 ${describeAttachment(attachment)}`;
 }
 
+/** File lines that fit a row budget, and how many files were left out. */
+export interface DisplayAttachments {
+	readonly lines: readonly string[];
+	readonly omitted: number;
+	/** Rows the lines occupy, marker included. */
+	readonly rows: number;
+}
+
+/**
+ * Attachment lines for a pane with `maxRows` rows to spare. When they do not all
+ * fit, whole file lines are dropped to make room for one `+N more files` marker,
+ * so a peer's filenames are never silently clipped by ink — the pane says what it
+ * is hiding instead.
+ */
+export function attachmentsForDisplay(
+	message: Message,
+	maxRows: number,
+	innerWidth: number,
+): DisplayAttachments {
+	if (message.isDeleted) {
+		return { lines: [], omitted: 0, rows: 0 };
+	}
+	const width = Math.max(1, innerWidth);
+	const budget = Math.max(0, maxRows);
+	const all = attachmentsOf(message);
+	const lines: string[] = [];
+	const costs: number[] = [];
+	let used = 0;
+	for (const attachment of all) {
+		const line = attachmentLine(attachment);
+		const cost = wrappedRows(line, width);
+		if (used + cost > budget) {
+			break;
+		}
+		lines.push(line);
+		costs.push(cost);
+		used += cost;
+	}
+	let omitted = all.length - lines.length;
+	if (omitted === 0) {
+		return { lines, omitted: 0, rows: used };
+	}
+	// The marker is a row of its own: give up a file line until it fits.
+	while (used + 1 > budget && lines.length > 0) {
+		used -= costs.pop() ?? 0;
+		lines.pop();
+		omitted += 1;
+	}
+	if (used + 1 > budget) {
+		return { lines: [], omitted: all.length, rows: 0 };
+	}
+	return { lines, omitted, rows: used + 1 };
+}
+
 /**
  * Rows a message spends before its body: the header (a long author name wraps)
  * and one line per file (filenames wrap too). The body gets what is left, so an
  * oversized body cannot push its own attachments out of the pane.
  */
-export function messageOverheadRows(
-	message: Message,
-	innerWidth: number,
-	timeZone: string,
-): number {
+export function messageOverheadRows(message: Message, innerWidth: number, clock: Clock): number {
 	const width = Math.max(1, innerWidth);
-	const header = wrappedRows(headerLine(message, timeZone), width);
+	const header = wrappedRows(headerLine(message, clock), width);
 	const files = message.isDeleted
 		? 0
 		: attachmentsOf(message).reduce(
@@ -127,11 +157,11 @@ export function messageOverheadRows(
 export function messageRowCount(
 	message: Message,
 	innerWidth: number,
-	timeZone: string,
+	clock: Clock,
 	maxRows = 60,
 ): number {
 	const rows = Math.max(1, maxRows);
-	const overhead = messageOverheadRows(message, innerWidth, timeZone);
+	const overhead = messageOverheadRows(message, innerWidth, clock);
 	const budget = Math.max(0, rows - overhead);
 	const body = showsBody(message) ? bodyForDisplay(message, budget, innerWidth) : { rows: 0 };
 	return Math.min(rows, overhead + body.rows);
@@ -157,9 +187,14 @@ export interface DisplayBody {
  * is not reachable until the pane can scroll by line instead of by message.
  */
 export function bodyForDisplay(message: Message, maxRows: number, innerWidth: number): DisplayBody {
+	return textForDisplay(describeBody(message), maxRows, innerWidth);
+}
+
+/** Row-bounded rendering of any single text block: a body, a header, a caption. */
+export function textForDisplay(text: string, maxRows: number, innerWidth: number): DisplayBody {
 	const width = Math.max(1, innerWidth);
 	const rows = Math.max(0, maxRows);
-	const full = describeBody(message);
+	const full = text;
 	if (rows === 0) {
 		return { text: "", truncated: full.length > 0, rows: 0 };
 	}

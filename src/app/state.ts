@@ -115,9 +115,13 @@ export function reduce(state: AppState, action: Action): AppState {
 			return next === state.focus ? state : { ...state, focus: next };
 		}
 		case "scroll-moved": {
-			// Clamped at 0 only: how many messages fit is a rendering fact, so the
-			// upper bound is enforced where the window is built, not here.
-			const next = Math.max(0, state.scroll + action.delta);
+			// How many messages fit is a rendering fact, but the oldest message is not:
+			// without this bound a held key keeps counting up, and every press back
+			// then lands on that dead range instead of moving the pane.
+			const id = selectedConversation(state)?.id;
+			const available = id === undefined ? 0 : (state.messagesByConversation[id]?.length ?? 0);
+			const furthest = Math.max(0, available - 1);
+			const next = Math.min(Math.max(0, state.scroll + action.delta), furthest);
 			return next === state.scroll ? state : { ...state, scroll: next };
 		}
 		case "draft-changed": {

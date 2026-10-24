@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { render } from "ink-testing-library";
 import type { Conversation, Message } from "../src/domain/types";
+import { clockFor } from "../src/ui/clock";
 import { MessagePane } from "../src/ui/MessagePane";
+
+const utc = clockFor("UTC");
 
 const conversation = (index: number): Conversation => ({
 	id: `c-${index}`,
@@ -32,7 +35,7 @@ describe("MessagePane window", () => {
 				messages={many(8)}
 				height={8}
 				width={60}
-				timeZone="UTC"
+				clock={utc}
 			/>,
 		);
 		const frame = lastFrame() ?? "";
@@ -50,7 +53,7 @@ describe("MessagePane window", () => {
 				height={8}
 				width={60}
 				scroll={2}
-				timeZone="UTC"
+				clock={utc}
 			/>,
 		);
 		const frame = lastFrame() ?? "";
@@ -68,7 +71,7 @@ describe("MessagePane window", () => {
 				messages={many(2)}
 				height={12}
 				width={60}
-				timeZone="UTC"
+				clock={utc}
 			/>,
 		);
 		const frame = lastFrame() ?? "";
@@ -87,7 +90,7 @@ describe("MessagePane window", () => {
 				messages={many(8)}
 				height={7}
 				width={60}
-				timeZone="UTC"
+				clock={utc}
 			/>,
 		);
 		const frame = lastFrame() ?? "";
@@ -118,7 +121,7 @@ describe("MessagePane window", () => {
 				messages={[withFile]}
 				height={8}
 				width={60}
-				timeZone="UTC"
+				clock={utc}
 			/>,
 		);
 		const frame = lastFrame() ?? "";
@@ -143,7 +146,7 @@ describe("MessagePane window", () => {
 					messages={at}
 					height={8}
 					width={60}
-					timeZone={timeZone}
+					clock={clockFor(timeZone)}
 				/>,
 			);
 			const frame = lastFrame() ?? "";
@@ -154,6 +157,66 @@ describe("MessagePane window", () => {
 		expect(inZone("UTC")).toContain("07:04");
 		expect(inZone("Europe/Warsaw")).toContain("09:04");
 	});
+
+	test("keeps the row budget when the older label takes one", () => {
+		// A window re-measured with one row less must not hand the body the old
+		// budget: with the label plus an oversized newest message the pane would
+		// draw six rows into five and ink would clip the header off the top.
+		const messages = [message(1, { body: "small" }), message(2, { body: "z".repeat(4000) })];
+		const { lastFrame, unmount } = render(
+			<MessagePane
+				conversation={conversation(0)}
+				messages={messages}
+				height={8}
+				width={60}
+				clock={utc}
+			/>,
+		);
+		const frame = lastFrame() ?? "";
+		unmount();
+
+		expect(frame).toContain("↑ 1 older");
+		expect(frame).toContain("Marta");
+		expect(frame).toContain("…");
+		expect(frame.split("\n").filter((line) => line.length > 0)).toHaveLength(8);
+	});
+
+	test("says how many files did not fit instead of letting ink clip them", () => {
+		const attachment = (index: number) => ({
+			id: `a${index}`,
+			contentType: "image/png",
+			filename: `/tmp/file-${index}.png`,
+			size: 1024,
+			caption: null,
+			isVoiceNote: false,
+		});
+		const withFiles = [
+			message(0, {
+				body: "w".repeat(4000),
+				attachments: [attachment(1), attachment(2), attachment(3), attachment(4)],
+			}),
+		];
+		const { lastFrame, unmount } = render(
+			<MessagePane
+				conversation={conversation(0)}
+				messages={withFiles}
+				height={7}
+				width={60}
+				clock={utc}
+			/>,
+		);
+		const frame = lastFrame() ?? "";
+		unmount();
+
+		// Four content rows: header, two file lines, one row for the marker. The body
+		// has nothing left, and the files that did not fit are counted, not clipped.
+		expect(frame).toContain("file-1.png");
+		expect(frame).toContain("file-2.png");
+		expect(frame).toContain("+2 more files");
+		expect(frame).not.toContain("file-4.png");
+		expect(frame).not.toContain("wwww");
+	});
+
 	test("draws only the rows a single oversized message can fill", () => {
 		// ink wraps whatever string it is given, on every frame: a body far taller
 		// than the pane is cut, and the cut is visible rather than silent.
@@ -164,7 +227,7 @@ describe("MessagePane window", () => {
 				messages={huge}
 				height={8}
 				width={60}
-				timeZone="UTC"
+				clock={utc}
 			/>,
 		);
 		const frame = lastFrame() ?? "";

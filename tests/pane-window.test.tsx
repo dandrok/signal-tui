@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { render } from "ink-testing-library";
-import { bodyForDisplay, messageRowCount } from "../src/domain/format";
+import type { Clock } from "../src/domain/format";
+import { attachmentsForDisplay, bodyForDisplay, messageRowCount } from "../src/domain/format";
 import type { Conversation, Message } from "../src/domain/types";
 import { ConversationList, listWindowStart } from "../src/ui/ConversationList";
 import { visibleWindow } from "../src/ui/MessagePane";
+
+/** A fixed clock keeps row arithmetic independent of the host timezone. */
+const clock: Clock = () => "10:00";
 
 const conversation = (index: number): Conversation => ({
 	id: `c-${index}`,
@@ -103,34 +107,34 @@ describe("messageRowCount", () => {
 				},
 			],
 		});
-		expect(messageRowCount(withFile, 40, "UTC")).toBe(2);
+		expect(messageRowCount(withFile, 40, clock)).toBe(2);
 	});
 
 	test("wraps a long body across the pane width", () => {
-		expect(messageRowCount(message(0, { body: "x".repeat(85) }), 40, "UTC")).toBe(4);
+		expect(messageRowCount(message(0, { body: "x".repeat(85) }), 40, clock)).toBe(4);
 	});
 
 	test("counts explicit newlines as their own rows", () => {
 		// Two lines inside one string: ink renders two rows, so the window must
 		// charge two — measuring string length would charge one.
-		expect(messageRowCount(message(0, { body: "first\nsecond" }), 40, "UTC")).toBe(3);
+		expect(messageRowCount(message(0, { body: "first\nsecond" }), 40, clock)).toBe(3);
 	});
 
 	test("counts a wide character as the two cells it occupies", () => {
 		// 40 CJK characters are 80 cells: two rows in a 40-column pane.
-		expect(messageRowCount(message(0, { body: "字".repeat(40) }), 40, "UTC")).toBe(3);
+		expect(messageRowCount(message(0, { body: "字".repeat(40) }), 40, clock)).toBe(3);
 	});
 
 	test("stops measuring a body past the tallest possible window", () => {
 		// A message can never count taller than the pane it is drawn in, and only
 		// the rows' worth of text is wrapped: an 8 MiB body must not be measured in
 		// full for a 5-row window.
-		expect(messageRowCount(message(0, { body: "x".repeat(100_000) }), 20, "UTC", 5)).toBe(5);
+		expect(messageRowCount(message(0, { body: "x".repeat(100_000) }), 20, clock, 5)).toBe(5);
 	});
 
 	test("charges the extra row a long author name wraps onto", () => {
 		// Header is "10:04 " + author; a 30-character name needs two rows at width 20.
-		expect(messageRowCount(message(0, { author: "a".repeat(30), body: "" }), 20, "UTC")).toBe(2);
+		expect(messageRowCount(message(0, { author: "a".repeat(30), body: "" }), 20, clock)).toBe(2);
 	});
 
 	test("charges the extra row a long filename wraps onto", () => {
@@ -144,7 +148,7 @@ describe("messageRowCount", () => {
 		};
 		// "📎 " + a 64-character name + " (1.0 KB)" is 76 cells: four file rows at
 		// width 20, plus the header, where charging one row would have said two.
-		expect(messageRowCount(message(0, { body: "", attachments: [longName] }), 20, "UTC")).toBe(5);
+		expect(messageRowCount(message(0, { body: "", attachments: [longName] }), 20, clock)).toBe(5);
 	});
 
 	test("ignores files on a deleted message", () => {
@@ -162,29 +166,29 @@ describe("messageRowCount", () => {
 				},
 			],
 		});
-		expect(messageRowCount(deleted, 40, "UTC")).toBe(2);
+		expect(messageRowCount(deleted, 40, clock)).toBe(2);
 	});
 });
 
 describe("visibleWindow", () => {
 	test("fills from the newest message, never past the row budget", () => {
 		// Five rows of room, two rows per message: the newest two fit.
-		expect(visibleWindow(many(8), 5, 0, 40, "UTC")).toEqual({ start: 6, end: 8, hiddenAbove: 6 });
+		expect(visibleWindow(many(8), 5, 0, 40, clock)).toEqual({ start: 6, end: 8, hiddenAbove: 6 });
 	});
 
 	test("scrolling moves the window back through history", () => {
-		expect(visibleWindow(many(8), 5, 2, 40, "UTC")).toEqual({ start: 4, end: 6, hiddenAbove: 4 });
+		expect(visibleWindow(many(8), 5, 2, 40, clock)).toEqual({ start: 4, end: 6, hiddenAbove: 4 });
 	});
 
 	test("a scroll past the start clamps to the oldest message", () => {
 		// Not an empty window: the reducer only clamps at zero, so a held `k` or a
 		// page-up must not turn the conversation into "no messages yet".
-		expect(visibleWindow(many(8), 5, 99, 40, "UTC")).toEqual({ start: 0, end: 1, hiddenAbove: 0 });
+		expect(visibleWindow(many(8), 5, 99, 40, clock)).toEqual({ start: 0, end: 1, hiddenAbove: 0 });
 	});
 
 	test("always renders one message, even when it is taller than the pane", () => {
 		const tall = [message(0, { body: "x".repeat(400) })];
-		expect(visibleWindow(tall, 3, 0, 20, "UTC")).toEqual({ start: 0, end: 1, hiddenAbove: 0 });
+		expect(visibleWindow(tall, 3, 0, 20, clock)).toEqual({ start: 0, end: 1, hiddenAbove: 0 });
 	});
 });
 
@@ -225,5 +229,48 @@ describe("bodyForDisplay", () => {
 			truncated: true,
 			rows: 0,
 		});
+	});
+});
+
+describe("attachmentsForDisplay", () => {
+	const file = (index: number) => ({
+		id: `a${index}`,
+		contentType: "image/png",
+		filename: `/tmp/file-${index}.png`,
+		size: 1024,
+		caption: null,
+		isVoiceNote: false,
+	});
+
+	test("renders every file when they all fit", () => {
+		const shown = attachmentsForDisplay(
+			message(0, { body: "", attachments: [file(1), file(2)] }),
+			10,
+			40,
+		);
+		expect(shown.omitted).toBe(0);
+		expect(shown.lines).toHaveLength(2);
+		expect(shown.rows).toBe(2);
+	});
+
+	test("gives up a file line to make room for the count", () => {
+		// Three files, two rows: one file plus a marker, not two files and no marker.
+		const shown = attachmentsForDisplay(
+			message(0, { body: "", attachments: [file(1), file(2), file(3)] }),
+			2,
+			40,
+		);
+		expect(shown.lines).toHaveLength(1);
+		expect(shown.omitted).toBe(2);
+		expect(shown.rows).toBe(2);
+	});
+
+	test("has nothing to render for a deleted message", () => {
+		const shown = attachmentsForDisplay(
+			message(0, { isDeleted: true, attachments: [file(1)] }),
+			5,
+			40,
+		);
+		expect(shown).toEqual({ lines: [], omitted: 0, rows: 0 });
 	});
 });

@@ -1,8 +1,10 @@
 import { Box, Text, useApp, useInput } from "ink";
+import { useMemo } from "react";
 import type { Action, AppState } from "../app/state";
 import { selectedConversation, selectedMessages } from "../app/state";
 import { COMPOSER_HEIGHT, Composer } from "./Composer";
 import { ConversationList } from "./ConversationList";
+import { clockFor, localTimeZone } from "./clock";
 import { useTerminalSize } from "./hooks/useTerminalSize";
 import { MessagePane } from "./MessagePane";
 import { SearchPane } from "./SearchPane";
@@ -126,9 +128,9 @@ export function App({ state, dispatch }: AppProps) {
 		}
 	});
 
-	// The domain never reads the host timezone, so the UI resolves it once and
-	// hands it to the pane that renders clocks.
-	const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+	// The domain never reads the host timezone nor holds a formatter cache: the UI
+	// builds one cached clock here and hands it to the pane.
+	const clock = useMemo(() => clockFor(localTimeZone()), []);
 	const listWidth = Math.max(22, Math.min(32, Math.floor(columns * 0.3)));
 	const bodyHeight = Math.max(8, rows - 1);
 	const messageHeight = Math.max(5, bodyHeight - COMPOSER_HEIGHT);
@@ -155,7 +157,7 @@ export function App({ state, dispatch }: AppProps) {
 							height={messageHeight}
 							scroll={state.scroll}
 							isFocused={state.focus === "messages"}
-							timeZone={timeZone}
+							clock={clock}
 						/>
 						<Composer draft={state.draft} isFocused={isComposing} width={messageWidth} />
 					</Box>
