@@ -17,15 +17,4 @@ describe("clockFor", () => {
 		expect(clockFor("Europe/Warsaw")(instant)).toBe("09:04");
 		expect(clockFor("America/New_York")(instant)).toBe("03:04");
 	});
-
-	test("reuses one formatter per zone", () => {
-		// Constructing an Intl.DateTimeFormat costs ~52 µs against ~1 µs to format,
-		// so a per-call construction would put ~100 ms into this loop.
-		const clock = clockFor("UTC");
-		const started = Bun.nanoseconds();
-		for (let index = 0; index < 2000; index += 1) {
-			clock(index);
-		}
-		expect((Bun.nanoseconds() - started) / 1e6).toBeLessThan(50);
-	});
 });

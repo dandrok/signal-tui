@@ -217,6 +217,53 @@ describe("MessagePane window", () => {
 		expect(frame).not.toContain("wwww");
 	});
 
+	test("drops the file marker when no row is left to show it", () => {
+		// height 5 leaves two content rows; the older label takes one, so the message
+		// budget is a single row. A marker with no row reserved for it would push the
+		// title and the label off the top of the pane under flex-end.
+		const withFiles = [
+			message(1, { body: "small" }),
+			message(2, {
+				body: "",
+				attachments: [
+					{
+						id: "a1",
+						contentType: "image/png",
+						filename: "/tmp/a.png",
+						size: 1,
+						caption: null,
+						isVoiceNote: false,
+					},
+					{
+						id: "a2",
+						contentType: "image/png",
+						filename: "/tmp/b.png",
+						size: 1,
+						caption: null,
+						isVoiceNote: false,
+					},
+				],
+			}),
+		];
+		const { lastFrame, unmount } = render(
+			<MessagePane
+				conversation={conversation(0)}
+				messages={withFiles}
+				height={5}
+				width={60}
+				clock={utc}
+			/>,
+		);
+		const frame = lastFrame() ?? "";
+		unmount();
+
+		expect(frame).toContain("Person 0");
+		expect(frame).toContain("↑ 1 older");
+		expect(frame).toContain("Marta");
+		expect(frame).not.toContain("more");
+		expect(frame.split("\n").filter((line) => line.length > 0)).toHaveLength(5);
+	});
+
 	test("draws only the rows a single oversized message can fill", () => {
 		// ink wraps whatever string it is given, on every frame: a body far taller
 		// than the pane is cut, and the cut is visible rather than silent.

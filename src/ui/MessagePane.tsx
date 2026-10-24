@@ -165,7 +165,9 @@ function MessageRow({
 					{line}
 				</Text>
 			))}
-			{files.omitted > 0 ? (
+			{/* Only when a row was actually reserved: with no budget left the marker
+			    would push the title or the "older" label out of the pane. */}
+			{files.omitted > 0 && files.rows > 0 ? (
 				<Text dimColor>
 					… +{files.omitted} more {files.omitted === 1 ? "file" : "files"}
 				</Text>
