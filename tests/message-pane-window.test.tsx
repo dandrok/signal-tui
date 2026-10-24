@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { render } from "ink-testing-library";
 import type { Clock } from "../src/domain/format";
 import type { Conversation, Message } from "../src/domain/types";
 import { clockFor } from "../src/ui/clock";
 import { MessagePane } from "../src/ui/MessagePane";
+import { frameOf } from "./helpers/frame";
 
 /** A stub clock: layout assertions must not depend on ICU formatting. */
 const fixedClock: Clock = () => "10:00";
@@ -32,7 +32,7 @@ const many = (count: number, overrides: Partial<Message> = {}): readonly Message
 
 describe("MessagePane window", () => {
 	test("shows the newest messages and says how many are above", () => {
-		const { lastFrame, unmount } = render(
+		const frame = frameOf(
 			<MessagePane
 				conversation={conversation(0)}
 				messages={many(8)}
@@ -41,15 +41,13 @@ describe("MessagePane window", () => {
 				clock={utc}
 			/>,
 		);
-		const frame = lastFrame() ?? "";
-		unmount();
 
 		expect(frame).toContain("body-7");
 		expect(frame).toContain("↑ 6 older");
 	});
 
 	test("scrolled up, the window shows older text and the count shrinks", () => {
-		const { lastFrame, unmount } = render(
+		const frame = frameOf(
 			<MessagePane
 				conversation={conversation(0)}
 				messages={many(8)}
@@ -59,8 +57,6 @@ describe("MessagePane window", () => {
 				clock={utc}
 			/>,
 		);
-		const frame = lastFrame() ?? "";
-		unmount();
 
 		expect(frame).toContain("body-5");
 		expect(frame).not.toContain("body-7");
@@ -68,7 +64,7 @@ describe("MessagePane window", () => {
 	});
 
 	test("says nothing about older messages when the whole thread fits", () => {
-		const { lastFrame, unmount } = render(
+		const frame = frameOf(
 			<MessagePane
 				conversation={conversation(0)}
 				messages={many(2)}
@@ -77,8 +73,6 @@ describe("MessagePane window", () => {
 				clock={utc}
 			/>,
 		);
-		const frame = lastFrame() ?? "";
-		unmount();
 
 		expect(frame).not.toContain("older");
 	});
@@ -87,7 +81,7 @@ describe("MessagePane window", () => {
 		// Four content rows. Two messages plus the label would be five, so the
 		// window has to give up a message — otherwise ink clips the bottom line,
 		// which is the newest message's body.
-		const { lastFrame, unmount } = render(
+		const frame = frameOf(
 			<MessagePane
 				conversation={conversation(0)}
 				messages={many(8)}
@@ -96,8 +90,6 @@ describe("MessagePane window", () => {
 				clock={utc}
 			/>,
 		);
-		const frame = lastFrame() ?? "";
-		unmount();
 
 		expect(frame).toContain("↑ 7 older");
 		expect(frame).toContain("body-7");
@@ -118,7 +110,7 @@ describe("MessagePane window", () => {
 				},
 			],
 		});
-		const { lastFrame, unmount } = render(
+		const frame = frameOf(
 			<MessagePane
 				conversation={conversation(0)}
 				messages={[withFile]}
@@ -127,8 +119,6 @@ describe("MessagePane window", () => {
 				clock={utc}
 			/>,
 		);
-		const frame = lastFrame() ?? "";
-		unmount();
 
 		// Everything the pane draws has to fit its eight rows: title, borders, and
 		// the five content rows shared by header, body and file line. Budgeting the
@@ -142,7 +132,7 @@ describe("MessagePane window", () => {
 	test("renders clocks in the zone it is given", () => {
 		const at = [message(0, { sentAt: Date.UTC(2026, 9, 24, 7, 4) })];
 		const inZone = (timeZone: string): string => {
-			const { lastFrame, unmount } = render(
+			const frame = frameOf(
 				<MessagePane
 					conversation={conversation(0)}
 					messages={at}
@@ -151,8 +141,6 @@ describe("MessagePane window", () => {
 					clock={clockFor(timeZone)}
 				/>,
 			);
-			const frame = lastFrame() ?? "";
-			unmount();
 			return frame;
 		};
 
@@ -165,7 +153,7 @@ describe("MessagePane window", () => {
 		// budget: with the label plus an oversized newest message the pane would
 		// draw six rows into five and ink would clip the header off the top.
 		const messages = [message(1, { body: "small" }), message(2, { body: "z".repeat(4000) })];
-		const { lastFrame, unmount } = render(
+		const frame = frameOf(
 			<MessagePane
 				conversation={conversation(0)}
 				messages={messages}
@@ -174,8 +162,6 @@ describe("MessagePane window", () => {
 				clock={utc}
 			/>,
 		);
-		const frame = lastFrame() ?? "";
-		unmount();
 
 		expect(frame).toContain("↑ 1 older");
 		expect(frame).toContain("Marta");
@@ -197,7 +183,7 @@ describe("MessagePane window", () => {
 				attachments: [attachment(1), attachment(2), attachment(3), attachment(4)],
 			}),
 		];
-		const { lastFrame, unmount } = render(
+		const frame = frameOf(
 			<MessagePane
 				conversation={conversation(0)}
 				messages={withFiles}
@@ -206,8 +192,6 @@ describe("MessagePane window", () => {
 				clock={utc}
 			/>,
 		);
-		const frame = lastFrame() ?? "";
-		unmount();
 
 		// Four content rows: header, two file lines, one row for the marker. The body
 		// has nothing left, and the files that did not fit are counted, not clipped.
@@ -246,7 +230,7 @@ describe("MessagePane window", () => {
 				],
 			}),
 		];
-		const { lastFrame, unmount } = render(
+		const frame = frameOf(
 			<MessagePane
 				conversation={conversation(0)}
 				messages={withFiles}
@@ -255,8 +239,6 @@ describe("MessagePane window", () => {
 				clock={utc}
 			/>,
 		);
-		const frame = lastFrame() ?? "";
-		unmount();
 
 		expect(frame).toContain("Person 0");
 		expect(frame).toContain("↑ 1 older");
@@ -268,7 +250,7 @@ describe("MessagePane window", () => {
 		// ink wraps whatever string it is given, on every frame: a body far taller
 		// than the pane is cut, and the cut is visible rather than silent.
 		const huge = [message(0, { body: `START${"x".repeat(4000)}ENDTAG` })];
-		const { lastFrame, unmount } = render(
+		const frame = frameOf(
 			<MessagePane
 				conversation={conversation(0)}
 				messages={huge}
@@ -277,8 +259,6 @@ describe("MessagePane window", () => {
 				clock={utc}
 			/>,
 		);
-		const frame = lastFrame() ?? "";
-		unmount();
 
 		expect(frame).toContain("START");
 		expect(frame).toContain("…");

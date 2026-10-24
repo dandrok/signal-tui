@@ -5,6 +5,7 @@ import { demoConversations, demoMessages } from "../src/adapters/memory/demo-dat
 import type { Action, AppState } from "../src/app/state";
 import { emptyState, reduce } from "../src/app/state";
 import { App } from "../src/ui/App";
+import { plain } from "./helpers/frame";
 
 const tick = (ms = 80): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -41,7 +42,7 @@ function Harness({
 describe("App", () => {
 	test("renders the selected conversation and its messages", () => {
 		const { lastFrame } = render(<Harness initial={seededState()} />);
-		const frame = lastFrame() ?? "";
+		const frame = plain(lastFrame() ?? "");
 		expect(frame).toContain("Conversations");
 		expect(frame).toContain("Signal devs");
 		expect(frame).toContain("pushed the fix, ptal");
@@ -52,7 +53,7 @@ describe("App", () => {
 		const { lastFrame, stdin } = render(<Harness initial={seededState()} />);
 		stdin.write("j");
 		await tick();
-		const frame = lastFrame() ?? "";
+		const frame = plain(lastFrame() ?? "");
 		expect(frame).toContain("can we ship before friday?");
 		expect(frame).not.toContain("pushed the fix, ptal");
 	});
@@ -63,7 +64,7 @@ describe("App", () => {
 		await tick();
 		stdin.write("hey");
 		await tick();
-		expect(lastFrame() ?? "").toContain("hey");
+		expect(plain(lastFrame() ?? "")).toContain("hey");
 	});
 
 	test("escape leaves the composer without losing the draft", async () => {
@@ -74,7 +75,7 @@ describe("App", () => {
 		await tick();
 		stdin.write("\u001b");
 		await tick();
-		const frame = lastFrame() ?? "";
+		const frame = plain(lastFrame() ?? "");
 		// Back to the message pane, which is where you look after writing.
 		expect(frame).toContain("j/k scroll");
 		expect(frame).toContain("draft one");
@@ -89,7 +90,7 @@ describe("App", () => {
 
 		stdin.write("	");
 		await tick();
-		expect(lastFrame() ?? "").toContain("j/k scroll");
+		expect(plain(lastFrame() ?? "")).toContain("j/k scroll");
 
 		// j belongs to the message pane now. Asserting the dispatched action
 		// rather than the frame: from `scroll: 0` a `scroll-moved` of -1 clamps to
@@ -126,7 +127,7 @@ describe("App", () => {
 
 		stdin.write("\u001b[Z");
 		await tick();
-		expect(lastFrame() ?? "").toContain("⏎ send");
+		expect(plain(lastFrame() ?? "")).toContain("⏎ send");
 	});
 });
 
@@ -140,7 +141,7 @@ describe("search pane", () => {
 		stdin.write("dinner");
 		await tick();
 
-		const frame = lastFrame() ?? "";
+		const frame = plain(lastFrame() ?? "");
 		expect(frame).toContain("Search");
 		expect(frame).toContain("dinner");
 		unmount();
@@ -152,11 +153,11 @@ describe("search pane", () => {
 
 		stdin.write("/");
 		await tick();
-		expect(lastFrame() ?? "").toContain("Search");
+		expect(plain(lastFrame() ?? "")).toContain("Search");
 
 		stdin.write("\u001B");
 		await tick();
-		expect(lastFrame() ?? "").not.toContain("Search  ");
+		expect(plain(lastFrame() ?? "")).not.toContain("Search  ");
 		unmount();
 	});
 });

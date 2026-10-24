@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { render } from "ink-testing-library";
 import type { Message } from "../src/domain/types";
 import { SearchPane } from "../src/ui/SearchPane";
+import { plain } from "./helpers/frame";
 
 const hit = (id: string, body: string): Message => ({
 	id,
@@ -28,7 +29,7 @@ describe("SearchPane", () => {
 			/>,
 		);
 
-		const frame = lastFrame() ?? "";
+		const frame = plain(lastFrame() ?? "");
 		expect(frame).toContain("15 other results");
 		expect(frame).not.toContain("+0 more");
 		unmount();
@@ -43,7 +44,7 @@ describe("SearchPane", () => {
 			/>,
 		);
 
-		const frame = lastFrame() ?? "";
+		const frame = plain(lastFrame() ?? "");
 		// Absence alone would also hold for a pane that renders nothing at all.
 		expect(frame).toContain("hit 0");
 		expect(frame).toContain("hit 1");
@@ -61,7 +62,7 @@ describe("SearchPane", () => {
 			/>,
 		);
 
-		const frame = lastFrame() ?? "";
+		const frame = plain(lastFrame() ?? "");
 		expect(frame).toContain("4 other results");
 		unmount();
 	});
@@ -76,7 +77,7 @@ describe("SearchPane", () => {
 			/>,
 		);
 
-		const frame = lastFrame() ?? "";
+		const frame = plain(lastFrame() ?? "");
 		expect(frame).not.toContain("secret text");
 		expect(frame).toContain("message deleted");
 		unmount();

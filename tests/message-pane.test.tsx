@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { render } from "ink-testing-library";
 import type { Attachment, Conversation, Message } from "../src/domain/types";
 import { clockFor } from "../src/ui/clock";
 import { MessagePane } from "../src/ui/MessagePane";
+import { frameOf as renderFrame } from "./helpers/frame";
 
 const conversation: Conversation = {
 	id: "c1",
@@ -32,8 +32,8 @@ const message = (overrides: Partial<Message> = {}): Message => ({
 	...overrides,
 });
 
-const frameOf = (messages: readonly Message[]): string => {
-	const { lastFrame, unmount } = render(
+const frameOf = (messages: readonly Message[]): string =>
+	renderFrame(
 		<MessagePane
 			conversation={conversation}
 			messages={messages}
@@ -41,10 +41,6 @@ const frameOf = (messages: readonly Message[]): string => {
 			clock={clockFor("UTC")}
 		/>,
 	);
-	const frame = lastFrame() ?? "";
-	unmount();
-	return frame;
-};
 
 describe("MessagePane attachments", () => {
 	test("names the file and its size", () => {
