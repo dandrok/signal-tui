@@ -31,6 +31,11 @@ export interface Message {
 	readonly isOutgoing: boolean;
 	readonly isDeleted: boolean;
 	/**
+	 * True once the sender replaced this body. Displayed as a marker rather than
+	 * as text, so the message reads exactly as the edit left it.
+	 */
+	readonly isEdited?: boolean;
+	/**
 	 * Optional so a caller that only cares about text is not forced to spell out
 	 * an empty list; `attachmentsOf` reads it without null checks.
 	 */

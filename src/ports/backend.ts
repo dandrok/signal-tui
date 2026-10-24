@@ -4,6 +4,13 @@ export type BackendEvent =
 	| { readonly kind: "message"; readonly message: Message }
 	| { readonly kind: "conversation-updated"; readonly conversation: Conversation }
 	| {
+			/** The sender replaced the body of a message already on screen. */
+			readonly kind: "message-edited";
+			readonly conversationId: ConversationId;
+			readonly targetSentAt: number;
+			readonly body: string;
+	  }
+	| {
 			readonly kind: "message-deleted";
 			readonly conversationId: ConversationId;
 			readonly messageId: MessageId;

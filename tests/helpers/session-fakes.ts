@@ -59,6 +59,25 @@ export class RecordingStore implements MessageStore {
 		return { inserted };
 	}
 
+	async applyEdit(conversationId: string, targetSentAt: number, body: string): Promise<boolean> {
+		if (this.failOn === "applyEdit") {
+			throw new Error("applyEdit failed");
+		}
+		this.ops.push(`applyEdit:${conversationId}:${targetSentAt}:${body}`);
+		const existing = this.messages.get(conversationId) ?? [];
+		const index = existing.findIndex((entry) => entry.sentAt === targetSentAt);
+		const found = existing[index];
+		if (found === undefined) {
+			return false;
+		}
+		this.messages.set(conversationId, [
+			...existing.slice(0, index),
+			{ ...found, body, isEdited: true },
+			...existing.slice(index + 1),
+		]);
+		return true;
+	}
+
 	async markMessageDeleted(_conversationId: string, messageId: string): Promise<void> {
 		this.#record(`deleted:${messageId}`);
 	}

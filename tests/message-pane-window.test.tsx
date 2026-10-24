@@ -129,6 +129,37 @@ describe("MessagePane window", () => {
 		expect(frame).toContain("…");
 	});
 
+	test("marks an edited message on its header row, without spending a row", () => {
+		const edited = message(0, { body: "typo fixed", isEdited: true });
+		const same = message(0, { body: "typo fixed" });
+		const rows = (frame: string): number =>
+			frame.split("\n").filter((line) => line.trim().length > 0).length;
+
+		const withMarker = frameOf(
+			<MessagePane
+				conversation={conversation(0)}
+				messages={[edited]}
+				height={8}
+				width={60}
+				clock={utc}
+			/>,
+		);
+		const withoutMarker = frameOf(
+			<MessagePane
+				conversation={conversation(0)}
+				messages={[same]}
+				height={8}
+				width={60}
+				clock={utc}
+			/>,
+		);
+
+		expect(withMarker).toContain("· edited");
+		expect(withoutMarker).not.toContain("· edited");
+		// Same rows either way: the marker rides on the header line.
+		expect(rows(withMarker)).toBe(rows(withoutMarker));
+	});
+
 	test("renders clocks in the zone it is given", () => {
 		const at = [message(0, { sentAt: Date.UTC(2026, 9, 24, 7, 4) })];
 		const inZone = (timeZone: string): string => {

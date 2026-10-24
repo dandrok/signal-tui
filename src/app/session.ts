@@ -67,6 +67,9 @@ export function createSession({ store, backend }: SessionDeps): Session {
 				}
 				break;
 			}
+			case "message-edited":
+				await store.applyEdit(event.conversationId, event.targetSentAt, event.body);
+				break;
 			case "message-deleted":
 				await store.markMessageDeleted(event.conversationId, event.messageId);
 				break;

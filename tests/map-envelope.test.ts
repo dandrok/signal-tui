@@ -216,6 +216,7 @@ describe("mapEnvelope", () => {
 			conversation: null,
 			conversationKind: "direct",
 			deleted: null,
+			edited: null,
 		});
 	});
 
@@ -226,6 +227,7 @@ describe("mapEnvelope", () => {
 			conversation: null,
 			conversationKind: "direct",
 			deleted: null,
+			edited: null,
 		});
 	});
 
@@ -236,6 +238,7 @@ describe("mapEnvelope", () => {
 			conversation: null,
 			conversationKind: "direct",
 			deleted: null,
+			edited: null,
 		});
 	});
 });

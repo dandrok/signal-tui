@@ -6,7 +6,8 @@ import type {
 	Message,
 	MessageId,
 } from "../../domain/types";
-import type { DataMessage, Envelope, SentMessage } from "./schemas";
+import type { DataMessage, EditMessage, Envelope, SentMessage } from "./schemas";
+import { dataMessageSchema } from "./schemas";
 
 export type ConversationKind = "direct" | "group";
 
@@ -14,6 +15,16 @@ export type ConversationKind = "direct" | "group";
 export interface DeletedMessage {
 	readonly conversationId: ConversationId;
 	readonly messageId: MessageId;
+}
+
+/**
+ * Replacement content for an earlier message. Signal identifies the message by
+ * the timestamp it was sent at, so that is the key the store updates on.
+ */
+export interface EditedMessage {
+	readonly conversationId: ConversationId;
+	readonly targetSentAt: number;
+	readonly body: string;
 }
 
 /**
@@ -26,6 +37,7 @@ export interface MappedEnvelope {
 	readonly conversation: Conversation | null;
 	readonly conversationKind: ConversationKind;
 	readonly deleted: DeletedMessage | null;
+	readonly edited: EditedMessage | null;
 }
 
 /** Stable conversation key for a peer, preferring the UUID (numbers can change). */
@@ -118,16 +130,22 @@ const captionOf = (data: Textual): string | null => {
 	return null;
 };
 
-const bodyOf = (data: Textual): string => {
+/** The text a message actually carries: its body, or a file's caption. */
+const textOf = (data: Textual): string => {
 	if (data.message !== undefined && data.message !== null && data.message.length > 0) {
 		return data.message;
 	}
 	// A photo sent with text puts that text in the attachment's caption, so without
 	// this the message would show only a filename. It also keeps captions searchable.
-	const caption = captionOf(data);
-	if (caption !== null) {
-		return caption;
+	return captionOf(data) ?? "";
+};
+
+const bodyOf = (data: Textual): string => {
+	const text = textOf(data);
+	if (text.length > 0) {
+		return text;
 	}
+	// Files with no text at all still deserve a row of their own.
 	return (data.attachments?.length ?? 0) > 0 ? ATTACHMENT_PLACEHOLDER : "";
 };
 
@@ -136,6 +154,7 @@ const EMPTY: MappedEnvelope = {
 	conversation: null,
 	conversationKind: "direct",
 	deleted: null,
+	edited: null,
 };
 
 const groupTarget = (groupInfo: DataMessage["groupInfo"]): Target | null =>
@@ -144,6 +163,42 @@ const groupTarget = (groupInfo: DataMessage["groupInfo"]): Target | null =>
 		: { id: groupInfo.groupId, name: groupInfo.groupName ?? "", kind: "group" };
 
 /** Incoming message: the sender identifies the conversation. */
+/**
+ * An edit carries a *copy* of the data message with the replacement text inside
+ * it, so the conversation comes from that inner message's group info and falls
+ * back to the envelope's sender. Anything without a body is ignored rather than
+ * blanking the message: an edit to nothing is not a thing Signal produces.
+ */
+function mapEdit(envelope: Envelope, edit: EditMessage): MappedEnvelope {
+	const parsed =
+		edit.dataMessage === null || edit.dataMessage === undefined
+			? null
+			: dataMessageSchema.safeParse(edit.dataMessage);
+	const data = parsed?.success === true ? parsed.data : undefined;
+	const target =
+		data?.groupInfo === undefined ? conversationTarget(envelope) : groupTarget(data.groupInfo);
+	// Only real text may replace a body. `bodyOf` would answer "[attachment]" for a
+	// data message that carries files and nothing else, which would replace the
+	// message's text with a placeholder.
+	const body = data === undefined ? "" : textOf(data);
+
+	if (target === null || body.length === 0) {
+		return target === null ? EMPTY : { ...EMPTY, conversationKind: target.kind };
+	}
+
+	return {
+		message: null,
+		conversation: null,
+		conversationKind: target.kind,
+		deleted: null,
+		edited: {
+			conversationId: target.id,
+			targetSentAt: edit.targetSentTimestamp,
+			body,
+		},
+	};
+}
+
 function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
 	const peer = peerId(envelope);
 	const target =
@@ -159,6 +214,7 @@ function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
 			message: null,
 			conversation: null,
 			conversationKind: target.kind,
+			edited: null,
 			deleted: {
 				conversationId: target.id,
 				messageId: `${target.id}:${data.remoteDelete.timestamp}`,
@@ -187,6 +243,7 @@ function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
 		},
 		conversationKind: target.kind,
 		deleted: null,
+		edited: null,
 	};
 }
 
@@ -206,6 +263,7 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 			message: null,
 			conversation: null,
 			conversationKind: target.kind,
+			edited: null,
 			deleted: {
 				conversationId: target.id,
 				messageId: `${target.id}:${sent.remoteDelete.timestamp}`,
@@ -232,6 +290,7 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 		},
 		conversationKind: target.kind,
 		deleted: null,
+		edited: null,
 	};
 }
 
@@ -240,6 +299,10 @@ function mapSent(sent: SentMessage): MappedEnvelope {
  * produces the same result, which is what makes the adapter testable from fixtures.
  */
 export function mapEnvelope(envelope: Envelope): MappedEnvelope {
+	if (envelope.editMessage !== undefined) {
+		return mapEdit(envelope, envelope.editMessage);
+	}
+
 	if (envelope.dataMessage !== undefined) {
 		return mapIncoming(envelope, envelope.dataMessage);
 	}

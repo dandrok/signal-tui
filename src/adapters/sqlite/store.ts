@@ -17,6 +17,7 @@ interface MessageRow {
 	sent_at: number;
 	is_outgoing: number;
 	is_deleted: number;
+	is_edited: number;
 }
 
 interface ConversationRow {
@@ -35,6 +36,7 @@ export function toMessage(row: MessageRow): Message {
 		sentAt: row.sent_at,
 		isOutgoing: row.is_outgoing === 1,
 		isDeleted: row.is_deleted === 1,
+		isEdited: row.is_edited === 1,
 	};
 }
 
@@ -115,7 +117,7 @@ export class SqliteMessageStore implements MessageStore {
 		const rows = this.#db
 			.query<MessageRow, [string, number]>(
 				`SELECT * FROM (
-					SELECT id, conversation_id, author, body, sent_at, is_outgoing, is_deleted
+					SELECT id, conversation_id, author, body, sent_at, is_outgoing, is_deleted, is_edited
 					FROM messages
 					WHERE conversation_id = ?1
 					ORDER BY sent_at DESC, id DESC
@@ -129,7 +131,7 @@ export class SqliteMessageStore implements MessageStore {
 	async listAllMessages(conversationId: ConversationId): Promise<readonly Message[]> {
 		const rows = this.#db
 			.query<MessageRow, [string]>(
-				`SELECT id, conversation_id, author, body, sent_at, is_outgoing, is_deleted
+				`SELECT id, conversation_id, author, body, sent_at, is_outgoing, is_deleted, is_edited
 				 FROM messages
 				 WHERE conversation_id = ?1
 				 ORDER BY sent_at ASC, id ASC`,
@@ -145,7 +147,7 @@ export class SqliteMessageStore implements MessageStore {
 		}
 		const rows = this.#db
 			.query<MessageRow, [string, number]>(
-				`SELECT m.id, m.conversation_id, m.author, m.body, m.sent_at, m.is_outgoing, m.is_deleted
+				`SELECT m.id, m.conversation_id, m.author, m.body, m.sent_at, m.is_outgoing, m.is_deleted, m.is_edited
 				 FROM messages_fts
 				 JOIN messages m ON m.rowid = messages_fts.rowid
 				 WHERE messages_fts MATCH ?1
@@ -211,8 +213,8 @@ export class SqliteMessageStore implements MessageStore {
 		const inserted = this.#db.transaction(() => {
 			const changes = this.#db
 				.query<null, SaveParams>(
-					`INSERT INTO messages (id, conversation_id, author, body, sent_at, is_outgoing, is_deleted)
-					 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+					`INSERT INTO messages (id, conversation_id, author, body, sent_at, is_outgoing, is_deleted, is_edited)
+					 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)
 					 ON CONFLICT(id) DO NOTHING`,
 				)
 				.run(...params).changes;
@@ -220,17 +222,52 @@ export class SqliteMessageStore implements MessageStore {
 			if (changes === 0) {
 				this.#db
 					.query<null, SaveParams>(
-						`UPDATE messages SET author = ?3, body = ?4, sent_at = ?5, is_outgoing = ?6, is_deleted = ?7
+						// Two rules, both about replays. A correction outranks the original
+						// text, so once a message is edited only another edit changes its
+						// body. And deletion is one-way: Signal has no undelete, so a
+						// redelivered envelope must not bring a deleted message back — nor
+						// restore the body that the delete cleared.
+						`UPDATE messages SET author = ?3,
+						        body = CASE
+						                 WHEN is_deleted = 1 THEN body
+						                 WHEN is_edited = 1 THEN body
+						                 ELSE ?4
+						               END,
+						        sent_at = ?5, is_outgoing = ?6,
+						        is_deleted = is_deleted | ?7
 						 WHERE id = ?1 AND conversation_id = ?2`,
 					)
 					.run(...params);
 			}
 
-			replaceAttachments(this.#db, message);
+			// Attachments follow the same rule: a deleted message keeps none, or a replay
+			// would put the file rows back on a tombstone.
+			const row = this.#db
+				.query<{ is_deleted: number }, [string]>("SELECT is_deleted FROM messages WHERE id = ?1")
+				.get(message.id);
+			if (row?.is_deleted !== 1) {
+				replaceAttachments(this.#db, message);
+			}
 			return changes;
 		})();
 
 		return { inserted: inserted > 0 };
+	}
+
+	async applyEdit(
+		conversationId: ConversationId,
+		targetSentAt: number,
+		body: string,
+	): Promise<boolean> {
+		// The FTS triggers on `messages` re-index the new body, so search follows the
+		// edit without a second write. A deleted message keeps its blank body.
+		const result = this.#db
+			.query<null, [string, number, string]>(
+				`UPDATE messages SET body = ?3, is_edited = 1
+				 WHERE conversation_id = ?1 AND sent_at = ?2 AND is_deleted = 0`,
+			)
+			.run(conversationId, targetSentAt, body);
+		return result.changes > 0;
 	}
 
 	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {

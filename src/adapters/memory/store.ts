@@ -7,6 +7,7 @@ const DEFAULT_LIMIT = 200;
 /** Same shape the SQLite adapter returns: always an array, never a missing field. */
 const withFiles = (message: Message): Message => ({
 	...message,
+	isEdited: message.isEdited === true,
 	attachments: message.attachments ?? [],
 });
 
@@ -99,8 +100,36 @@ export class InMemoryStore implements MessageStore {
 		// not "this message has none" — the rule the SQLite adapter already applies,
 		// or a partial update would silently drop files the store had.
 		const attachments = message.attachments ?? existing.attachments;
-		this.#messages[index] = attachments === undefined ? message : { ...message, attachments };
+		// Two rules, both about replays, and both mirrored in the SQLite adapter: a
+		// correction outranks the original text, and deletion is one-way — Signal has no
+		// undelete, so a redelivered envelope must not revive a tombstone.
+		const deleted = existing.isDeleted === true || message.isDeleted === true;
+		const frozen = existing.isDeleted === true || existing.isEdited === true;
+		const base: Message = {
+			...message,
+			isDeleted: deleted,
+			body: frozen ? existing.body : message.body,
+			...(existing.isEdited === true ? { isEdited: true } : {}),
+		};
+		const kept = deleted ? [] : attachments;
+		this.#messages[index] = kept === undefined ? base : { ...base, attachments: kept };
 		return { inserted: false };
+	}
+
+	async applyEdit(
+		conversationId: ConversationId,
+		targetSentAt: number,
+		body: string,
+	): Promise<boolean> {
+		const index = this.#messages.findIndex(
+			(entry) => entry.conversationId === conversationId && entry.sentAt === targetSentAt,
+		);
+		const existing = this.#messages[index];
+		if (existing === undefined || existing.isDeleted) {
+			return false;
+		}
+		this.#messages[index] = { ...existing, body, isEdited: true };
+		return true;
 	}
 
 	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {
