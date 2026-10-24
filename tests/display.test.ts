@@ -24,6 +24,30 @@ describe("displayText", () => {
 		expect(displayText("\uFEFFok")).toBe("ok");
 	});
 
+	test("consumes CSI with colon sub-parameters whole", () => {
+		// `38:2:255:0:0` is a valid true-colour SGR: only the leading `[0-9;?]` set
+		// would stop at the colon and leave the parameters on screen as text.
+		expect(displayText("red \u001b[38:2:255:0:0mRED")).toBe("red RED");
+		expect(displayText("\u001b[4:3m")).toBe("");
+	});
+
+	test("consumes string-type escapes with their payload", () => {
+		// DCS, SOS, PM and APC each carry a payload up to ST; leaving it would print
+		// the payload as chat text.
+		expect(displayText("a\u001bPpayload\u001b\\b")).toBe("ab");
+		expect(displayText("a\u001b_payload\u001b\\b")).toBe("ab");
+		expect(displayText("a\u001b^payload\u001b\\b")).toBe("ab");
+		expect(displayText("a\u001bXpayload\u001b\\b")).toBe("ab");
+	});
+
+	test("consumes an OSC terminated by ST instead of BEL", () => {
+		expect(displayText("a\u001b]0;title\u001b\\b")).toBe("ab");
+	});
+
+	test("consumes a CSI the peer never finished", () => {
+		expect(displayText("a\u001b[38")).toBe("a");
+	});
+
 	test("strips C0 and C1 controls but keeps the text", () => {
 		expect(displayText("a\u0007b\u0008c\u009bd")).toBe("abcd");
 	});

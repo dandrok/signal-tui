@@ -9,10 +9,24 @@
  * search still matches what the sender actually wrote.
  */
 
-/** CSI, OSC, DCS and the two-character escapes: everything that starts with ESC. */
+/**
+ * Everything that starts with ESC, consumed whole:
+ *
+ * - CSI: parameter bytes are `0x30-0x3F` (so `:` sub-parameters count, as in
+ *   `CSI 38:2:255:0:0 m`), then intermediates, then a final byte.
+ * - String types — OSC `]`, DCS `P`, SOS `X`, PM `^`, APC `_` — carry a payload
+ *   terminated by BEL or ST (`ESC \`); the payload goes too, or it renders as text.
+ * - ESC + intermediate(s) + final (charset designators), and the plain two-byte
+ *   escapes.
+ */
 const ESCAPE_SEQUENCE =
 	// biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point
-	/\u001B(?:\[[0-9;?]*[ -/]*[@-~]|\][^\u0007\u001B]*(?:\u0007|\u001B\\)?|[()#%][0-9A-Za-z]|[@-Z\\-_])/g;
+	/\u001B(?:\[[0-?]*[ -/]*[@-~]|[\]PX^_][^\u0007\u001B]*(?:\u0007|\u001B\\)?|[ -/][0-~]|[@-Z\\-_])/g;
+
+/** A CSI the peer never terminated: consume what is there rather than show it. */
+const UNTERMINATED_CSI =
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point
+	/\u001B\[[0-?]*[ -/]*/g;
 
 /** C0 and C1 controls except tab, newline and carriage return, handled separately. */
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point
@@ -34,6 +48,7 @@ const TABS_AND_BREAKS = /[\t\r\n\v\f]+/g;
 export function displayText(raw: string): string {
 	return raw
 		.replace(ESCAPE_SEQUENCE, "")
+		.replace(UNTERMINATED_CSI, "")
 		.replace(CONTROL_CHARS, "")
 		.replace(BIDI_CONTROLS, "")
 		.replace(ZERO_WIDTH, "")
