@@ -1,7 +1,7 @@
 import { Box, Text, useApp, useInput } from "ink";
 import { useMemo } from "react";
 import type { Action, AppState } from "../app/state";
-import { selectedConversation, selectedMessages } from "../app/state";
+import { selectedConversation, selectedIndex, selectedMessages } from "../app/state";
 import { displayLine } from "../domain/display";
 import { COMPOSER_HEIGHT, Composer } from "./Composer";
 import { ConversationList } from "./ConversationList";
@@ -145,7 +145,7 @@ export function App({ state, dispatch }: AppProps) {
 				<Box flexDirection="row" height={bodyHeight}>
 					<ConversationList
 						conversations={state.conversations}
-						selectedIndex={state.selectedIndex}
+						selectedIndex={selectedIndex(state)}
 						width={listWidth}
 						height={bodyHeight}
 						isFocused={state.focus === "conversations"}

@@ -28,7 +28,15 @@ export interface SearchState {
 export interface AppState {
 	readonly conversations: readonly Conversation[];
 	readonly messagesByConversation: Readonly<Record<ConversationId, readonly Message[]>>;
-	readonly selectedIndex: number;
+	/**
+	 * Which conversation is selected, by id rather than by its row in the list.
+	 *
+	 * The list is ordered by activity, so it reorders whenever a message arrives or is
+	 * sent: an index would then point at whoever moved into that row, and the message
+	 * pane would silently switch to a different person. The selection is about a
+	 * conversation, so it has to survive the list moving.
+	 */
+	readonly selectedId: ConversationId | null;
 	readonly focus: Focus;
 	/** Messages hidden above the window; `0` is pinned to the newest. */
 	readonly scroll: number;
@@ -62,7 +70,7 @@ export type Action =
 export const emptyState: AppState = {
 	conversations: [],
 	messagesByConversation: {},
-	selectedIndex: 0,
+	selectedId: null,
 	focus: "conversations",
 	scroll: 0,
 	draft: "",
@@ -74,17 +82,19 @@ export const emptyState: AppState = {
 export function reduce(state: AppState, action: Action): AppState {
 	switch (action.type) {
 		case "conversations-loaded": {
-			const lastIndex = Math.max(0, action.conversations.length - 1);
-			const nextIndex = Math.min(state.selectedIndex, lastIndex);
-			// A reload can reorder the list, so the same index may now be a different
-			// conversation: keeping the old scroll offset would open it mid-history.
-			const before = state.conversations[state.selectedIndex]?.id;
-			const after = action.conversations[nextIndex]?.id;
+			// A reload can reorder the list — that is the point of ordering it by
+			// activity. The selection is an id, so the same person stays selected no
+			// matter which row they moved to; only a conversation that left the list
+			// entirely moves the cursor, and then to the top of the list.
+			const stillThere = action.conversations.some((entry) => entry.id === state.selectedId);
+			const selectedId = stillThere ? state.selectedId : (action.conversations[0]?.id ?? null);
 			return {
 				...state,
 				conversations: action.conversations,
-				selectedIndex: nextIndex,
-				scroll: before === after ? state.scroll : 0,
+				selectedId,
+				// Only a different conversation starts at its newest message. A reorder
+				// keeps the offset because it is still the same thread.
+				scroll: selectedId === state.selectedId ? state.scroll : 0,
 			};
 		}
 		case "messages-loaded":
@@ -96,13 +106,18 @@ export function reduce(state: AppState, action: Action): AppState {
 				},
 			};
 		case "move-selection": {
+			const current = selectedIndex(state);
+			if (current === -1) {
+				return state;
+			}
 			const lastIndex = Math.max(0, state.conversations.length - 1);
-			const nextIndex = Math.min(lastIndex, Math.max(0, state.selectedIndex + action.delta));
-			return nextIndex === state.selectedIndex
+			const nextIndex = Math.min(lastIndex, Math.max(0, current + action.delta));
+			const next = state.conversations[nextIndex];
+			return next === undefined || nextIndex === current
 				? state
 				: // A different conversation always starts at its newest message. The
 					// other way round, the pane would open mid-history and look stale.
-					{ ...state, selectedIndex: nextIndex, scroll: 0 };
+					{ ...state, selectedId: next.id, scroll: 0 };
 		}
 		case "focus":
 			return state.focus === action.focus ? state : { ...state, focus: action.focus };
@@ -188,11 +203,13 @@ export function reduce(state: AppState, action: Action): AppState {
 			if (hit === undefined) {
 				return state;
 			}
-			const index = state.conversations.findIndex((entry) => entry.id === hit.conversationId);
+			// Jump by conversation, not by row: the hit's conversation is what the user
+			// picked, and an index would go stale the moment the list reorders.
+			const known = state.conversations.some((entry) => entry.id === hit.conversationId);
 			return {
 				...state,
 				search: null,
-				selectedIndex: index === -1 ? state.selectedIndex : index,
+				selectedId: known ? hit.conversationId : state.selectedId,
 				scroll: 0,
 				focus: "conversations",
 			};
@@ -214,7 +231,16 @@ export function selectedSearchResult(state: AppState): Message | undefined {
 }
 
 export function selectedConversation(state: AppState): Conversation | undefined {
-	return state.conversations[state.selectedIndex];
+	return state.conversations.find((entry) => entry.id === state.selectedId);
+}
+
+/**
+ * Row of the selected conversation, or -1 when nothing is selected. A render fact
+ * derived on demand: storing the row is what made the pane follow the row instead
+ * of the conversation.
+ */
+export function selectedIndex(state: AppState): number {
+	return state.conversations.findIndex((entry) => entry.id === state.selectedId);
 }
 
 export function selectedMessages(state: AppState): readonly Message[] {

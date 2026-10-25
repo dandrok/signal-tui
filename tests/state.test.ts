@@ -6,6 +6,7 @@ import {
 	FOCUS_ORDER,
 	reduce,
 	selectedConversation,
+	selectedIndex,
 	selectedMessages,
 } from "../src/app/state";
 
@@ -13,20 +14,21 @@ const loaded = () =>
 	reduce(emptyState, { type: "conversations-loaded", conversations: demoConversations });
 
 describe("reduce", () => {
-	test("loading conversations keeps the selection at zero", () => {
+	test("loading conversations selects the first one", () => {
 		const state = loaded();
 		expect(state.conversations).toHaveLength(4);
-		expect(state.selectedIndex).toBe(0);
+		expect(state.selectedId).toBe(demoConversations[0]?.id ?? null);
+		expect(selectedIndex(state)).toBe(0);
 		expect(selectedConversation(state)?.id).toBe("c-signal-devs");
 	});
 
 	test("move-selection clamps instead of wrapping", () => {
 		let state = loaded();
 		state = reduce(state, { type: "move-selection", delta: -1 });
-		expect(state.selectedIndex).toBe(0);
+		expect(selectedIndex(state)).toBe(0);
 
 		state = reduce(state, { type: "move-selection", delta: 99 });
-		expect(state.selectedIndex).toBe(demoConversations.length - 1);
+		expect(selectedIndex(state)).toBe(demoConversations.length - 1);
 	});
 
 	test("moving past the end is a no-op identity", () => {
@@ -164,15 +166,16 @@ describe("scroll", () => {
 		expect(reloaded.scroll).toBe(5);
 	});
 
-	test("a reload that reorders the list drops a stale offset", () => {
+	test("a reload that reorders the list keeps the same conversation and its offset", () => {
 		const scrolled = reduce(withThread(10), { type: "scroll-moved", delta: 5 });
 		const reordered = reduce(scrolled, {
 			type: "conversations-loaded",
 			conversations: [...demoConversations].reverse(),
 		});
-		// Same index, different conversation: keeping the offset would open the
-		// new conversation mid-history.
-		expect(reordered.scroll).toBe(0);
+		// The conversation is the same one, only its row moved, so the offset still
+		// describes where the user was in that thread.
+		expect(selectedConversation(reordered)?.id).toBe("c-signal-devs");
+		expect(reordered.scroll).toBe(5);
 	});
 });
 
@@ -216,11 +219,8 @@ describe("search mode", () => {
 
 		state = reduce(state, { type: "search-selected" });
 
-		const expectedIndex = demoConversations.findIndex(
-			(entry) => entry.id === target?.conversationId,
-		);
 		expect(state.search).toBeNull();
-		expect(state.selectedIndex).toBe(expectedIndex);
+		expect(selectedConversation(state)?.id).toBe(target?.conversationId);
 	});
 
 	test("selecting with no results changes nothing", () => {
