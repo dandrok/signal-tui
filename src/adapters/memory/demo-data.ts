@@ -113,4 +113,15 @@ export const demoMessages: readonly Message[] = [
 		isOutgoing: true,
 		isDeleted: false,
 	},
+	{
+		id: "m-view-once",
+		conversationId: "c-family",
+		author: "Mum",
+		body: "",
+		sentAt: minutes(7),
+		isOutgoing: false,
+		isDeleted: false,
+		// What a view-once message leaves behind: a row with no text and no files.
+		isViewOnce: true,
+	},
 ];

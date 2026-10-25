@@ -109,7 +109,9 @@ export class InMemoryStore implements MessageStore {
 		const index = this.#messages.findIndex((existing) => existing.id === message.id);
 		const existing = this.#messages[index];
 		if (existing === undefined) {
-			this.#messages.push(message);
+			this.#messages.push(
+				message.isViewOnce === true ? { ...message, body: "", attachments: [] } : message,
+			);
 			return { inserted: true };
 		}
 		// An absent `attachments` field means "this update says nothing about files",
@@ -123,10 +125,14 @@ export class InMemoryStore implements MessageStore {
 		// Deleted, expired, or corrected: in all three the stored body is the newer truth.
 		const frozen =
 			existing.isDeleted === true || existing.isExpired === true || existing.isEdited === true;
+		// A view-once message keeps no content, ever: not on the first write, not on a
+		// replay, and not when an older cache still had the text. One-way, like deletion.
+		const viewOnce = existing.isViewOnce === true || message.isViewOnce === true;
 		const base: Message = {
 			...message,
 			isDeleted: deleted,
-			body: frozen ? existing.body : message.body,
+			body: viewOnce ? "" : frozen ? existing.body : message.body,
+			...(viewOnce ? { isViewOnce: true } : {}),
 			...(existing.isEdited === true ? { isEdited: true } : {}),
 			// Same for expiry: the flag lives in the row, not in the payload.
 			...(existing.isExpired === true ? { isExpired: true } : {}),
@@ -149,7 +155,7 @@ export class InMemoryStore implements MessageStore {
 				? { receipt: existing.receipt }
 				: {}),
 		};
-		const kept = deleted || existing.isExpired === true ? [] : attachments;
+		const kept = viewOnce || deleted || existing.isExpired === true ? [] : attachments;
 		this.#messages[index] = kept === undefined ? base : { ...base, attachments: kept };
 		return { inserted: false };
 	}
@@ -173,9 +179,14 @@ export class InMemoryStore implements MessageStore {
 					: entry.authorId === editor.id),
 		);
 		const existing = this.#messages[index];
-		// An expired message is gone on purpose, and a deleted one is gone for everyone;
-		// neither may be refilled by an edit that arrives late.
-		if (existing === undefined || existing.isDeleted || existing.isExpired === true) {
+		// An expired message is gone on purpose, a deleted one is gone for everyone, and a
+		// view-once one was never kept; none may be refilled by an edit that arrives late.
+		if (
+			existing === undefined ||
+			existing.isDeleted ||
+			existing.isExpired === true ||
+			existing.isViewOnce === true
+		) {
 			return false;
 		}
 		this.#messages[index] = { ...existing, body, isEdited: true };

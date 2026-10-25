@@ -31,7 +31,7 @@ export function applyEditRow(
 		.query<{ id: string }, [string, number, string | null, string, string]>(
 			`UPDATE messages SET body = ?5, is_edited = 1
 			 WHERE conversation_id = ?1 AND sent_at = ?2
-			   AND is_deleted = 0 AND is_expired = 0
+			   AND is_deleted = 0 AND is_expired = 0 AND is_view_once = 0
 			   AND (author_id = ?3 OR (author_id IS NULL AND author = ?4))
 			 RETURNING id`,
 		)

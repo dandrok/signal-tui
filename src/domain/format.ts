@@ -48,10 +48,18 @@ export function describeBody(message: Message): string {
 	if (message.isDeleted) {
 		return "message deleted";
 	}
+	// A view-once message was never cached, so there is nothing to recover — say what
+	// arrived instead of drawing an empty row.
+	if (message.isViewOnce === true) {
+		return VIEW_ONCE_BODY;
+	}
 	// The body is already empty by the time this renders; the label is what tells a
 	// reader the message was there and is not something they can recover.
 	return message.isExpired === true ? "message expired" : displayText(message.body);
 }
+
+/** What a view-once message says instead of its content, which was never stored. */
+export const VIEW_ONCE_BODY = "view-once message · not stored";
 
 /**
  * Stand-in body for a message that carried only files.
@@ -61,6 +69,10 @@ export const ATTACHMENT_BODY_PLACEHOLDER = "[attachment]";
 /** Whether the body line is worth a row of its own. */
 export function showsBody(message: Message): boolean {
 	if (message.isDeleted) {
+		return true;
+	}
+	// The view-once notice is the whole content of the row, so it always gets a line.
+	if (message.isViewOnce === true) {
 		return true;
 	}
 	const attachments = attachmentsOf(message);
@@ -113,7 +125,8 @@ export function attachmentsForDisplay(
 	maxRows: number,
 	innerWidth: number,
 ): DisplayAttachments {
-	if (message.isDeleted) {
+	// A view-once message keeps no files, so nothing stands in for them either.
+	if (message.isDeleted || message.isViewOnce === true) {
 		return { lines: [], omitted: 0, rows: 0 };
 	}
 	const width = Math.max(1, innerWidth);

@@ -8,7 +8,7 @@ import { type ConversationRow, type MessageRow, toConversation, toMessage } from
  * looks like happens in one place instead of being copied into every SELECT.
  */
 export const selectMessageColumns =
-	"id, conversation_id, author, author_id, body, sent_at, is_outgoing, is_deleted, is_edited, expires_at, is_expired, receipt_rank";
+	"id, conversation_id, author, author_id, body, sent_at, is_outgoing, is_deleted, is_edited, expires_at, is_expired, receipt_rank, is_view_once";
 
 export function readConversations(db: Database): ConversationRow[] {
 	return db
@@ -57,7 +57,7 @@ export function searchMessages(db: Database, query: string, limit: number): Mess
 	}
 	return db
 		.query<MessageRow, [string, number]>(
-			`SELECT m.id, m.conversation_id, m.author, m.author_id, m.body, m.sent_at, m.is_outgoing, m.is_deleted, m.is_edited, m.expires_at, m.is_expired, m.receipt_rank
+			`SELECT m.id, m.conversation_id, m.author, m.author_id, m.body, m.sent_at, m.is_outgoing, m.is_deleted, m.is_edited, m.expires_at, m.is_expired, m.receipt_rank, m.is_view_once
 			 FROM messages_fts
 			 JOIN messages m ON m.rowid = messages_fts.rowid
 			 WHERE messages_fts MATCH ?1
