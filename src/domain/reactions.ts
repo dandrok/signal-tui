@@ -18,13 +18,12 @@ const MAX_MARKERS = 6;
 const MAX_EMOJI_GRAPHEMES = 8;
 
 /**
- * Longest emoji kept, in UTF-16 units, checked *after* the grapheme count.
- *
- * A cluster count alone bounds nothing: a base character followed by ten thousand
- * combining marks is **one** grapheme cluster, so eight clusters can be a ten-kilobyte
- * string that the pane then re-wraps on every frame. A real emoji is short — four people
- * with skin tones is nineteen units — so a longer value is not an emoji and is dropped
- * rather than shown.
+ * Longest emoji kept, in UTF-16 units, checked before the grapheme cut. The two bounds
+ * catch different things: a cluster count alone bounds nothing, because a base character
+ * followed by ten thousand combining marks is **one** cluster — eight clusters can be a
+ * ten-kilobyte string that the pane then re-wraps on every frame. A real emoji is short
+ * (four people with skin tones is nineteen units), so a longer value is not an emoji and
+ * is dropped rather than shown.
  */
 const MAX_EMOJI_CODE_UNITS = 32;
 
