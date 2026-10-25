@@ -11,6 +11,7 @@ import {
 	showsBody,
 	textForDisplay,
 } from "../domain/format";
+import { receiptMarker } from "../domain/receipts";
 import type { Conversation, Message } from "../domain/types";
 
 export interface MessagePaneProps {
@@ -139,6 +140,9 @@ function MessageRow({
 	readonly clock: Clock;
 }) {
 	const fullHeader = headerLine(message, clock);
+	// One composition, so the measured string and the drawn string cannot drift: the
+	// ticks ride the author row, which the window already budgeted for.
+	const marker = receiptMarker(message);
 	const header = textForDisplay(fullHeader, rowBudget, innerWidth);
 	const files = attachmentsForDisplay(message, Math.max(0, rowBudget - header.rows), innerWidth);
 	const body = bodyForDisplay(
@@ -154,6 +158,7 @@ function MessageRow({
 					<Text dimColor>{clock(message.sentAt)} </Text>
 					<Text bold>{describeAuthor(message)}</Text>
 					{editedMarker(message) === "" ? null : <Text dimColor>{editedMarker(message)}</Text>}
+					{marker === "" ? null : <Text dimColor>{marker}</Text>}
 				</Text>
 			) : (
 				<Text>{header.text}</Text>

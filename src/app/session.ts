@@ -77,6 +77,11 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 			case "message-deleted":
 				await store.markMessageDeleted(event.conversationId, event.messageId);
 				break;
+			case "receipt":
+				// The tick is a cache fact, not a render fact: it has to survive a restart,
+				// which is why the store takes it rather than the pane remembering it.
+				await store.applyReceipt(event.timestamps, event.state);
+				break;
 		}
 		// Every envelope is a chance to take out what has expired while the app runs.
 		// Without this, a timer would only be honoured when a conversation is opened —

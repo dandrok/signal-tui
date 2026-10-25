@@ -5,10 +5,11 @@ import type {
 	EditAuthor,
 	Message,
 	MessageId,
+	ReceiptState,
 } from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
 import { deleteAttachments, loadAttachments, replaceAttachments } from "./attachments";
-import { applyEditRow, purgeExpiredRows } from "./message-rules";
+import { applyEditRow, applyReceiptRows, purgeExpiredRows } from "./message-rules";
 import { migrations } from "./migrations";
 import { restrictCachePermissions } from "./private-cache";
 import { readAllMessages, readConversations, readMessages, searchMessages } from "./read-messages";
@@ -233,6 +234,16 @@ export class SqliteMessageStore implements MessageStore {
 
 	async purgeExpired(now: number): Promise<number> {
 		return purgeExpiredRows(this.#db, now);
+	}
+
+	async applyReceipt(
+		timestamps: readonly number[],
+		state: ReceiptState,
+	): Promise<readonly ConversationId[]> {
+		if (timestamps.length === 0) {
+			return [];
+		}
+		return applyReceiptRows(this.#db, timestamps, state);
 	}
 
 	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {

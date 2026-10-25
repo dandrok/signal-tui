@@ -1,9 +1,11 @@
+import { strongerReceipt } from "../../domain/receipts";
 import type {
 	Conversation,
 	ConversationId,
 	EditAuthor,
 	Message,
 	MessageId,
+	ReceiptState,
 } from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
 import { demoConversations, demoMessages } from "./demo-data";
@@ -139,6 +141,13 @@ export class InMemoryStore implements MessageStore {
 			...(message.authorId === undefined && existing.authorId !== undefined
 				? { authorId: existing.authorId }
 				: {}),
+			// Same shape as the author id, and the fourth field to fail this way: a
+			// payload never carries a receipt, so spreading `...message` would erase the
+			// one the store already recorded and the ticks would vanish on a reconnect.
+			// The SQLite adapter leaves the column alone, so both agree.
+			...(message.receipt === undefined && existing.receipt !== undefined
+				? { receipt: existing.receipt }
+				: {}),
 		};
 		const kept = deleted || existing.isExpired === true ? [] : attachments;
 		this.#messages[index] = kept === undefined ? base : { ...base, attachments: kept };
@@ -200,5 +209,28 @@ export class InMemoryStore implements MessageStore {
 		// Attachments go with the text: a deleted message should stop pointing at
 		// files, same as the SQLite adapter drops their rows.
 		this.#messages[index] = { ...existing, isDeleted: true, body: "", attachments: [] };
+	}
+
+	async applyReceipt(
+		timestamps: readonly number[],
+		state: ReceiptState,
+	): Promise<readonly ConversationId[]> {
+		// Same rules as the SQLite adapter, because this store is what demo mode and
+		// half the tests run against: a receipt may only touch our own messages, and
+		// only to strengthen what is stored.
+		const wanted = new Set(timestamps);
+		const changed = new Set<ConversationId>();
+		this.#messages = this.#messages.map((message) => {
+			if (!message.isOutgoing || !wanted.has(message.sentAt)) {
+				return message;
+			}
+			const next = strongerReceipt(message.receipt, state);
+			if (next === message.receipt) {
+				return message;
+			}
+			changed.add(message.conversationId);
+			return { ...message, receipt: next };
+		});
+		return [...changed];
 	}
 }

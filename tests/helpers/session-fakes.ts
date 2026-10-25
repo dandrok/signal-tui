@@ -1,4 +1,5 @@
-import type { Conversation, EditAuthor, Message } from "../../src/domain/types";
+import { strongerReceipt } from "../../src/domain/receipts";
+import type { Conversation, EditAuthor, Message, ReceiptState } from "../../src/domain/types";
 import type { BackendEvent, SignalBackend } from "../../src/ports/backend";
 import type { MessageStore } from "../../src/ports/store";
 
@@ -131,6 +132,35 @@ export class RecordingStore implements MessageStore {
 
 	async markMessageDeleted(_conversationId: string, messageId: string): Promise<void> {
 		this.#record(`deleted:${messageId}`);
+	}
+
+	readonly receipts: Array<{ timestamps: readonly number[]; state: ReceiptState }> = [];
+
+	/** Mirrors both real adapters, so a session test can assert the stored state. */
+	async applyReceipt(
+		timestamps: readonly number[],
+		state: ReceiptState,
+	): Promise<readonly string[]> {
+		this.receipts.push({ timestamps, state });
+		const wanted = new Set(timestamps);
+		const changed = new Set<string>();
+		for (const [conversationId, entries] of this.messages) {
+			this.messages.set(
+				conversationId,
+				entries.map((entry) => {
+					if (!entry.isOutgoing || !wanted.has(entry.sentAt)) {
+						return entry;
+					}
+					const next = strongerReceipt(entry.receipt, state);
+					if (next === entry.receipt) {
+						return entry;
+					}
+					changed.add(conversationId);
+					return { ...entry, receipt: next };
+				}),
+			);
+		}
+		return [...changed];
 	}
 
 	async incrementUnread(conversationId: string, by: number): Promise<void> {

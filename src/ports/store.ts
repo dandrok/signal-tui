@@ -1,4 +1,11 @@
-import type { Conversation, ConversationId, EditAuthor, Message, MessageId } from "../domain/types";
+import type {
+	Conversation,
+	ConversationId,
+	EditAuthor,
+	Message,
+	MessageId,
+	ReceiptState,
+} from "../domain/types";
 
 /**
  * Read model for the local cache. Implementations: memory (tests/demo) and
@@ -56,6 +63,23 @@ export interface MessageWriter {
 	purgeExpired(now: number): Promise<number>;
 	/** Marks a message as deleted; a no-op when the message is not cached. */
 	markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void>;
+	/**
+	 * Records a receipt for messages we sent, named by the timestamps it acknowledges.
+	 * Resolves the conversations whose rows actually changed, so a caller can tell a
+	 * receipt that moved something from one that repeated what was already known.
+	 *
+	 * There is no conversation argument on purpose: `JsonReceiptMessage` carries no
+	 * group id, so a receipt cannot say which thread a group message is in, and the
+	 * timestamp is how Signal names a message everywhere else too (an edit and a
+	 * delete-for-everyone both address one that way). Two rules come with it — only
+	 * our own messages can be acknowledged, and a receipt may only ever strengthen
+	 * what is stored, because they arrive out of order and a late delivery must not
+	 * take a read away.
+	 */
+	applyReceipt(
+		timestamps: readonly number[],
+		state: ReceiptState,
+	): Promise<readonly ConversationId[]>;
 }
 
 export interface MessageStore extends MessageReader, MessageWriter {}

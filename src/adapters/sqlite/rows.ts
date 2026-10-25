@@ -1,3 +1,4 @@
+import { receiptFromRank } from "../../domain/receipts";
 import type { Conversation, Message } from "../../domain/types";
 
 export interface MessageRow {
@@ -12,6 +13,7 @@ export interface MessageRow {
 	is_edited: number;
 	expires_at: number | null;
 	is_expired: number;
+	receipt_rank: number;
 }
 
 export interface ConversationRow {
@@ -23,6 +25,7 @@ export interface ConversationRow {
 }
 
 export function toMessage(row: MessageRow): Message {
+	const receipt = receiptFromRank(row.receipt_rank);
 	return {
 		id: row.id,
 		conversationId: row.conversation_id,
@@ -35,6 +38,9 @@ export function toMessage(row: MessageRow): Message {
 		isEdited: row.is_edited === 1,
 		...(row.expires_at === null ? {} : { expiresAt: row.expires_at }),
 		...(row.is_expired === 1 ? { isExpired: true } : {}),
+		// Absent rather than a defaulted state: a message nobody acknowledged, and a
+		// row cached before receipts were stored, both report "no receipt seen".
+		...(receipt === undefined ? {} : { receipt }),
 	};
 }
 

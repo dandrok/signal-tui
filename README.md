@@ -158,6 +158,9 @@ the last second of typing.
 - unread counts that clear when you open a conversation, and while you watch it
 - **read receipts**: the other side sees "read" when you open the chat, not when the
   message arrives
+- **delivery ticks**: your own messages show `✓` once the other side's device has one
+  and `✓✓` once they read it. The strongest receipt wins, so a delivery that arrives
+  after a read (a device that was offline) cannot take the second tick away.
 - delete-for-everyone, reflected in the cache
 - **disappearing messages**: a message whose timer runs out keeps its row so the
   thread keeps its shape, but its text and file references are deleted from the

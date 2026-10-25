@@ -61,6 +61,22 @@ for await (const line of console) {
 			method: "typing",
 			params: { envelope: { timestamp: 1, typingMessage: { action: "STARTED", timestamp: 1 } } },
 		});
+		// The other side acknowledging the message in the sync transcript above. A
+		// receipt names messages by timestamp and carries no conversation of its own.
+		notify({
+			sourceNumber: "+100****0009",
+			sourceUuid: "uuid-bob",
+			sourceName: "Bob",
+			sourceDevice: 1,
+			timestamp: 1_760_000_000_002,
+			receiptMessage: {
+				when: 1_760_000_000_002,
+				isDelivery: false,
+				isRead: true,
+				isViewed: false,
+				timestamps: [1_760_000_000_001],
+			},
+		});
 		continue;
 	}
 
