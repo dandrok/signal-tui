@@ -7,11 +7,10 @@ import type {
 	MessageId,
 } from "../../domain/types";
 import { SELF_AUTHOR_ID } from "../../domain/types";
-import { mapAttachments } from "./map-attachments";
 import { type MappedReceipt, mapReceipt } from "./map-receipt";
 import type { DataMessage, EditMessage, Envelope, SentMessage } from "./schemas";
 import { dataMessageSchema } from "./schemas";
-import { bodyOf, expiresAtOf, textOf } from "./text";
+import { contentOf, expiresAtOf, textOf } from "./text";
 
 export type ConversationKind = "direct" | "group";
 
@@ -174,12 +173,11 @@ function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
 			conversationId: target.id,
 			author: peerName(envelope),
 			...(peerId(envelope) === null ? {} : { authorId: peerId(envelope) as string }),
-			body: bodyOf(data),
 			sentAt: data.timestamp,
 			isOutgoing: false,
 			isDeleted: false,
 			...(expiresAtOf(data) === undefined ? {} : { expiresAt: expiresAtOf(data) as number }),
-			attachments: mapAttachments(data.attachments),
+			...contentOf(data),
 		},
 		conversation: {
 			id: target.id,
@@ -227,12 +225,11 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 			conversationId: target.id,
 			author: SELF_LABEL,
 			authorId: SELF_AUTHOR_ID,
-			body: bodyOf(sent),
 			sentAt: sent.timestamp,
 			isOutgoing: true,
 			isDeleted: false,
 			...(expiresAtOf(sent) === undefined ? {} : { expiresAt: expiresAtOf(sent) as number }),
-			attachments: mapAttachments(sent.attachments),
+			...contentOf(sent),
 		},
 		conversation: {
 			id: target.id,

@@ -47,7 +47,7 @@ describe("signal-cli adapter over a real child process", () => {
 			await backend.start();
 			await waitFor(() => messages.length > 0);
 
-			await waitFor(() => messages.length > 1);
+			await waitFor(() => messages.length > 2);
 
 			expect(messages[0]).toEqual({
 				id: "uuid-alice:1760000000000",
@@ -74,9 +74,24 @@ describe("signal-cli adapter over a real child process", () => {
 				isDeleted: false,
 				attachments: [],
 			});
+			// A message the sender marked view-once arrives with neither text nor files.
+			expect(messages[2]).toEqual({
+				id: "uuid-alice:1760000000003",
+				conversationId: "uuid-alice",
+				author: "Alice",
+				authorId: "uuid-alice",
+				body: "",
+				sentAt: 1_760_000_000_003,
+				isOutgoing: false,
+				isDeleted: false,
+				isViewOnce: true,
+				attachments: [],
+			});
 			// the peer also pushes a "typing" notification that must be ignored, then a
 			// receipt that must not be — it is the only path that puts a tick on screen
 			expect(kinds).toEqual([
+				"conversation-updated",
+				"message",
 				"conversation-updated",
 				"message",
 				"conversation-updated",

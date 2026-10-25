@@ -85,6 +85,12 @@ export interface Message {
 	 */
 	readonly receipt?: ReceiptState;
 	/**
+	 * True for a message the sender marked view-once. Their request outranks showing it:
+	 * the text and the file references are never written to the cache, so this row
+	 * records only that such a message arrived.
+	 */
+	readonly isViewOnce?: boolean;
+	/**
 	 * Optional so a caller that only cares about text is not forced to spell out
 	 * an empty list; `attachmentsOf` reads it without null checks.
 	 */

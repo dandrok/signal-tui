@@ -170,6 +170,9 @@ the last second of typing.
   Signal never echoes them back to the device that wrote them.
 - local full-text search over cached bodies (`/`)
 - files shown by name and size, with the caption when the sender wrote one
+- **view-once messages** are recorded but never kept: their text and file references
+  are not written to the cache or the search index, so the row says
+  `view-once message · not stored` and there is nothing to recover later
 - keyboard-first panes: the message window is measured in terminal rows, so a short
   terminal still shows the newest message rather than clipping it
 - history persisted across restarts
@@ -183,8 +186,10 @@ the last second of typing.
 - opening an attachment from the TUI (`xdg-open`), typing indicators, desktop
   notifications
 - history from before you linked this device
-- **view-once messages are cached like any other** — they are shown and stored
-  instead of being dropped, which is the opposite of what the sender asked for
+- **view-once messages are not shown at all**, only announced: this client keeps no copy,
+  and files are not rendered yet, so there is nothing to open. Note that `signal-cli`
+  still downloads the attachment to its own directory — the guarantee is about *this*
+  cache, not about the engine's storage
 - `doctor` and `link` are scripts, not subcommands: run them with Bun from a clone or
   from the installed package directory, since `signal-tui` exposes only the TUI
 

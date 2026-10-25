@@ -14,6 +14,7 @@ export interface MessageRow {
 	expires_at: number | null;
 	is_expired: number;
 	receipt_rank: number;
+	is_view_once: number;
 }
 
 export interface ConversationRow {
@@ -41,6 +42,7 @@ export function toMessage(row: MessageRow): Message {
 		// Absent rather than a defaulted state: a message nobody acknowledged, and a
 		// row cached before receipts were stored, both report "no receipt seen".
 		...(receipt === undefined ? {} : { receipt }),
+		...(row.is_view_once === 1 ? { isViewOnce: true } : {}),
 	};
 }
 

@@ -55,6 +55,29 @@ for await (const line of console) {
 				},
 			},
 		});
+		// A view-once photo: the sender asked for it not to be kept, so the adapter must
+		// hand over a row with no text and no file references.
+		notify({
+			sourceNumber: "+100****0000",
+			sourceUuid: "uuid-alice",
+			sourceName: "Alice",
+			sourceDevice: 1,
+			timestamp: 1_760_000_000_003,
+			dataMessage: {
+				timestamp: 1_760_000_000_003,
+				viewOnce: true,
+				attachments: [
+					{
+						id: "att-1",
+						contentType: "image/jpeg",
+						isVoiceNote: false,
+						filename: "/home/you/.local/share/signal-cli/attachments/secret.jpg",
+						size: 41_000,
+						caption: "burn after reading",
+					},
+				],
+			},
+		});
 		// A notification kind the adapter must ignore.
 		write({
 			jsonrpc: "2.0",

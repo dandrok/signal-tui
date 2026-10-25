@@ -149,17 +149,21 @@ export class SqliteMessageStore implements MessageStore {
 			number,
 			number,
 			number | null,
+			number,
 		];
 		const params: SaveParams = [
 			message.id,
 			message.conversationId,
 			message.author,
 			message.authorId ?? null,
-			message.body,
+			// A view-once message never keeps its text, whatever the caller handed over:
+			// the rule belongs where the bytes land, not only in the mapper.
+			message.isViewOnce === true ? "" : message.body,
 			message.sentAt,
 			message.isOutgoing ? 1 : 0,
 			message.isDeleted ? 1 : 0,
 			message.expiresAt ?? null,
+			message.isViewOnce === true ? 1 : 0,
 		];
 
 		// One write on the common path: a message seen once is inserted, and only a
@@ -172,8 +176,8 @@ export class SqliteMessageStore implements MessageStore {
 			// and loses whatever the replay was carrying.
 			const insertedRows = this.#db
 				.query<{ id: string }, SaveParams>(
-					`INSERT INTO messages (id, conversation_id, author, author_id, body, sent_at, is_outgoing, is_deleted, is_edited, expires_at)
-					 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, ?9)
+					`INSERT INTO messages (id, conversation_id, author, author_id, body, sent_at, is_outgoing, is_deleted, is_edited, expires_at, is_view_once)
+					 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, ?9, ?10)
 					 ON CONFLICT(id) DO NOTHING
 					 RETURNING id`,
 				)
@@ -197,6 +201,10 @@ export class SqliteMessageStore implements MessageStore {
 						               END,
 						        sent_at = ?6, is_outgoing = ?7,
 						        is_deleted = is_deleted | ?8,
+						        -- One-way like deletion: a view-once message stays marked, and the
+						        -- rows cached by an older release that did keep the text are
+						        -- scrubbed by the body branch above on the replay that names it.
+						        is_view_once = is_view_once | ?10,
 					        -- The deadline is the promise made when the message was stored.
 					        -- A replay may supply one where none was known (NULL), and may
 					        -- never push out one that exists: that would extend the lifetime
@@ -210,11 +218,15 @@ export class SqliteMessageStore implements MessageStore {
 			// Files follow the same rule: a tombstone keeps none, whether it was deleted or
 			// expired, or a replay would put the rows back on a message that is gone.
 			const row = this.#db
-				.query<{ is_deleted: number; is_expired: number }, [string]>(
-					"SELECT is_deleted, is_expired FROM messages WHERE id = ?1",
+				.query<{ is_deleted: number; is_expired: number; is_view_once: number }, [string]>(
+					"SELECT is_deleted, is_expired, is_view_once FROM messages WHERE id = ?1",
 				)
 				.get(message.id);
-			if (row === null || (row.is_deleted !== 1 && row.is_expired !== 1)) {
+			if (row !== null && row.is_view_once === 1) {
+				// A view-once message keeps no file rows at all: the sender asked for the
+				// content to be seen once, and this cache never held it.
+				deleteAttachments(this.#db, message.id);
+			} else if (row === null || (row.is_deleted !== 1 && row.is_expired !== 1)) {
 				replaceAttachments(this.#db, message);
 			}
 			return changes;

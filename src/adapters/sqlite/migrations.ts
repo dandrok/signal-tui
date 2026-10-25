@@ -123,4 +123,16 @@ export const migrations: readonly Migration[] = [
 			CREATE INDEX messages_receipts ON messages(sent_at) WHERE is_outgoing = 1;
 		`,
 	},
+	{
+		version: 7,
+		// A view-once message is the sender asking that it not be kept, so its text and
+		// files are never written: the column records that such a message arrived, and
+		// the row keeps the thread's shape. Enforced on write as well as in the mapper,
+		// because a retention rule that only one layer knows about is one adapter away
+		// from leaking. Rows cached before this migration cannot be identified as
+		// view-once after the fact — there is nothing in them that says so.
+		sql: `
+			ALTER TABLE messages ADD COLUMN is_view_once INTEGER NOT NULL DEFAULT 0;
+		`,
+	},
 ];
