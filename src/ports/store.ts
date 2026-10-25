@@ -4,6 +4,7 @@ import type {
 	EditAuthor,
 	Message,
 	MessageId,
+	Reaction,
 	ReceiptState,
 } from "../domain/types";
 
@@ -80,6 +81,20 @@ export interface MessageWriter {
 		timestamps: readonly number[],
 		state: ReceiptState,
 	): Promise<readonly ConversationId[]>;
+	/**
+	 * Adds, replaces or removes one person's reaction on a cached message, identified by
+	 * the timestamp it was sent at. Resolves false when that message is not cached — a
+	 * reaction to something we never stored is not an error, and must not invent a row.
+	 *
+	 * One reaction per person per message: a second emoji from the same author replaces
+	 * the first, and `isRemove` takes it away. Deleted and expired messages take none.
+	 */
+	applyReaction(
+		conversationId: ConversationId,
+		targetSentAt: number,
+		reaction: Reaction,
+		isRemove: boolean,
+	): Promise<boolean>;
 }
 
 export interface MessageStore extends MessageReader, MessageWriter {}

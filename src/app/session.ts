@@ -59,6 +59,10 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 	};
 
 	const apply = async (event: BackendEvent): Promise<void> => {
+		// Everything here changes the cache except one case: a reaction that repeats what is
+		// stored, or names a message we do not have. Redrawing for it would be a full reload
+		// of the pane per replayed envelope after a reconnect.
+		let changed = true;
 		switch (event.kind) {
 			case "conversation-updated":
 				await store.upsertConversation(event.conversation);
@@ -77,6 +81,20 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 			case "message-deleted":
 				await store.markMessageDeleted(event.conversationId, event.messageId);
 				break;
+			case "reaction":
+				// A reaction is about a message the cache already has; when it is not there,
+				// the store answers false and nothing is invented.
+				changed = await store.applyReaction(
+					event.conversationId,
+					event.targetSentAt,
+					{
+						emoji: event.emoji,
+						author: event.reactor.label,
+						authorId: event.reactor.id ?? event.reactor.label,
+					},
+					event.isRemove,
+				);
+				break;
 			case "receipt":
 				// The tick is a cache fact, not a render fact: it has to survive a restart,
 				// which is why the store takes it rather than the pane remembering it.
@@ -86,8 +104,10 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 		// Every envelope is a chance to take out what has expired while the app runs.
 		// Without this, a timer would only be honoured when a conversation is opened —
 		// and a message nobody looks at would keep its text on disk indefinitely.
-		await store.purgeExpired(now());
-		notify();
+		const purged = await store.purgeExpired(now());
+		if (changed || purged > 0) {
+			notify();
+		}
 	};
 
 	// Subscribed before start() so no already-delivered envelope is missed.

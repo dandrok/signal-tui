@@ -9,7 +9,7 @@ import { SqliteMessageStore } from "../src/adapters/sqlite/store";
 /**
  * A cache written by an older release has to open without losing anything. The unit
  * tests all start from an empty file, which is the one case an upgrade never sees, so
- * this builds a v6 database the way 0.0.6 left it and opens it with today's code.
+ * this builds a v7 database the way 0.0.7 left it and opens it with today's code.
  */
 const directories: string[] = [];
 
@@ -27,7 +27,7 @@ afterEach(() => {
 
 const writeOldCache = (path: string): void => {
 	const database = new Database(path, { create: true });
-	for (const migration of migrations.filter((entry) => entry.version <= 6)) {
+	for (const migration of migrations.filter((entry) => entry.version <= 7)) {
 		database.exec(migration.sql);
 		database.exec(`PRAGMA user_version = ${migration.version}`);
 	}
@@ -49,7 +49,7 @@ describe("upgrading a cache written by an older release", () => {
 		writeOldCache(path);
 
 		const store = new SqliteMessageStore({ path });
-		expect(store.schemaVersion).toBe(7);
+		expect(store.schemaVersion).toBe(8);
 
 		const [migrated] = await store.listMessages("uuid-alice");
 		expect(migrated?.body).toBe("written by 0.0.4");
@@ -63,6 +63,8 @@ describe("upgrading a cache written by an older release", () => {
 		expect(migrated?.receipt).toBeUndefined();
 		// And a row cached before view-once was recognised must not claim to be one.
 		expect(migrated?.isViewOnce).toBeUndefined();
+		// And an old row starts with no reactions rather than an empty list.
+		expect(migrated?.reactions).toBeUndefined();
 		expect(await store.expiresInSeconds("uuid-alice")).toBeUndefined();
 		store.close();
 	});

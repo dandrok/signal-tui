@@ -105,7 +105,12 @@ export function purgeExpiredRows(db: Database, now: number, batch = PURGE_BATCH)
 	return db.transaction(() => {
 		let purged = 0;
 		for (;;) {
-			// Same subquery for both statements, so a batch's files go with its text.
+			// Same subquery for every statement, so a batch's files and reactions go with
+			// its text instead of outliving it.
+			db.query<null, [number, number]>(
+				`DELETE FROM reactions
+				  WHERE message_id IN (SELECT id FROM messages WHERE rowid IN (${due}))`,
+			).run(now, batch);
 			db.query<null, [number, number]>(
 				`DELETE FROM attachments
 				  WHERE message_id IN (SELECT id FROM messages WHERE rowid IN (${due}))`,

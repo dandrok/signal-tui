@@ -170,6 +170,8 @@ the last second of typing.
   Signal never echoes them back to the device that wrote them.
 - local full-text search over cached bodies (`/`)
 - files shown by name and size, with the caption when the sender wrote one
+- **reactions**: an emoji a peer adds is shown on the message's author row (`👍 2`), a
+  second emoji from the same person replaces the first, and a removal takes it away
 - **view-once messages** are recorded but never kept: their text and file references
   are not written to the cache or the search index, so the row says
   `view-once message · not stored` and there is nothing to recover later
@@ -182,7 +184,9 @@ the last second of typing.
 - **Your own edits made on another device** are not applied here — those arrive on a
   second path (`syncMessage.sentMessage`) that is not mapped yet
 - scrollback beyond the messages a conversation holds in the window
-- reactions, replies and quotes (parsed, not surfaced)
+- **sending a reaction** from the TUI: received ones are shown, but there is no key or
+  mode for adding your own yet
+- replies and quotes (parsed, not surfaced)
 - opening an attachment from the TUI (`xdg-open`), typing indicators, desktop
   notifications
 - history from before you linked this device

@@ -33,6 +33,7 @@ describe("signal-cli adapter over a real child process", () => {
 		const messages: Message[] = [];
 		const kinds: BackendEvent["kind"][] = [];
 		const receipts: Array<{ timestamps: readonly number[]; state: string }> = [];
+		const reactions: Array<{ targetSentAt: number; emoji: string; isRemove: boolean }> = [];
 		backend.subscribe((event) => {
 			kinds.push(event.kind);
 			if (event.kind === "message") {
@@ -40,6 +41,13 @@ describe("signal-cli adapter over a real child process", () => {
 			}
 			if (event.kind === "receipt") {
 				receipts.push({ timestamps: event.timestamps, state: event.state });
+			}
+			if (event.kind === "reaction") {
+				reactions.push({
+					targetSentAt: event.targetSentAt,
+					emoji: event.emoji,
+					isRemove: event.isRemove,
+				});
 			}
 		});
 
@@ -96,9 +104,16 @@ describe("signal-cli adapter over a real child process", () => {
 				"message",
 				"conversation-updated",
 				"message",
+				"reaction",
 				"receipt",
 			]);
 			expect(receipts).toEqual([{ timestamps: [1_760_000_000_001], state: "read" }]);
+			// A reaction names an existing message and carries none of its own: the three
+			// messages above are still all that arrived.
+			expect(reactions).toEqual([
+				{ targetSentAt: 1_760_000_000_000, emoji: "👍", isRemove: false },
+			]);
+			expect(messages).toHaveLength(3);
 
 			await backend.sendMessage("uuid-alice", "hi back");
 			await waitFor(() => existsSync(capture) && readFileSync(capture, "utf8").trim().length > 0);

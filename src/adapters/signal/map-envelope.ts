@@ -7,12 +7,22 @@ import type {
 	MessageId,
 } from "../../domain/types";
 import { SELF_AUTHOR_ID } from "../../domain/types";
+import type { MappedReaction } from "./map-reaction";
+import { mapReaction } from "./map-reaction";
 import { type MappedReceipt, mapReceipt } from "./map-receipt";
+import {
+	type ConversationKind,
+	conversationTarget,
+	groupTarget,
+	peerId,
+	peerName,
+} from "./map-target";
 import type { DataMessage, EditMessage, Envelope, SentMessage } from "./schemas";
 import { dataMessageSchema } from "./schemas";
 import { contentOf, expiresAtOf, textOf } from "./text";
 
-export type ConversationKind = "direct" | "group";
+/** Reactor identity for our own reactions, echoed to this device as a transcript. */
+const SELF_REACTOR: EditAuthor = { id: SELF_AUTHOR_ID, label: SELF_LABEL };
 
 /** Identity of a message that a `remoteDelete` refers to. */
 export interface DeletedMessage {
@@ -45,52 +55,8 @@ export interface MappedEnvelope {
 	readonly deleted: DeletedMessage | null;
 	readonly edited: EditedMessage | null;
 	readonly receipt: MappedReceipt | null;
-}
-
-/** Stable conversation key for a peer, preferring the UUID (numbers can change). */
-export function peerId(envelope: Envelope): string | null {
-	return envelope.sourceUuid ?? envelope.sourceNumber ?? envelope.source ?? null;
-}
-
-/** Human label for a peer, falling back through the identifiers we have. */
-export function peerName(envelope: Envelope): string {
-	return (
-		envelope.sourceName ??
-		envelope.sourceNumber ??
-		envelope.sourceUuid ??
-		envelope.source ??
-		"unknown"
-	);
-}
-
-interface Target {
-	readonly id: ConversationId;
-	/**
-	 * Empty when the envelope does not name the conversation — a sync transcript
-	 * only carries the destination id, and guessing would overwrite a name learned
-	 * from an earlier incoming message.
-	 */
-	readonly name: string;
-	readonly kind: ConversationKind;
-}
-
-/**
- * Where a message belongs: a group message is keyed by the group id, not by the
- * sender, otherwise every member's messages would open a separate conversation.
- */
-export function conversationTarget(envelope: Envelope): Target | null {
-	const group = envelope.dataMessage?.groupInfo;
-	if (group !== undefined) {
-		// Blank when unnamed: the stores treat a blank name as "unknown" and keep a
-		// name learned earlier, where a placeholder like "Group" would overwrite it.
-		return { id: group.groupId, name: group.groupName ?? "", kind: "group" };
-	}
-
-	const id = peerId(envelope);
-	if (id === null) {
-		return null;
-	}
-	return { id, name: peerName(envelope), kind: "direct" };
+	/** A reaction on an existing message; never a message of its own. */
+	readonly reaction: MappedReaction | null;
 }
 
 const EMPTY: MappedEnvelope = {
@@ -100,12 +66,8 @@ const EMPTY: MappedEnvelope = {
 	deleted: null,
 	edited: null,
 	receipt: null,
+	reaction: null,
 };
-
-const groupTarget = (groupInfo: DataMessage["groupInfo"]): Target | null =>
-	groupInfo === undefined
-		? null
-		: { id: groupInfo.groupId, name: groupInfo.groupName ?? "", kind: "group" };
 
 /** Incoming message: the sender identifies the conversation. */
 /**
@@ -152,6 +114,16 @@ function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
 
 	if (target === null) {
 		return EMPTY;
+	}
+
+	// A reaction rides inside a data message but is not one: treating it as a message
+	// would leave a blank row in the thread for every emoji a peer adds.
+	if (data.reaction !== undefined) {
+		const reaction = mapReaction(target, data.reaction, {
+			id: peerId(envelope),
+			label: peerName(envelope),
+		});
+		return reaction === null ? EMPTY : { ...EMPTY, conversationKind: target.kind, reaction };
 	}
 
 	// A delete-for-everyone names the message it removes; it is not a new message.
@@ -205,6 +177,12 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 
 	if (target === null) {
 		return EMPTY;
+	}
+
+	// Our own reaction, made on another device.
+	if (sent.reaction !== undefined) {
+		const reaction = mapReaction(target, sent.reaction, SELF_REACTOR);
+		return reaction === null ? EMPTY : { ...EMPTY, conversationKind: target.kind, reaction };
 	}
 
 	if (sent.remoteDelete !== undefined) {

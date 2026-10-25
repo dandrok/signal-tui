@@ -5,6 +5,7 @@ import type {
 	EditAuthor,
 	Message,
 	MessageId,
+	Reaction,
 	ReceiptState,
 } from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
@@ -12,17 +13,20 @@ import { demoConversations, demoMessages } from "./demo-data";
 
 const DEFAULT_LIMIT = 200;
 
-/** Same shape the SQLite adapter returns: always an array, never a missing field. */
-const withFiles = (message: Message): Message => ({
+/** Same shape the SQLite adapter returns: always a file array, reactions only when present. */
+const hydrate = (message: Message, reactions: readonly Reaction[] | undefined): Message => ({
 	...message,
 	isEdited: message.isEdited === true,
 	attachments: message.attachments ?? [],
+	...(reactions === undefined || reactions.length === 0 ? {} : { reactions }),
 });
 
 /** Test/demo store. Shape-compatible with the SQLite adapter. */
 export class InMemoryStore implements MessageStore {
 	#conversations: Conversation[] = [...demoConversations];
 	#messages: Message[] = [...demoMessages];
+	/** Keyed by message id: reactions arrive after the message, one list per message. */
+	#reactions = new Map<string, Reaction[]>();
 
 	async listConversations(): Promise<readonly Conversation[]> {
 		return [...this.#conversations].sort((a, b) => b.lastActivityAt - a.lastActivityAt);
@@ -35,11 +39,13 @@ export class InMemoryStore implements MessageStore {
 		return this.#messages
 			.filter((message) => message.conversationId === conversationId)
 			.slice(-limit)
-			.map(withFiles);
+			.map((message) => hydrate(message, this.#reactions.get(message.id)));
 	}
 
 	async listAllMessages(conversationId: ConversationId): Promise<readonly Message[]> {
-		return this.#messages.filter((entry) => entry.conversationId === conversationId).map(withFiles);
+		return this.#messages
+			.filter((entry) => entry.conversationId === conversationId)
+			.map((entry) => hydrate(entry, this.#reactions.get(entry.id)));
 	}
 
 	async search(query: string, limit = 20): Promise<readonly Message[]> {
@@ -52,7 +58,7 @@ export class InMemoryStore implements MessageStore {
 				// A deleted message must not be discoverable through search.
 				.filter((message) => !message.isDeleted && message.body.toLowerCase().includes(needle))
 				.slice(0, limit)
-				.map(withFiles)
+				.map((message) => hydrate(message, this.#reactions.get(message.id)))
 		);
 	}
 
@@ -204,11 +210,57 @@ export class InMemoryStore implements MessageStore {
 				return message;
 			}
 			purged += 1;
-			// Text and files both go: a message that is gone should not still name the
-			// path of the photo it carried.
+			// Text, files and reactions all go: a message that is gone should not still name
+			// the path of the photo it carried, nor keep a 👍 on it.
+			this.#reactions.delete(message.id);
 			return { ...message, body: "", attachments: [], isExpired: true };
 		});
 		return purged;
+	}
+
+	async applyReaction(
+		conversationId: ConversationId,
+		targetSentAt: number,
+		reaction: Reaction,
+		isRemove: boolean,
+	): Promise<boolean> {
+		// Same rules as the SQLite adapter: the message is found by conversation and
+		// timestamp, one reaction per person replaces, removal deletes, and a message that
+		// is gone takes none.
+		const target = this.#messages.find(
+			(entry) =>
+				entry.conversationId === conversationId &&
+				entry.sentAt === targetSentAt &&
+				!entry.isDeleted &&
+				entry.isExpired !== true,
+		);
+		if (target === undefined) {
+			return false;
+		}
+
+		const existing = this.#reactions.get(target.id) ?? [];
+		const mine = existing.find((entry) => entry.authorId === reaction.authorId);
+		if (isRemove) {
+			if (mine === undefined) {
+				return false;
+			}
+			const left = existing.filter((entry) => entry.authorId !== reaction.authorId);
+			if (left.length === 0) {
+				this.#reactions.delete(target.id);
+			} else {
+				this.#reactions.set(target.id, left);
+			}
+			return true;
+		}
+
+		if (mine !== undefined && mine.emoji === reaction.emoji) {
+			return false;
+		}
+		this.#reactions.set(target.id, [
+			...existing.filter((entry) => entry.authorId !== reaction.authorId),
+			reaction,
+		]);
+		return true;
 	}
 
 	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {
@@ -220,6 +272,7 @@ export class InMemoryStore implements MessageStore {
 		// Attachments go with the text: a deleted message should stop pointing at
 		// files, same as the SQLite adapter drops their rows.
 		this.#messages[index] = { ...existing, isDeleted: true, body: "", attachments: [] };
+		this.#reactions.delete(messageId);
 	}
 
 	async applyReceipt(

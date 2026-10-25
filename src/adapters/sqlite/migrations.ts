@@ -135,4 +135,24 @@ export const migrations: readonly Migration[] = [
 			ALTER TABLE messages ADD COLUMN is_view_once INTEGER NOT NULL DEFAULT 0;
 		`,
 	},
+	{
+		version: 8,
+		// Reactions are their own rows rather than a JSON column or extra message: they
+		// arrive as events about a message that already exists, so the message row must
+		// not be rewritten each time one lands, and the foreign key means a deleted or
+		// swept message takes its reactions with it.
+		//
+		// The primary key is `(message_id, author_id)` because Signal clients hold one
+		// reaction per person per message: reacting again replaces the emoji instead of
+		// stacking a second one.
+		sql: `
+			CREATE TABLE reactions (
+				message_id TEXT    NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+				author_id  TEXT    NOT NULL,
+				author     TEXT    NOT NULL,
+				emoji      TEXT    NOT NULL,
+				PRIMARY KEY (message_id, author_id)
+			);
+		`,
+	},
 ];

@@ -1,5 +1,6 @@
 import wrapAnsi from "wrap-ansi";
 import { displayLine, displayText } from "./display";
+import { reactionMarker } from "./reactions";
 import { receiptMarker } from "./receipts";
 import type { Attachment, Conversation, Message } from "./types";
 
@@ -97,8 +98,18 @@ export function showsBody(message: Message): boolean {
 export const editedMarker = (message: Message): string =>
 	message.isEdited === true ? " · edited" : "";
 
+/**
+ * Everything drawn after the author on a message's first row: corrected, delivered,
+ * reacted. One composer, because the row is measured from `headerLine` and drawn from
+ * the same pieces — two copies is how a marker ends up measured but not drawn, or the
+ * other way round.
+ */
+export function headerSuffix(message: Message): string {
+	return `${editedMarker(message)}${receiptMarker(message)}${reactionMarker(message)}`;
+}
+
 export function headerLine(message: Message, clock: Clock): string {
-	return `${clock(message.sentAt)} ${describeAuthor(message)}${editedMarker(message)}${receiptMarker(message)}`;
+	return `${clock(message.sentAt)} ${describeAuthor(message)}${headerSuffix(message)}`;
 }
 
 /** One attachment exactly as the pane draws it. */

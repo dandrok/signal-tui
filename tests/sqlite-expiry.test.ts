@@ -227,6 +227,7 @@ describe("purgeExpiredRows batching", () => {
 			"CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT, body TEXT, sent_at INTEGER, expires_at INTEGER, is_expired INTEGER NOT NULL DEFAULT 0)",
 		);
 		db.run("CREATE TABLE attachments (message_id TEXT, attachment_id TEXT)");
+		db.run("CREATE TABLE reactions (message_id TEXT, author_id TEXT, emoji TEXT)");
 		for (let index = 0; index < total; index++) {
 			db.run(
 				"INSERT INTO messages (id, conversation_id, body, sent_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -235,6 +236,11 @@ describe("purgeExpiredRows batching", () => {
 			db.run("INSERT INTO attachments (message_id, attachment_id) VALUES (?1, ?2)", [
 				`m${index}`,
 				`a${index}`,
+			]);
+			db.run("INSERT INTO reactions (message_id, author_id, emoji) VALUES (?1, ?2, ?3)", [
+				`m${index}`,
+				"uuid-alice",
+				"👍",
 			]);
 		}
 		return db;
@@ -251,6 +257,9 @@ describe("purgeExpiredRows batching", () => {
 		expect(left?.n).toBe(0);
 		const files = db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM attachments").get();
 		expect(files?.n).toBe(0);
+		// A reaction to text that no longer exists goes with it.
+		const reactions = db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM reactions").get();
+		expect(reactions?.n).toBe(0);
 		db.close();
 	});
 

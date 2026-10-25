@@ -5,6 +5,7 @@ import type {
 	EditAuthor,
 	Message,
 	MessageId,
+	Reaction,
 	ReceiptState,
 } from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
@@ -12,6 +13,7 @@ import { deleteAttachments, loadAttachments, replaceAttachments } from "./attach
 import { applyEditRow, applyReceiptRows, purgeExpiredRows } from "./message-rules";
 import { migrations } from "./migrations";
 import { restrictCachePermissions } from "./private-cache";
+import { applyReactionRow, deleteReactions, loadReactions } from "./reactions";
 import { readAllMessages, readConversations, readMessages, searchMessages } from "./read-messages";
 import { toConversation, toMessage } from "./rows";
 
@@ -75,15 +77,15 @@ export class SqliteMessageStore implements MessageStore {
 		if (limit <= 0) {
 			return [];
 		}
-		return this.#withAttachments(readMessages(this.#db, conversationId, limit).map(toMessage));
+		return this.#hydrate(readMessages(this.#db, conversationId, limit).map(toMessage));
 	}
 
 	async listAllMessages(conversationId: ConversationId): Promise<readonly Message[]> {
-		return this.#withAttachments(readAllMessages(this.#db, conversationId).map(toMessage));
+		return this.#hydrate(readAllMessages(this.#db, conversationId).map(toMessage));
 	}
 
 	async search(query: string, limit = this.#searchLimit): Promise<readonly Message[]> {
-		return this.#withAttachments(searchMessages(this.#db, query, limit).map(toMessage));
+		return this.#hydrate(searchMessages(this.#db, query, limit).map(toMessage));
 	}
 
 	async upsertConversation(conversation: Conversation): Promise<void> {
@@ -258,6 +260,15 @@ export class SqliteMessageStore implements MessageStore {
 		return applyReceiptRows(this.#db, timestamps, state);
 	}
 
+	async applyReaction(
+		conversationId: ConversationId,
+		targetSentAt: number,
+		reaction: Reaction,
+		isRemove: boolean,
+	): Promise<boolean> {
+		return applyReactionRow(this.#db, conversationId, targetSentAt, reaction, isRemove);
+	}
+
 	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {
 		this.#db.transaction(() => {
 			this.#db
@@ -267,8 +278,10 @@ export class SqliteMessageStore implements MessageStore {
 				)
 				.run(messageId, conversationId);
 			// The files on disk are signal-cli's, but the references are ours and a
-			// deleted message should not keep pointing at them.
+			// deleted message should not keep pointing at them — nor keep reactions to
+			// text that is gone.
 			deleteAttachments(this.#db, messageId);
+			deleteReactions(this.#db, messageId);
 		})();
 	}
 
@@ -276,20 +289,25 @@ export class SqliteMessageStore implements MessageStore {
 		this.#db.close();
 	}
 
-	#withAttachments(messages: readonly Message[]): readonly Message[] {
+	#hydrate(messages: readonly Message[]): readonly Message[] {
 		if (messages.length === 0) {
 			return messages;
 		}
-		const byMessage = loadAttachments(
-			this.#db,
-			messages.map((message) => message.id),
-		);
-		// Always an array on the way out, even when empty: a caller reading a message
-		// should not have to distinguish "no files" from "field absent".
-		return messages.map((message) => ({
-			...message,
-			attachments: byMessage.get(message.id) ?? [],
-		}));
+		const ids = messages.map((message) => message.id);
+		const files = loadAttachments(this.#db, ids);
+		const reactions = loadReactions(this.#db, ids);
+		return messages.map((message) => {
+			const own = reactions.get(message.id);
+			return {
+				...message,
+				// Files are always an array on the way out, even when empty: a caller reading
+				// a message should not have to distinguish "no files" from "field absent".
+				attachments: files.get(message.id) ?? [],
+				// Reactions are absent when nobody reacted: unlike a file list, they accumulate
+				// after the message arrives, and an empty array on every row would be noise.
+				...(own === undefined ? {} : { reactions: own }),
+			};
+		});
 	}
 
 	#migrate(): void {

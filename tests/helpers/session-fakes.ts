@@ -1,5 +1,11 @@
 import { strongerReceipt } from "../../src/domain/receipts";
-import type { Conversation, EditAuthor, Message, ReceiptState } from "../../src/domain/types";
+import type {
+	Conversation,
+	EditAuthor,
+	Message,
+	Reaction,
+	ReceiptState,
+} from "../../src/domain/types";
 import type { BackendEvent, SignalBackend } from "../../src/ports/backend";
 import type { MessageStore } from "../../src/ports/store";
 
@@ -128,6 +134,27 @@ export class RecordingStore implements MessageStore {
 			);
 		}
 		return purged;
+	}
+
+	readonly reactionChanges: Array<{ conversationId: string; targetSentAt: number }> = [];
+
+	/** Records the call and answers whether a message was there to react to. */
+	async applyReaction(
+		conversationId: string,
+		targetSentAt: number,
+		reaction: Reaction,
+		isRemove: boolean,
+	): Promise<boolean> {
+		this.#record(
+			`reaction:${conversationId}:${targetSentAt}:${reaction.emoji}:${isRemove ? "remove" : "add"}`,
+		);
+		const entries = this.messages.get(conversationId) ?? [];
+		const target = entries.find((entry) => entry.sentAt === targetSentAt);
+		if (target === undefined) {
+			return false;
+		}
+		this.reactionChanges.push({ conversationId, targetSentAt });
+		return true;
 	}
 
 	async markMessageDeleted(_conversationId: string, messageId: string): Promise<void> {
