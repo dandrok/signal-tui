@@ -39,6 +39,11 @@ export const demoMessages: readonly Message[] = [
 		sentAt: minutes(3),
 		isOutgoing: false,
 		isDeleted: false,
+		// Two people agreeing, so the demo shows a counted marker.
+		reactions: [
+			{ emoji: "👍", author: "Adam", authorId: "uuid-adam" },
+			{ emoji: "👍", author: "You", authorId: "self" },
+		],
 	},
 	{
 		id: "m-4",

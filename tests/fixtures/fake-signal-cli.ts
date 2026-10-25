@@ -78,6 +78,24 @@ for await (const line of console) {
 				],
 			},
 		});
+		// A reaction on the first message: an event about a message that already exists,
+		// which must not be stored as a message of its own.
+		notify({
+			sourceNumber: "+100****0000",
+			sourceUuid: "uuid-alice",
+			sourceName: "Alice",
+			sourceDevice: 1,
+			timestamp: 1_760_000_000_004,
+			dataMessage: {
+				timestamp: 1_760_000_000_004,
+				reaction: {
+					emoji: "👍",
+					targetSentTimestamp: 1_760_000_000_000,
+					targetAuthorUuid: "self",
+					isRemove: false,
+				},
+			},
+		});
 		// A notification kind the adapter must ignore.
 		write({
 			jsonrpc: "2.0",

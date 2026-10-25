@@ -33,6 +33,18 @@ export type BackendEvent =
 			readonly kind: "receipt";
 			readonly timestamps: readonly number[];
 			readonly state: ReceiptState;
+	  }
+	| {
+			/**
+			 * Someone reacted to (or removed a reaction from) a message we already have,
+			 * naming it by its timestamp. Never inserts a message of its own.
+			 */
+			readonly kind: "reaction";
+			readonly conversationId: ConversationId;
+			readonly targetSentAt: number;
+			readonly reactor: EditAuthor;
+			readonly emoji: string;
+			readonly isRemove: boolean;
 	  };
 
 /**

@@ -5,13 +5,12 @@ import {
 	bodyForDisplay,
 	describeAuthor,
 	displayName,
-	editedMarker,
 	headerLine,
+	headerSuffix,
 	messageRowCount,
 	showsBody,
 	textForDisplay,
 } from "../domain/format";
-import { receiptMarker } from "../domain/receipts";
 import type { Conversation, Message } from "../domain/types";
 
 export interface MessagePaneProps {
@@ -140,9 +139,9 @@ function MessageRow({
 	readonly clock: Clock;
 }) {
 	const fullHeader = headerLine(message, clock);
-	// One composition, so the measured string and the drawn string cannot drift: the
-	// ticks ride the author row, which the window already budgeted for.
-	const marker = receiptMarker(message);
+	// The suffix is one string for measurement and render: `headerLine` composes exactly
+	// clock + space + author + suffix, so a marker cannot be counted and not drawn.
+	const suffix = headerSuffix(message);
 	const header = textForDisplay(fullHeader, rowBudget, innerWidth);
 	const files = attachmentsForDisplay(message, Math.max(0, rowBudget - header.rows), innerWidth);
 	const body = bodyForDisplay(
@@ -157,8 +156,7 @@ function MessageRow({
 				<Text>
 					<Text dimColor>{clock(message.sentAt)} </Text>
 					<Text bold>{describeAuthor(message)}</Text>
-					{editedMarker(message) === "" ? null : <Text dimColor>{editedMarker(message)}</Text>}
-					{marker === "" ? null : <Text dimColor>{marker}</Text>}
+					{suffix === "" ? null : <Text dimColor>{suffix}</Text>}
 				</Text>
 			) : (
 				<Text>{header.text}</Text>

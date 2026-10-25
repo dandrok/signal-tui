@@ -77,6 +77,20 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 			case "message-deleted":
 				await store.markMessageDeleted(event.conversationId, event.messageId);
 				break;
+			case "reaction":
+				// A reaction is about a message the cache already has; when it is not there,
+				// the store answers false and nothing is invented.
+				await store.applyReaction(
+					event.conversationId,
+					event.targetSentAt,
+					{
+						emoji: event.emoji,
+						author: event.reactor.label,
+						authorId: event.reactor.id ?? event.reactor.label,
+					},
+					event.isRemove,
+				);
+				break;
 			case "receipt":
 				// The tick is a cache fact, not a render fact: it has to survive a restart,
 				// which is why the store takes it rather than the pane remembering it.

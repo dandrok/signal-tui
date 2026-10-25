@@ -185,6 +185,16 @@ export class SignalCliBackend implements SignalBackend {
 				messageId: mapped.deleted.messageId,
 			});
 		}
+		if (mapped.reaction !== null) {
+			this.#emit({
+				kind: "reaction",
+				conversationId: mapped.reaction.conversationId,
+				targetSentAt: mapped.reaction.targetSentAt,
+				reactor: mapped.reaction.reactor,
+				emoji: mapped.reaction.emoji,
+				isRemove: mapped.reaction.isRemove,
+			});
+		}
 		if (mapped.receipt !== null) {
 			this.#emit({
 				kind: "receipt",

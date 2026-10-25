@@ -29,6 +29,19 @@ export interface EditAuthor {
 export const SELF_AUTHOR_ID = "self";
 
 /**
+ * One reaction on a message: what was added, and who added it. Signal clients hold a
+ * single reaction per person per message, so a new emoji from the same person replaces
+ * the previous one and a removal takes it away.
+ */
+export interface Reaction {
+	readonly emoji: string;
+	/** Display label of the reactor, for a pane that only needs a count. */
+	readonly author: string;
+	/** Stable identity of the reactor — the key a replacement or removal matches. */
+	readonly authorId: string;
+}
+
+/**
  * How far one of our own messages has travelled, as reported by the other side:
  * their device has it ("delivered"), they opened the conversation ("read"), or they
  * opened a view-once message ("viewed").
@@ -90,6 +103,11 @@ export interface Message {
 	 * records only that such a message arrived.
 	 */
 	readonly isViewOnce?: boolean;
+	/**
+	 * Reactions left on this message, one per person. Absent when nobody reacted, and
+	 * absent on rows cached before reactions were mapped.
+	 */
+	readonly reactions?: readonly Reaction[];
 	/**
 	 * Optional so a caller that only cares about text is not forced to spell out
 	 * an empty list; `attachmentsOf` reads it without null checks.

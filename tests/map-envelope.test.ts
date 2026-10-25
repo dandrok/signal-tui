@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-	conversationTarget,
-	mapEnvelope,
-	peerId,
-	peerName,
-} from "../src/adapters/signal/map-envelope";
+import { mapEnvelope } from "../src/adapters/signal/map-envelope";
+import { conversationTarget, peerId, peerName } from "../src/adapters/signal/map-target";
 import type { Envelope } from "../src/adapters/signal/schemas";
 
 const envelope = (overrides: Partial<Envelope> = {}): Envelope => ({
@@ -249,6 +245,7 @@ describe("mapEnvelope", () => {
 			deleted: null,
 			edited: null,
 			receipt: null,
+			reaction: null,
 		});
 	});
 
@@ -261,6 +258,7 @@ describe("mapEnvelope", () => {
 			deleted: null,
 			edited: null,
 			receipt: null,
+			reaction: null,
 		});
 	});
 
@@ -273,6 +271,7 @@ describe("mapEnvelope", () => {
 			deleted: null,
 			edited: null,
 			receipt: null,
+			reaction: null,
 		});
 	});
 });
