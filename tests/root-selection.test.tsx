@@ -88,7 +88,9 @@ describe("the pane follows the person, not the row", () => {
 		await tick();
 
 		const frame = plain(lastFrame() ?? "");
-		expect(frame).toContain("Note to self");
+		// The note thread's own body, not its name: "Note to self" is in the list
+		// whichever conversation is open, so asserting it would pass on the wrong one.
+		expect(frame).toContain("FTS5 index before v0.1");
 		expect(frame).not.toContain("can we ship before friday?");
 		unmount();
 	});

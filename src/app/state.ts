@@ -243,6 +243,18 @@ export function selectedIndex(state: AppState): number {
 	return state.conversations.findIndex((entry) => entry.id === state.selectedId);
 }
 
+/**
+ * Id → row for one conversation list, for callers that resolve the selection on every
+ * frame. Kept here as a pure function so what a row *is* stays in one place; the UI
+ * decides when to rebuild it (memoized on the list, not on each keystroke), which is
+ * what keeps a redraw from rescanning the whole list.
+ */
+export function conversationRows(
+	conversations: readonly Conversation[],
+): ReadonlyMap<ConversationId, number> {
+	return new Map(conversations.map((entry, position) => [entry.id, position] as const));
+}
+
 export function selectedMessages(state: AppState): readonly Message[] {
 	const conversation = selectedConversation(state);
 	if (!conversation) {
