@@ -71,6 +71,24 @@ describe("reaction markers", () => {
 		expect(markers).toContain("👍");
 	});
 
+	test("a multi-part emoji is never cut in the middle", () => {
+		// Eleven UTF-16 units, one symbol. A code-unit cut answers "👨‍👩‍👧" — a different emoji —
+		// and the old cap of eight did exactly that.
+		const family = "👨‍👩‍👧‍👦";
+		expect(reactionMarker(message([reaction({ emoji: family })]))).toBe(` ${family}`);
+	});
+
+	test("two long emoji that share a prefix stay distinct", () => {
+		const family = "👨‍👩‍👧‍👦";
+		const couple = "👨‍👩‍👧‍👧";
+		const markers = reactionMarker(
+			message([reaction({ emoji: family }), reaction({ emoji: couple, authorId: "uuid-bob" })]),
+		);
+
+		expect(markers).toContain(family);
+		expect(markers).toContain(couple);
+	});
+
 	test("a paragraph-long payload cannot become the header", () => {
 		const markers = reactionMarker(message([reaction({ emoji: "x".repeat(200) })]));
 		expect(markers.length).toBeLessThan(30);

@@ -31,11 +31,16 @@ describe("createSession reactions", () => {
 		expect(changes).toBe(1);
 	});
 
-	test("a reaction for a message we never cached inserts nothing", async () => {
+	test("a reaction for a message we never cached inserts nothing and redraws nothing", async () => {
 		const store = new RecordingStore();
 		const backend = new FakeBackend();
 		const session = createSession({ store, backend });
 		store.messages.set(DIRECT_ID, []);
+
+		let changes = 0;
+		session.onChange(() => {
+			changes += 1;
+		});
 
 		backend.emit({
 			kind: "reaction",
@@ -51,5 +56,8 @@ describe("createSession reactions", () => {
 		expect(store.ops).toContain(`reaction:${DIRECT_ID}:404:👍:add`);
 		expect(store.reactionChanges).toEqual([]);
 		expect(store.savedMessages).toHaveLength(0);
+		// Nothing changed in the cache, so nothing in the pane can have changed either: a
+		// reconnect replaying a backlog of reactions must not reload the thread per envelope.
+		expect(changes).toBe(0);
 	});
 });

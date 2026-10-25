@@ -1,4 +1,5 @@
-import { displayLine } from "./display";
+import { displayEmoji } from "./display";
+import { firstGraphemes } from "./graphemes";
 import type { Message, Reaction } from "./types";
 
 /**
@@ -9,10 +10,12 @@ import type { Message, Reaction } from "./types";
 const MAX_MARKERS = 6;
 
 /**
- * Longest emoji drawn. Signal sends one grapheme; a payload carrying a paragraph
- * would otherwise become the header, so it is cut and the rest is not shown.
+ * Longest emoji drawn, in grapheme clusters. Signal sends one; a payload carrying a
+ * paragraph would otherwise become the header, so it is cut and the rest is not shown.
+ * Counted in clusters, not code units: an eight-unit cut lands inside a ZWJ sequence
+ * and draws a different emoji (`👨‍👩‍👧‍👦` is eleven units, one symbol).
  */
-const MAX_EMOJI_LENGTH = 8;
+const MAX_EMOJI_GRAPHEMES = 8;
 
 /** Reactions on a message, without every caller repeating `?? []`. */
 export function reactionsOf(message: Message): readonly Reaction[] {
@@ -31,7 +34,7 @@ export function reactionsOf(message: Message): readonly Reaction[] {
 export function reactionMarker(message: Message): string {
 	const counts = new Map<string, number>();
 	for (const reaction of reactionsOf(message)) {
-		const emoji = displayLine(reaction.emoji).slice(0, MAX_EMOJI_LENGTH);
+		const emoji = firstGraphemes(displayEmoji(reaction.emoji), MAX_EMOJI_GRAPHEMES);
 		if (emoji.length === 0) {
 			continue;
 		}

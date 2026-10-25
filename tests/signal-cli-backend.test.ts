@@ -188,6 +188,38 @@ describe("SignalCliBackend", () => {
 		});
 	});
 
+	test("a reaction in a group registers the group, so a later send uses groupId", async () => {
+		// A reaction can be the first thing this session sees from a group. If it does not
+		// register the id, the next send addresses the group by `recipient`, which the engine
+		// cannot resolve — a send that fails with no obvious cause.
+		const { rpc, backend } = setup();
+		await backend.start();
+		rpc.emit("receive", {
+			subscription: 0,
+			result: {
+				account: ACCOUNT,
+				envelope: {
+					sourceNumber: "+100****0000",
+					sourceUuid: "uuid-alice",
+					sourceName: "Alice",
+					timestamp: 6,
+					dataMessage: {
+						timestamp: 6,
+						groupInfo: { groupId: "group-1", groupName: "Signal devs" },
+						reaction: { emoji: "👍", targetSentTimestamp: 5, isRemove: false },
+					},
+				},
+			},
+		});
+
+		await backend.sendMessage("group-1", "thanks all");
+
+		expect(rpc.requests.at(-1)).toEqual({
+			method: "send",
+			params: { groupId: "group-1", message: "thanks all" },
+		});
+	});
+
 	test("stop unsubscribes, then closes the client", async () => {
 		const { rpc, backend } = setup();
 		await backend.start();

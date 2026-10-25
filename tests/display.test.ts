@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { displayLine, displayText } from "../src/domain/display";
+import { displayEmoji, displayLine, displayText } from "../src/domain/display";
 
 describe("displayText", () => {
 	test("strips SGR, which ink would otherwise pass to the terminal", () => {
@@ -98,5 +98,36 @@ describe("displayLine", () => {
 
 	test("keeps a name that is only spaces from becoming empty by accident", () => {
 		expect(displayLine("\u200b")).toBe("");
+	});
+});
+
+describe("displayEmoji", () => {
+	test("keeps the zero-width joiner that makes a sequence one symbol", () => {
+		// Stripping it turns one family emoji into four, and makes two different
+		// reactions render identically — the opposite of what the strip is for.
+		expect(displayEmoji("👨‍👩‍👧‍👦")).toBe("👨‍👩‍👧‍👦");
+		expect(displayEmoji("👨‍👩‍👧‍👦")).not.toBe(displayEmoji("👨‍👩‍👧‍👧"));
+	});
+
+	test("the joiner is the only zero-width character it keeps", () => {
+		expect(displayEmoji("a\u200bb")).toBe("ab");
+		expect(displayEmoji("a\u2060b")).toBe("ab");
+		expect(displayEmoji("a\ufeffb")).toBe("ab");
+	});
+
+	test("removes every terminal directive, same as the other variants", () => {
+		expect(displayEmoji("\u001b[31m👍\u001b[0m")).toBe("👍");
+		expect(displayEmoji("👍\u202e")).toBe("👍");
+		expect(displayEmoji("👍\u0007")).toBe("👍");
+	});
+
+	test("collapses breaks and trims, so a marker stays on one row", () => {
+		expect(displayEmoji(" 👍\n👎 ")).toBe("👍 👎");
+	});
+
+	test("displayText and displayLine still strip the joiner", () => {
+		// Their inputs are names and bodies, where a hidden join is an impersonation.
+		expect(displayText("👨‍👩‍👧‍👦")).toBe("👨👩👧👦");
+		expect(displayLine("👨‍👩‍👧‍👦")).toBe("👨👩👧👦");
 	});
 });

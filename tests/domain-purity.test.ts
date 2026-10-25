@@ -9,7 +9,12 @@ import { readdirSync, readFileSync } from "node:fs";
 const domainSources = (): readonly { readonly file: string; readonly source: string }[] =>
 	readdirSync("src/domain")
 		.filter((file) => file.endsWith(".ts"))
-		.map((file) => ({ file, source: readFileSync(`src/domain/${file}`, "utf8") }));
+		// Block comments are prose: a file may legitimately explain which API the rule
+		// forbids, and matching that would fail the suite for documentation.
+		.map((file) => ({
+			file,
+			source: readFileSync(`src/domain/${file}`, "utf8").replace(/\/\*[\s\S]*?\*\//g, ""),
+		}));
 
 describe("domain purity", () => {
 	test("no host-clock reads: timestamps are formatted from an injected clock", () => {
@@ -21,9 +26,17 @@ describe("domain purity", () => {
 		expect(offenders.map(({ file }) => file)).toEqual([]);
 	});
 
-	test("no Intl formatter cached in the domain", () => {
-		// The per-zone formatter cache is mutable module state: it lives in src/ui.
-		const offenders = domainSources().filter(({ source }) => source.includes("Intl."));
+	test("no locale- or zone-dependent formatting in the domain", () => {
+		// The rule is about output that depends on the host: a per-zone formatter cache is
+		// mutable module state and renders differently on every machine, so both it and the
+		// locale-dependent formatters live in src/ui. `Intl.Segmenter` is not that: grapheme
+		// boundaries are defined by UAX #29, not by the host's locale or timezone, and
+		// `domain/graphemes.ts` needs them to cut an emoji without splitting it.
+		const offenders = domainSources().filter(({ source }) =>
+			/(Intl\.DateTimeFormat|Intl\.NumberFormat|Intl\.Collator|toLocaleString|toLocaleDateString|toLocaleTimeString)/.test(
+				source,
+			),
+		);
 		expect(offenders.map(({ file }) => file)).toEqual([]);
 	});
 });

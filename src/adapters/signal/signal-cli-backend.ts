@@ -157,8 +157,14 @@ export class SignalCliBackend implements SignalBackend {
 		}
 
 		const mapped = mapEnvelope(parsed.data.envelope);
+		// Every event that names a conversation counts, reactions included: a reaction can
+		// be the first thing this session sees from a group, and `#groupIds` is what decides
+		// whether a later send addresses the group by id or by a recipient that is not one.
 		const conversationId =
-			mapped.conversation?.id ?? mapped.deleted?.conversationId ?? mapped.edited?.conversationId;
+			mapped.conversation?.id ??
+			mapped.deleted?.conversationId ??
+			mapped.edited?.conversationId ??
+			mapped.reaction?.conversationId;
 		if (mapped.conversationKind === "group" && conversationId !== undefined) {
 			this.#groupIds.add(conversationId);
 		}

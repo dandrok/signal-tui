@@ -59,7 +59,21 @@ const BIDI_CONTROLS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
 /** Zero-width characters that make two different strings render identically. */
 const ZERO_WIDTH = /[\u200B-\u200D\u2060\uFEFF]/g;
 
+/**
+ * The same set without the joiner: an emoji sequence is *made* of U+200D, so stripping
+ * it turns one symbol into several and makes two different reactions render the same.
+ */
+const ZERO_WIDTH_EXCEPT_JOINER = /[\u200B\u200C\u2060\uFEFF]/g;
+
 const TABS_AND_BREAKS = /[\t\r\n\v\f]+/g;
+
+const strip = (raw: string, zeroWidth: RegExp): string =>
+	rewriteC1(raw)
+		.replace(ESCAPE_SEQUENCE, "")
+		.replace(UNTERMINATED_CSI, "")
+		.replace(CONTROL_CHARS, "")
+		.replace(BIDI_CONTROLS, "")
+		.replace(zeroWidth, "");
 
 /**
  * Multi-line text with every terminal directive removed: for message bodies,
@@ -67,14 +81,17 @@ const TABS_AND_BREAKS = /[\t\r\n\v\f]+/g;
  * row arithmetic stays true.
  */
 export function displayText(raw: string): string {
-	return rewriteC1(raw)
-		.replace(ESCAPE_SEQUENCE, "")
-		.replace(UNTERMINATED_CSI, "")
-		.replace(CONTROL_CHARS, "")
-		.replace(BIDI_CONTROLS, "")
-		.replace(ZERO_WIDTH, "")
-		.replace(/\t/g, " ")
-		.replace(/\r\n?/g, "\n");
+	return strip(raw, ZERO_WIDTH).replace(/\t/g, " ").replace(/\r\n?/g, "\n");
+}
+
+/**
+ * Single-line text for an emoji: the same sanitiser, except the zero-width joiner
+ * survives, because a joiner is what makes `👨‍👩‍👧‍👦` one symbol instead of four and two
+ * variants distinguishable. A reaction is a counted marker, never a name, so the
+ * impersonation the strip exists to prevent has no surface here.
+ */
+export function displayEmoji(raw: string): string {
+	return strip(raw, ZERO_WIDTH_EXCEPT_JOINER).replace(TABS_AND_BREAKS, " ").trim();
 }
 
 /**
