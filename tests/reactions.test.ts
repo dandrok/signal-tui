@@ -89,6 +89,32 @@ describe("reaction markers", () => {
 		expect(markers).toContain(couple);
 	});
 
+	test("a combining-mark bomb is not an emoji and is dropped", () => {
+		// One grapheme cluster, ten thousand code units: a cluster count bounds nothing, and
+		// the pane would re-wrap the whole thing on every frame.
+		const bomb = `a${"\u0301".repeat(10_000)}`;
+
+		expect(reactionMarker(message([reaction({ emoji: bomb })]))).toBe("");
+	});
+
+	test("a real multi-part emoji is still short enough to keep", () => {
+		// Four people with skin tones: nineteen UTF-16 units, one cluster. The bound must sit
+		// above what Signal actually sends.
+		const complex = "👨🏽‍👩🏿‍👧🏽‍👦🏿";
+
+		expect(reactionMarker(message([reaction({ emoji: complex })]))).toBe(` ${complex}`);
+	});
+
+	test("equal counts order by code unit, not by the host's locale", () => {
+		// `localeCompare` without a locale resolves the runtime default, which is host state:
+		// the same reactions would draw in a different order on another machine.
+		const markers = reactionMarker(
+			message([reaction({ emoji: "ä", authorId: "u1" }), reaction({ emoji: "z", authorId: "u2" })]),
+		);
+
+		expect(markers).toBe(" z ä");
+	});
+
 	test("a paragraph-long payload cannot become the header", () => {
 		const markers = reactionMarker(message([reaction({ emoji: "x".repeat(200) })]));
 		expect(markers.length).toBeLessThan(30);

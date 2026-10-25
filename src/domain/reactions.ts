@@ -17,36 +17,51 @@ const MAX_MARKERS = 6;
  */
 const MAX_EMOJI_GRAPHEMES = 8;
 
+/**
+ * Longest emoji kept, in UTF-16 units, checked *after* the grapheme count.
+ *
+ * A cluster count alone bounds nothing: a base character followed by ten thousand
+ * combining marks is **one** grapheme cluster, so eight clusters can be a ten-kilobyte
+ * string that the pane then re-wraps on every frame. A real emoji is short — four people
+ * with skin tones is nineteen units — so a longer value is not an emoji and is dropped
+ * rather than shown.
+ */
+const MAX_EMOJI_CODE_UNITS = 32;
+
 /** Reactions on a message, without every caller repeating `?? []`. */
 export function reactionsOf(message: Message): readonly Reaction[] {
 	return message.reactions ?? [];
 }
 
 /**
- * The reaction suffix for a message header: `😀 2 ❤️`, most-reacted first, then by
- * emoji so two stores that saw the same reactions in different order draw the same
- * row. Counted per emoji rather than per person: the header is one line, and who
- * reacted belongs on a detail view we do not have yet.
+ * The reaction suffix for a message header: `😀 2 ❤️`, most-reacted first, then in a
+ * fixed order so two hosts draw the same row for the same reactions. Counted per emoji
+ * rather than per person: the header is one line, and who reacted belongs on a detail
+ * view we do not have yet.
  *
- * The emoji is remote text — sanitised and length-capped here, at the display
- * boundary, exactly like a body or an author name.
+ * The emoji is remote text — sanitised here and bounded both by cluster count and by
+ * length, at the display boundary, exactly like a body or an author name.
  */
 export function reactionMarker(message: Message): string {
 	const counts = new Map<string, number>();
 	for (const reaction of reactionsOf(message)) {
-		const emoji = firstGraphemes(displayEmoji(reaction.emoji), MAX_EMOJI_GRAPHEMES);
-		if (emoji.length === 0) {
+		const raw = displayEmoji(reaction.emoji);
+		if (raw.length === 0 || raw.length > MAX_EMOJI_CODE_UNITS) {
 			continue;
 		}
+		const emoji = firstGraphemes(raw, MAX_EMOJI_GRAPHEMES);
 		counts.set(emoji, (counts.get(emoji) ?? 0) + 1);
 	}
 	if (counts.size === 0) {
 		return "";
 	}
 
+	// Code-unit order, not `localeCompare`: that call without a locale resolves the runtime's
+	// *default* locale, which is host state, so the same reactions would draw in a different
+	// order on a machine with a different ICU default. Ties are broken deterministically.
 	const ranked = [...counts.entries()].sort(
 		([leftEmoji, leftCount], [rightEmoji, rightCount]) =>
-			rightCount - leftCount || leftEmoji.localeCompare(rightEmoji),
+			rightCount - leftCount || (leftEmoji < rightEmoji ? -1 : leftEmoji > rightEmoji ? 1 : 0),
 	);
 	const parts = ranked
 		.slice(0, MAX_MARKERS)
