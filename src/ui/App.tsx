@@ -1,7 +1,7 @@
 import { Box, Text, useApp, useInput } from "ink";
 import { useMemo } from "react";
 import type { Action, AppState } from "../app/state";
-import { selectedConversation, selectedMessages } from "../app/state";
+import { conversationRows } from "../app/state";
 import { displayLine } from "../domain/display";
 import { COMPOSER_HEIGHT, Composer } from "./Composer";
 import { ConversationList } from "./ConversationList";
@@ -30,8 +30,13 @@ export function App({ state, dispatch }: AppProps) {
 	const { exit } = useApp();
 	const { columns, rows } = useTerminalSize();
 
-	const conversation = selectedConversation(state);
-	const messages = selectedMessages(state);
+	// Per-frame work stays O(1) + O(visible rows): the id → row map is rebuilt only when
+	// the list itself changes, so typing a draft does not rescan the conversations.
+	const rowsById = useMemo(() => conversationRows(state.conversations), [state.conversations]);
+	const selectedRow = state.selectedId === null ? -1 : (rowsById.get(state.selectedId) ?? -1);
+	const conversation = selectedRow === -1 ? undefined : state.conversations[selectedRow];
+	const messages =
+		conversation === undefined ? [] : (state.messagesByConversation[conversation.id] ?? []);
 	const isSearching = state.search !== null;
 	const isComposing = state.focus === "composer" && !isSearching;
 
@@ -145,7 +150,7 @@ export function App({ state, dispatch }: AppProps) {
 				<Box flexDirection="row" height={bodyHeight}>
 					<ConversationList
 						conversations={state.conversations}
-						selectedIndex={state.selectedIndex}
+						selectedIndex={selectedRow}
 						width={listWidth}
 						height={bodyHeight}
 						isFocused={state.focus === "conversations"}
