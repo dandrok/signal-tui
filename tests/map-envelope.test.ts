@@ -248,6 +248,7 @@ describe("mapEnvelope", () => {
 			conversationKind: "direct",
 			deleted: null,
 			edited: null,
+			receipt: null,
 		});
 	});
 
@@ -259,6 +260,7 @@ describe("mapEnvelope", () => {
 			conversationKind: "direct",
 			deleted: null,
 			edited: null,
+			receipt: null,
 		});
 	});
 
@@ -270,6 +272,7 @@ describe("mapEnvelope", () => {
 			conversationKind: "direct",
 			deleted: null,
 			edited: null,
+			receipt: null,
 		});
 	});
 });

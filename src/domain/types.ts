@@ -28,6 +28,13 @@ export interface EditAuthor {
 /** Stable identity for our own messages, which no peer can claim. */
 export const SELF_AUTHOR_ID = "self";
 
+/**
+ * How far one of our own messages has travelled, as reported by the other side:
+ * their device has it ("delivered"), they opened the conversation ("read"), or they
+ * opened a view-once message ("viewed").
+ */
+export type ReceiptState = "delivered" | "read" | "viewed";
+
 export interface Attachment {
 	readonly id: string | null;
 	readonly contentType: string | null;
@@ -70,6 +77,13 @@ export interface Message {
 	 * its body and files are gone — see `purgeExpired`.
 	 */
 	readonly isExpired?: boolean;
+	/**
+	 * The strongest receipt the other side has sent for this message. Only our own
+	 * messages can carry one, and only until something strengthens it: absent means
+	 * "nobody has acknowledged this yet", which is also what every row cached before
+	 * receipts were mapped reports.
+	 */
+	readonly receipt?: ReceiptState;
 	/**
 	 * Optional so a caller that only cares about text is not forced to spell out
 	 * an empty list; `attachmentsOf` reads it without null checks.

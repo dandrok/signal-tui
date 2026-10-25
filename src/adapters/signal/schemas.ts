@@ -128,7 +128,10 @@ export const receiptMessageSchema = z.looseObject({
 	isDelivery: z.boolean(),
 	isRead: z.boolean(),
 	isViewed: z.boolean(),
-	timestamps: z.array(z.number().int()).optional(),
+	// `List<Long>` upstream: null when the receipt names no message, which happens
+	// for a receipt this build cannot use — `.optional()` alone would fail the
+	// envelope instead of ignoring it.
+	timestamps: z.array(z.number().int()).nullish(),
 });
 
 export const typingMessageSchema = z.looseObject({

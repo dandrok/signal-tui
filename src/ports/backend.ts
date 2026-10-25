@@ -1,4 +1,11 @@
-import type { Conversation, ConversationId, EditAuthor, Message, MessageId } from "../domain/types";
+import type {
+	Conversation,
+	ConversationId,
+	EditAuthor,
+	Message,
+	MessageId,
+	ReceiptState,
+} from "../domain/types";
 
 export type BackendEvent =
 	| { readonly kind: "message"; readonly message: Message }
@@ -16,6 +23,16 @@ export type BackendEvent =
 			readonly kind: "message-deleted";
 			readonly conversationId: ConversationId;
 			readonly messageId: MessageId;
+	  }
+	| {
+			/**
+			 * The other side acknowledged messages we sent, naming them by their
+			 * timestamps. Carries no conversation: a receipt payload has none, so the
+			 * store resolves the rows by the identity Signal itself uses.
+			 */
+			readonly kind: "receipt";
+			readonly timestamps: readonly number[];
+			readonly state: ReceiptState;
 	  };
 
 /**

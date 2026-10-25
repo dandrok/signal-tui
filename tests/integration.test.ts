@@ -32,10 +32,14 @@ describe("signal-cli adapter over a real child process", () => {
 
 		const messages: Message[] = [];
 		const kinds: BackendEvent["kind"][] = [];
+		const receipts: Array<{ timestamps: readonly number[]; state: string }> = [];
 		backend.subscribe((event) => {
 			kinds.push(event.kind);
 			if (event.kind === "message") {
 				messages.push(event.message);
+			}
+			if (event.kind === "receipt") {
+				receipts.push({ timestamps: event.timestamps, state: event.state });
 			}
 		});
 
@@ -70,8 +74,16 @@ describe("signal-cli adapter over a real child process", () => {
 				isDeleted: false,
 				attachments: [],
 			});
-			// the peer also pushes a "typing" notification that must be ignored
-			expect(kinds).toEqual(["conversation-updated", "message", "conversation-updated", "message"]);
+			// the peer also pushes a "typing" notification that must be ignored, then a
+			// receipt that must not be — it is the only path that puts a tick on screen
+			expect(kinds).toEqual([
+				"conversation-updated",
+				"message",
+				"conversation-updated",
+				"message",
+				"receipt",
+			]);
+			expect(receipts).toEqual([{ timestamps: [1_760_000_000_001], state: "read" }]);
 
 			await backend.sendMessage("uuid-alice", "hi back");
 			await waitFor(() => existsSync(capture) && readFileSync(capture, "utf8").trim().length > 0);

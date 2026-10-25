@@ -1,5 +1,6 @@
 import wrapAnsi from "wrap-ansi";
 import { displayLine, displayText } from "./display";
+import { receiptMarker } from "./receipts";
 import type { Attachment, Conversation, Message } from "./types";
 
 /**
@@ -85,7 +86,7 @@ export const editedMarker = (message: Message): string =>
 	message.isEdited === true ? " · edited" : "";
 
 export function headerLine(message: Message, clock: Clock): string {
-	return `${clock(message.sentAt)} ${describeAuthor(message)}${editedMarker(message)}`;
+	return `${clock(message.sentAt)} ${describeAuthor(message)}${editedMarker(message)}${receiptMarker(message)}`;
 }
 
 /** One attachment exactly as the pane draws it. */

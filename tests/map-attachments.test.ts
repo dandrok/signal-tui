@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { mapAttachments, mapEnvelope } from "../src/adapters/signal/map-envelope";
+import { mapAttachments } from "../src/adapters/signal/map-attachments";
+import { mapEnvelope } from "../src/adapters/signal/map-envelope";
 import type { Envelope } from "../src/adapters/signal/schemas";
 
 const envelope = (overrides: Partial<Envelope> = {}): Envelope =>

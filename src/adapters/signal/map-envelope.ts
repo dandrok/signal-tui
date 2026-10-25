@@ -1,6 +1,5 @@
 import { SELF_LABEL } from "../../domain/format";
 import type {
-	Attachment,
 	Conversation,
 	ConversationId,
 	EditAuthor,
@@ -8,6 +7,8 @@ import type {
 	MessageId,
 } from "../../domain/types";
 import { SELF_AUTHOR_ID } from "../../domain/types";
+import { mapAttachments } from "./map-attachments";
+import { type MappedReceipt, mapReceipt } from "./map-receipt";
 import type { DataMessage, EditMessage, Envelope, SentMessage } from "./schemas";
 import { dataMessageSchema } from "./schemas";
 import { bodyOf, expiresAtOf, textOf } from "./text";
@@ -34,8 +35,9 @@ export interface EditedMessage {
 
 /**
  * A received envelope translated into domain objects. Every field can be empty:
- * typing and receipt envelopes carry no message, and a delete notification
- * carries no message of its own — only a reference to an earlier one.
+ * typing envelopes carry no message, and a delete notification carries no message
+ * of its own — only a reference to an earlier one. So does a receipt: it names the
+ * messages it acknowledges by timestamp instead of carrying one.
  */
 export interface MappedEnvelope {
 	readonly message: Message | null;
@@ -43,6 +45,7 @@ export interface MappedEnvelope {
 	readonly conversationKind: ConversationKind;
 	readonly deleted: DeletedMessage | null;
 	readonly edited: EditedMessage | null;
+	readonly receipt: MappedReceipt | null;
 }
 
 /** Stable conversation key for a peer, preferring the UUID (numbers can change). */
@@ -91,38 +94,13 @@ export function conversationTarget(envelope: Envelope): Target | null {
 	return { id, name: peerName(envelope), kind: "direct" };
 }
 
-/**
- * One file from the wire. Everything is optional in signal-cli's output, so each
- * field is narrowed rather than trusted; a null entry (older releases send those)
- * is dropped by the caller.
- */
-function toAttachment(raw: unknown): Attachment | null {
-	if (raw === null || typeof raw !== "object") {
-		return null;
-	}
-	const entry = raw as Record<string, unknown>;
-	const text = (value: unknown): string | null => (typeof value === "string" ? value : null);
-	return {
-		id: text(entry.id),
-		contentType: text(entry.contentType),
-		filename: text(entry.filename),
-		size: typeof entry.size === "number" && Number.isFinite(entry.size) ? entry.size : null,
-		caption: text(entry.caption),
-		isVoiceNote: entry.isVoiceNote === true,
-	};
-}
-
-/** Files carried by a message, in the order signal-cli listed them. */
-export function mapAttachments(raw: readonly unknown[] | undefined): readonly Attachment[] {
-	return (raw ?? []).map(toAttachment).filter((entry): entry is Attachment => entry !== null);
-}
-
 const EMPTY: MappedEnvelope = {
 	message: null,
 	conversation: null,
 	conversationKind: "direct",
 	deleted: null,
 	edited: null,
+	receipt: null,
 };
 
 const groupTarget = (groupInfo: DataMessage["groupInfo"]): Target | null =>
@@ -155,10 +133,8 @@ function mapEdit(envelope: Envelope, edit: EditMessage): MappedEnvelope {
 	}
 
 	return {
-		message: null,
-		conversation: null,
+		...EMPTY,
 		conversationKind: target.kind,
-		deleted: null,
 		edited: {
 			conversationId: target.id,
 			targetSentAt: edit.targetSentTimestamp,
@@ -182,10 +158,8 @@ function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
 	// A delete-for-everyone names the message it removes; it is not a new message.
 	if (data.remoteDelete !== undefined) {
 		return {
-			message: null,
-			conversation: null,
+			...EMPTY,
 			conversationKind: target.kind,
-			edited: null,
 			deleted: {
 				conversationId: target.id,
 				messageId: `${target.id}:${data.remoteDelete.timestamp}`,
@@ -194,6 +168,7 @@ function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
 	}
 
 	return {
+		...EMPTY,
 		message: {
 			id: `${target.id}:${data.timestamp}`,
 			conversationId: target.id,
@@ -220,8 +195,6 @@ function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
 				: { expiresInSeconds: data.expiresInSeconds }),
 		},
 		conversationKind: target.kind,
-		deleted: null,
-		edited: null,
 	};
 }
 
@@ -238,10 +211,8 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 
 	if (sent.remoteDelete !== undefined) {
 		return {
-			message: null,
-			conversation: null,
+			...EMPTY,
 			conversationKind: target.kind,
-			edited: null,
 			deleted: {
 				conversationId: target.id,
 				messageId: `${target.id}:${sent.remoteDelete.timestamp}`,
@@ -250,6 +221,7 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 	}
 
 	return {
+		...EMPTY,
 		message: {
 			id: `${target.id}:${sent.timestamp}`,
 			conversationId: target.id,
@@ -272,8 +244,6 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 				: { expiresInSeconds: sent.expiresInSeconds }),
 		},
 		conversationKind: target.kind,
-		deleted: null,
-		edited: null,
 	};
 }
 
@@ -284,6 +254,12 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 export function mapEnvelope(envelope: Envelope): MappedEnvelope {
 	if (envelope.editMessage !== undefined) {
 		return mapEdit(envelope, envelope.editMessage);
+	}
+
+	if (envelope.receiptMessage !== undefined) {
+		// A receipt acknowledges messages we already sent; it never inserts one.
+		const receipt = mapReceipt(envelope.receiptMessage);
+		return receipt === null ? EMPTY : { ...EMPTY, receipt };
 	}
 
 	if (envelope.dataMessage !== undefined) {

@@ -28,6 +28,8 @@ export const demoMessages: readonly Message[] = [
 		sentAt: minutes(2),
 		isOutgoing: true,
 		isDeleted: false,
+		// So `--demo` shows both tick states without an account: read here, delivered below.
+		receipt: "read",
 	},
 	{
 		id: "m-3",
@@ -55,6 +57,7 @@ export const demoMessages: readonly Message[] = [
 		sentAt: minutes(6),
 		isOutgoing: true,
 		isDeleted: false,
+		receipt: "delivered",
 	},
 	{
 		id: "m-6",

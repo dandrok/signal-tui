@@ -108,4 +108,19 @@ export const migrations: readonly Migration[] = [
 			ALTER TABLE conversations ADD COLUMN expires_in_seconds INTEGER;
 		`,
 	},
+	{
+		version: 6,
+		// How far the other side got with a message we sent. Stored as a rank rather
+		// than three booleans so "only ever strengthen" is one comparison: receipts
+		// arrive out of order, so a late delivery must not undo a read. 0 is "nobody
+		// has acknowledged it", which is also what every row cached earlier reports.
+		//
+		// A receipt names messages by timestamp and nothing else, so the lookup needs
+		// an index of its own — partial, because only our own messages can be
+		// acknowledged and the other side's traffic is the bulk of the cache.
+		sql: `
+			ALTER TABLE messages ADD COLUMN receipt_rank INTEGER NOT NULL DEFAULT 0;
+			CREATE INDEX messages_receipts ON messages(sent_at) WHERE is_outgoing = 1;
+		`,
+	},
 ];

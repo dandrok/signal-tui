@@ -185,6 +185,13 @@ export class SignalCliBackend implements SignalBackend {
 				messageId: mapped.deleted.messageId,
 			});
 		}
+		if (mapped.receipt !== null) {
+			this.#emit({
+				kind: "receipt",
+				timestamps: mapped.receipt.timestamps,
+				state: mapped.receipt.state,
+			});
+		}
 	}
 
 	#recordProtocolError(message: string): void {
