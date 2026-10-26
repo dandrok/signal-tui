@@ -1,6 +1,6 @@
 import type { Conversation, ConversationId, Message, MessageId } from "../domain/types";
-import { SELF_AUTHOR_ID } from "../domain/types";
-import { isDirectConversationId } from "./session";
+import type { ReplyTargetIn } from "./reply";
+import { canAnswerIn, messageBeingAnsweredIn, pointedMessageIn, replyTargetIn } from "./reply";
 
 export type Focus = "conversations" | "messages" | "composer";
 
@@ -189,7 +189,7 @@ export function reduce(state: AppState, action: Action): AppState {
 			if (
 				target === undefined ||
 				conversation === undefined ||
-				!canAnswer(target, conversation.id)
+				!canAnswerIn(target, conversation.id)
 			) {
 				return state;
 			}
@@ -309,85 +309,18 @@ export function selectedMessages(state: AppState): readonly Message[] {
 	return state.messagesByConversation[conversation.id] ?? [];
 }
 
-/**
- * The message the pane is pointing at.
- *
- * There is no separate cursor: the scroll offset already names a message — the bottom-most
- * one in the window — so `j`/`k` keep meaning what they meant, and a selection can never
- * point at a row that is not on screen. That is what `r` answers.
- */
+/** State-shaped doors onto `./reply`, which takes messages and offsets instead. */
 export function pointedMessage(state: AppState): Message | undefined {
-	const messages = selectedMessages(state);
-	if (messages.length === 0) {
-		return undefined;
-	}
-	const offset = Math.min(Math.max(0, state.scroll), messages.length - 1);
-	return messages[messages.length - 1 - offset];
+	return pointedMessageIn(selectedMessages(state), state.scroll);
 }
 
-/**
- * The author a reply has to name, or null when it cannot be resolved.
- *
- * `send` refuses a quote without a `quoteAuthor`, and that must be a number or a uuid, so a
- * row whose id we never learned cannot be answered. Two fallbacks keep the common cases
- * alive: our own message is always us, and in a direct chat the conversation *is* the peer —
- * which covers rows cached before schema v4, when author ids were not stored at all. In a
- * group there is nothing to fall back to, because a name is not an identifier.
- */
-function quotedAuthor(message: Message, conversationId: ConversationId): string | null {
-	if (message.authorId !== undefined) {
-		return message.authorId;
-	}
-	if (message.isOutgoing) {
-		return SELF_AUTHOR_ID;
-	}
-	return isDirectConversationId(conversationId) ? conversationId : null;
-}
-
-/**
- * Whether a message can be answered at all: a delete-for-everyone, an expired row and a
- * view-once message have nothing to quote, and the author must be resolvable.
- */
-export function canAnswer(message: Message, conversationId: ConversationId): boolean {
-	return (
-		!message.isDeleted &&
-		message.isExpired !== true &&
-		message.isViewOnce !== true &&
-		quotedAuthor(message, conversationId) !== null
-	);
-}
-
-/**
- * What a submitted draft would send as its reply, or null when it would not send one.
- *
- * The text travels with the target because recipients render the quoted block from the
- * payload; this cache keeps only the identity, so the words are read from the message at
- * send time rather than stored a second time.
- */
-export function replyTarget(state: AppState): {
-	readonly sentAt: number;
-	readonly authorId: string;
-	readonly text: string;
-} | null {
-	if (state.replyToId === null) {
-		return null;
-	}
+export function replyTarget(state: AppState): ReplyTargetIn | null {
 	const conversation = selectedConversation(state);
-	const target = selectedMessages(state).find((message) => message.id === state.replyToId);
-	if (target === undefined || conversation === undefined) {
-		return null;
-	}
-	const authorId = quotedAuthor(target, conversation.id);
-	if (authorId === null || !canAnswer(target, conversation.id)) {
-		return null;
-	}
-	return { sentAt: target.sentAt, authorId, text: target.body };
+	return conversation === undefined
+		? null
+		: replyTargetIn(selectedMessages(state), state.replyToId, conversation.id);
 }
 
-/** The message a draft is answering, for the composer to draw. */
 export function messageBeingAnswered(state: AppState): Message | undefined {
-	if (state.replyToId === null) {
-		return undefined;
-	}
-	return selectedMessages(state).find((message) => message.id === state.replyToId);
+	return messageBeingAnsweredIn(selectedMessages(state), state.replyToId);
 }
