@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Clock } from "../src/domain/format";
-import { attachmentsForDisplay, bodyForDisplay, messageRowCount } from "../src/domain/format";
+import { attachmentsForDisplay, bodyForDisplay, messageRowCount } from "../src/domain/layout";
 import type { Conversation, Message } from "../src/domain/types";
 import { ConversationList, listWindowStart } from "../src/ui/ConversationList";
 import { visibleWindow } from "../src/ui/MessagePane";

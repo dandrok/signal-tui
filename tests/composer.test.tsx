@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { draftTail } from "../src/domain/format";
+import { draftTail } from "../src/domain/layout";
 import { COMPOSER_HEIGHT, Composer } from "../src/ui/Composer";
 import { frameOf as renderFrame } from "./helpers/frame";
 

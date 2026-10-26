@@ -155,4 +155,23 @@ export const migrations: readonly Migration[] = [
 			);
 		`,
 	},
+	{
+		version: 9,
+		// What a reply quotes, as the *identity* of the quoted message and nothing more.
+		//
+		// Signal's payload repeats the quoted message's text, and storing that copy would be
+		// storing somebody's words a second time — which the delete and expiry rules would
+		// then have to chase into the reply as well (and a redelivered envelope of the reply
+		// would put it back). So the cache keeps the two fields that identify the target and
+		// the pane reads the text from the message itself: it has the whole thread anyway,
+		// and a target that is gone then reads as "message deleted" for free.
+		//
+		// `quote_sent_at` is how Signal names the target everywhere else — the same
+		// timestamp an edit and a delete-for-everyone use — and `quote_author_id` keeps the
+		// label resoluble when the target itself is not cached.
+		sql: `
+			ALTER TABLE messages ADD COLUMN quote_sent_at INTEGER;
+			ALTER TABLE messages ADD COLUMN quote_author_id TEXT;
+		`,
+	},
 ];

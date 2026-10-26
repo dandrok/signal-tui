@@ -172,6 +172,11 @@ the last second of typing.
 - files shown by name and size, with the caption when the sender wrote one
 - **reactions**: an emoji a peer adds is shown on the message's author row (`👍 2`), a
   second emoji from the same person replaces the first, and a removal takes it away
+- **replies**: a message that answers another one shows what it answers, above its own
+  text (`┃ 12:34 Marta: the original`). The quoted message is looked up in the thread, so a
+  quote of something deleted or expired reads `message deleted` / `message expired` rather
+  than reviving text that is gone — the cache keeps only *which* message is quoted, never a
+  second copy of its words.
 - **view-once messages** are recorded but never kept: their text and file references
   are not written to the cache or the search index, so the row says
   `view-once message · not stored` and there is nothing to recover later
@@ -186,7 +191,9 @@ the last second of typing.
 - scrollback beyond the messages a conversation holds in the window
 - **sending a reaction** from the TUI: received ones are shown, but there is no key or
   mode for adding your own yet
-- replies and quotes (parsed, not surfaced)
+- **sending a reply** from the TUI: a reply that arrives shows what it answers, but there
+  is no key or mode for composing one yet — and a reply whose target is outside the loaded
+  window reads `not loaded`, because the quoted text is not stored
 - opening an attachment from the TUI (`xdg-open`), typing indicators, desktop
   notifications
 - history from before you linked this device

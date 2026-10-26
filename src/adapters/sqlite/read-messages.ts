@@ -8,7 +8,7 @@ import { type ConversationRow, type MessageRow, toConversation, toMessage } from
  * looks like happens in one place instead of being copied into every SELECT.
  */
 export const selectMessageColumns =
-	"id, conversation_id, author, author_id, body, sent_at, is_outgoing, is_deleted, is_edited, expires_at, is_expired, receipt_rank, is_view_once";
+	"id, conversation_id, author, author_id, body, sent_at, is_outgoing, is_deleted, is_edited, expires_at, is_expired, receipt_rank, is_view_once, quote_sent_at, quote_author_id";
 
 export function readConversations(db: Database): ConversationRow[] {
 	return db
@@ -50,6 +50,11 @@ export function readAllMessages(db: Database, conversationId: ConversationId): M
 		.all(conversationId);
 }
 
+/**
+ * Full-text hits, strongest match first. Deleted rows are filtered here as well as in the
+ * view: a body the sender deleted must not be discoverable, and `markMessageDeleted` blanks
+ * it only for rows this build wrote.
+ */
 export function searchMessages(db: Database, query: string, limit: number): MessageRow[] {
 	const ftsQuery = toFtsQuery(query);
 	if (ftsQuery === null || limit <= 0) {
@@ -57,7 +62,7 @@ export function searchMessages(db: Database, query: string, limit: number): Mess
 	}
 	return db
 		.query<MessageRow, [string, number]>(
-			`SELECT m.id, m.conversation_id, m.author, m.author_id, m.body, m.sent_at, m.is_outgoing, m.is_deleted, m.is_edited, m.expires_at, m.is_expired, m.receipt_rank, m.is_view_once
+			`SELECT m.id, m.conversation_id, m.author, m.author_id, m.body, m.sent_at, m.is_outgoing, m.is_deleted, m.is_edited, m.expires_at, m.is_expired, m.receipt_rank, m.is_view_once, m.quote_sent_at, m.quote_author_id
 			 FROM messages_fts
 			 JOIN messages m ON m.rowid = messages_fts.rowid
 			 WHERE messages_fts MATCH ?1

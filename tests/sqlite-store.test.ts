@@ -226,7 +226,7 @@ describe("SqliteMessageStore", () => {
 	});
 
 	test("started at the current schema version", async () => {
-		expect(open().schemaVersion).toBe(8);
+		expect(open().schemaVersion).toBe(9);
 	});
 
 	test.skipIf(process.platform !== "linux")(

@@ -1,17 +1,16 @@
 import { Box, Text } from "ink";
+import { useMemo } from "react";
 import type { Clock } from "../domain/format";
+import { describeAuthor, displayName, headerLine, headerSuffix, showsBody } from "../domain/format";
+import type { QuoteLookup } from "../domain/layout";
 import {
 	attachmentsForDisplay,
 	bodyForDisplay,
-	describeAuthor,
-	displayName,
-	headerLine,
-	headerSuffix,
 	messageRowCount,
-	showsBody,
+	quoteForDisplay,
 	textForDisplay,
-} from "../domain/format";
-import type { Conversation, Message } from "../domain/types";
+} from "../domain/layout";
+import type { Conversation, Message, QuotedMessage } from "../domain/types";
 
 export interface MessagePaneProps {
 	readonly conversation: Conversation | undefined;
@@ -43,6 +42,7 @@ export function visibleWindow(
 	scroll: number,
 	innerWidth: number,
 	clock: Clock,
+	lookup?: QuoteLookup,
 ): { readonly start: number; readonly end: number; readonly hiddenAbove: number } {
 	if (messages.length === 0) {
 		return { start: 0, end: 0, hiddenAbove: 0 };
@@ -57,7 +57,7 @@ export function visibleWindow(
 		if (previous === undefined) {
 			break;
 		}
-		const cost = messageRowCount(previous, innerWidth, clock, rows);
+		const cost = messageRowCount(previous, innerWidth, clock, rows, lookup);
 		if (used + cost > rows) {
 			break;
 		}
@@ -79,15 +79,33 @@ export function MessagePane({
 }: MessagePaneProps) {
 	const innerWidth = Math.max(8, width - 4);
 	const contentRows = Math.max(1, height - CHROME_ROWS);
+	// The thread is indexed once per render pass, not once per keystroke: a quote names its
+	// target by timestamp, and the label it shows lives on that other row. Building this
+	// map here keeps every frame at O(visible rows) afterwards — the pane would otherwise
+	// rescan the whole conversation for each quoted message it draws.
+	//
+	// One entry per timestamp is enough because a message's id *is* its conversation and
+	// instant (`<conversationId>:<sentAt>`, the primary key), so two rows in one thread can
+	// never share a `sentAt` — a second one merges into the first. Pinning that invariant is
+	// `tests/map-envelope-quotes.test.ts`'s "two envelopes at the same instant" case; a
+	// producer that invented its own id would break it, and this lookup would be the first
+	// thing to notice.
+	const lookup = useMemo<QuoteLookup>(() => {
+		const bySentAt = new Map<number, Message>();
+		for (const message of messages) {
+			bySentAt.set(message.sentAt, message);
+		}
+		return (quote: QuotedMessage) => bySentAt.get(quote.sentAt);
+	}, [messages]);
 	// The "older" label costs a row of its own, so the window is measured again
 	// once it is known to be needed. The same budget then applies to every row
 	// drawn inside: measuring the window tighter than the content is how a message
 	// ends up clipped at the top, where `justifyContent="flex-end"` hides it.
 	let rowBudget = contentRows;
-	let window = visibleWindow(messages, rowBudget, scroll, innerWidth, clock);
+	let window = visibleWindow(messages, rowBudget, scroll, innerWidth, clock, lookup);
 	if (window.hiddenAbove > 0) {
 		rowBudget = Math.max(1, contentRows - 1);
-		window = visibleWindow(messages, rowBudget, scroll, innerWidth, clock);
+		window = visibleWindow(messages, rowBudget, scroll, innerWidth, clock, lookup);
 	}
 	const visible = messages.slice(window.start, window.end);
 
@@ -116,6 +134,7 @@ export function MessagePane({
 					rowBudget={rowBudget}
 					innerWidth={innerWidth}
 					clock={clock}
+					lookup={lookup}
 				/>
 			))}
 		</Box>
@@ -124,29 +143,40 @@ export function MessagePane({
 
 /**
  * One message, measured against a shared row budget. The order is deliberate:
- * the header is drawn first, then the files, and the body gets whatever is left,
- * so neither a long name nor a long body can hide a peer's filenames.
+ * the header is drawn first, then what it quotes, then the files, and the body gets
+ * whatever is left, so neither a long name nor a long body can hide a peer's filenames.
  */
 function MessageRow({
 	message,
 	rowBudget,
 	innerWidth,
 	clock,
+	lookup,
 }: {
 	readonly message: Message;
 	readonly rowBudget: number;
 	readonly innerWidth: number;
 	readonly clock: Clock;
+	readonly lookup: QuoteLookup;
 }) {
 	const fullHeader = headerLine(message, clock);
 	// The suffix is one string for measurement and render: `headerLine` composes exactly
 	// clock + space + author + suffix, so a marker cannot be counted and not drawn.
 	const suffix = headerSuffix(message);
 	const header = textForDisplay(fullHeader, rowBudget, innerWidth);
-	const files = attachmentsForDisplay(message, Math.max(0, rowBudget - header.rows), innerWidth);
+	// Same budget arithmetic as `messageOverheadRows`, which is what fitted the window:
+	// header, then the quote, then the files, and the body takes the rest. `quoteForDisplay`
+	// has already bounded itself to one row at this width, so the budget can only drop it.
+	const quote = quoteForDisplay(message, innerWidth, clock, lookup);
+	const quoteRows = Math.min(quote.rows, Math.max(0, rowBudget - header.rows));
+	const files = attachmentsForDisplay(
+		message,
+		Math.max(0, rowBudget - header.rows - quoteRows),
+		innerWidth,
+	);
 	const body = bodyForDisplay(
 		message,
-		Math.max(0, rowBudget - header.rows - files.rows),
+		Math.max(0, rowBudget - header.rows - quoteRows - files.rows),
 		innerWidth,
 	);
 
@@ -161,6 +191,7 @@ function MessageRow({
 			) : (
 				<Text>{header.text}</Text>
 			)}
+			{quoteRows > 0 ? <Text dimColor>{quote.text}</Text> : null}
 			{showsBody(message) && body.rows > 0 ? (
 				<Text dimColor={message.isDeleted}>{body.text}</Text>
 			) : null}
