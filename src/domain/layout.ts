@@ -171,9 +171,10 @@ export function messageOverheadRows(
 	innerWidth: number,
 	clock: Clock,
 	lookup?: QuoteLookup,
+	marker = "",
 ): number {
 	const width = Math.max(1, innerWidth);
-	const header = wrappedRows(headerLine(message, clock), width);
+	const header = wrappedRows(headerLine(message, clock, marker), width);
 	const quoted = quoteForDisplay(message, width, clock, lookup).rows;
 	const files = message.isDeleted
 		? 0
@@ -200,9 +201,10 @@ export function messageRowCount(
 	clock: Clock,
 	maxRows = 60,
 	lookup?: QuoteLookup,
+	marker = "",
 ): number {
 	const rows = Math.max(1, maxRows);
-	const overhead = messageOverheadRows(message, innerWidth, clock, lookup);
+	const overhead = messageOverheadRows(message, innerWidth, clock, lookup, marker);
 	const budget = Math.max(0, rows - overhead);
 	const body = showsBody(message) ? bodyForDisplay(message, budget, innerWidth) : { rows: 0 };
 	return Math.min(rows, overhead + body.rows);

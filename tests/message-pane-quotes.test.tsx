@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Clock } from "../src/domain/format";
 import type { Conversation, Message } from "../src/domain/types";
 import { MessagePane } from "../src/ui/MessagePane";
-import { frameOf } from "./helpers/frame";
+import { frameOf, frameOf as renderFrame } from "./helpers/frame";
 
 /** A stub clock: layout assertions must not depend on ICU formatting or the host zone. */
 const clock: Clock = () => "10:00";
@@ -99,6 +99,25 @@ describe("MessagePane quotes", () => {
 		const frame = frameOfMessages([reply()]);
 
 		expect(frame).toContain("┃ 10:00 uuid-marta: not loaded");
+	});
+
+	test("marks the message the keyboard is pointing at", () => {
+		// The selection exists either way; without a marker `j`/`k` move something invisible
+		// and `r` looks like it only ever answers the newest message.
+		const frame = renderFrame(
+			<MessagePane
+				conversation={conversation}
+				messages={[target(), reply()]}
+				height={20}
+				width={60}
+				clock={clock}
+				cursorId="c1:1000"
+			/>,
+		);
+
+		expect(frame).toContain("▸ 10:00 Adam");
+		// One marker, on one row: the other message is not selected.
+		expect(frame.split("▸").length - 1).toBe(1);
 	});
 
 	test("a reply that was deleted for everyone draws no quote", () => {

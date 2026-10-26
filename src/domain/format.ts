@@ -111,9 +111,13 @@ export function headerSuffix(message: Message): string {
 	return `${editedMarker(message)}${receiptMarker(message)}${reactionMarker(message)}`;
 }
 
-/** The author row exactly as the pane draws it: clock, space, author label. */
-export function headerLine(message: Message, clock: Clock): string {
-	return `${clock(message.sentAt)} ${describeAuthor(message)}${headerSuffix(message)}`;
+/**
+ * The author row exactly as the pane draws it: optional marker, clock, space, author label.
+ * The marker is part of the string the row is measured from, so a cursor cannot cost a row
+ * the window never budgeted.
+ */
+export function headerLine(message: Message, clock: Clock, marker = ""): string {
+	return `${marker}${clock(message.sentAt)} ${describeAuthor(message)}${headerSuffix(message)}`;
 }
 
 /** One attachment exactly as the pane draws it. */

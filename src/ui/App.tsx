@@ -1,7 +1,7 @@
 import { Box, Text, useApp, useInput } from "ink";
 import { useMemo } from "react";
 import type { Action, AppState } from "../app/state";
-import { conversationRows } from "../app/state";
+import { conversationRows, pointedMessage } from "../app/state";
 import { displayLine } from "../domain/display";
 import { COMPOSER_HEIGHT, Composer, REPLYING_COMPOSER_HEIGHT } from "./Composer";
 import { ConversationList } from "./ConversationList";
@@ -24,7 +24,7 @@ const hintsFor = (isComposing: boolean, focus: AppState["focus"], isReplying: bo
 	}
 	const panes = "tab panes · i compose · / search · q quit";
 	return focus === "messages"
-		? `j/k scroll · r reply · ⇞/⇟ page · ${panes}`
+		? `j/k select · r reply · ⇞/⇟ page · ${panes}`
 		: `j/k move · ${panes}`;
 };
 
@@ -181,6 +181,7 @@ export function App({ state, dispatch }: AppProps) {
 							width={messageWidth}
 							height={messageHeight}
 							scroll={state.scroll}
+							cursorId={pointedMessage(state)?.id}
 							isFocused={state.focus === "messages"}
 							clock={clock}
 						/>
