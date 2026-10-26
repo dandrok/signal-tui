@@ -6,7 +6,7 @@ import type {
 	Reaction,
 	ReceiptState,
 } from "../../src/domain/types";
-import type { BackendEvent, SignalBackend } from "../../src/ports/backend";
+import type { BackendEvent, ReplyTarget, SignalBackend } from "../../src/ports/backend";
 import type { MessageStore } from "../../src/ports/store";
 
 export const conversation = (id = "uuid-alice"): Conversation => ({
@@ -214,7 +214,7 @@ export class RecordingStore implements MessageStore {
 export class FakeBackend implements SignalBackend {
 	started = 0;
 	stopped = 0;
-	readonly sent: Array<{ conversationId: string; body: string }> = [];
+	readonly sent: Array<{ conversationId: string; body: string; replyTo?: ReplyTarget }> = [];
 	failStart = false;
 	#listeners = new Set<(event: BackendEvent) => void>();
 
@@ -246,8 +246,9 @@ export class FakeBackend implements SignalBackend {
 	async sendMessage(
 		conversationId: string,
 		body: string,
+		replyTo?: ReplyTarget,
 	): Promise<{ timestamp: number | undefined }> {
-		this.sent.push({ conversationId, body });
+		this.sent.push({ conversationId, body, ...(replyTo === undefined ? {} : { replyTo }) });
 		return { timestamp: 1_760_000_000_500 };
 	}
 

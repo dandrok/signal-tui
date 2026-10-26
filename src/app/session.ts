@@ -1,7 +1,7 @@
 import { SELF_LABEL } from "../domain/format";
 import type { ConversationId } from "../domain/types";
 import { SELF_AUTHOR_ID } from "../domain/types";
-import type { BackendEvent, SignalBackend } from "../ports/backend";
+import type { BackendEvent, ReplyTarget, SignalBackend } from "../ports/backend";
 import type { MessageStore } from "../ports/store";
 
 const MAX_ERRORS = 20;
@@ -30,7 +30,8 @@ export interface SessionDeps {
 export interface Session {
 	start(): Promise<void>;
 	stop(): Promise<void>;
-	send(conversationId: ConversationId, body: string): Promise<void>;
+	/** Sends `body`, optionally as a reply to an earlier message. */
+	send(conversationId: ConversationId, body: string, replyTo?: ReplyTarget): Promise<void>;
 	/** Clears the unread count for a conversation the user is looking at. */
 	markRead(conversationId: ConversationId): Promise<void>;
 	/** Resolves once every queued write has been applied. */
@@ -164,8 +165,8 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 			// conversation — not when the message merely arrived.
 			await sendReadReceipts(conversationId);
 		},
-		async send(conversationId: ConversationId, body: string): Promise<void> {
-			const { timestamp } = await backend.sendMessage(conversationId, body);
+		async send(conversationId: ConversationId, body: string, replyTo?: ReplyTarget): Promise<void> {
+			const { timestamp } = await backend.sendMessage(conversationId, body, replyTo);
 
 			// Echo locally: Signal does not send a transcript back to the device that
 			// wrote the message, so without this your own message never appears.
@@ -195,6 +196,12 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 						sentAt,
 						isOutgoing: true,
 						isDeleted: false,
+						// Our own reply carries the marker too, so the row draws what it answers
+						// without waiting for the transcript Signal never sends back to us. Only
+						// the identity is stored — the text is read from the quoted message.
+						...(replyTo === undefined
+							? {}
+							: { quote: { sentAt: replyTo.sentAt, authorId: replyTo.authorId } }),
 						...(timer === undefined || timer <= 0 ? {} : { expiresAt: sentAt + timer * 1000 }),
 					});
 					notify();

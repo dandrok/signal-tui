@@ -1,4 +1,6 @@
-import type { Conversation, ConversationId, Message } from "../domain/types";
+import type { Conversation, ConversationId, Message, MessageId } from "../domain/types";
+import type { ReplyTargetIn } from "./reply";
+import { canAnswerIn, messageBeingAnsweredIn, pointedMessageIn, replyTargetIn } from "./reply";
 
 export type Focus = "conversations" | "messages" | "composer";
 
@@ -41,6 +43,12 @@ export interface AppState {
 	/** Messages hidden above the window; `0` is pinned to the newest. */
 	readonly scroll: number;
 	readonly draft: string;
+	/**
+	 * The message the draft answers, if any. An id rather than the message: the row it
+	 * names can be edited or deleted while the reply is being written, and the pane must
+	 * then show what actually happened to it.
+	 */
+	readonly replyToId: MessageId | null;
 	readonly notice: Notice | null;
 	readonly search: SearchState | null;
 }
@@ -59,6 +67,9 @@ export type Action =
 	| { readonly type: "scroll-moved"; readonly delta: number }
 	| { readonly type: "draft-changed"; readonly value: string }
 	| { readonly type: "draft-submitted" }
+	/** Answers the message the pane is pointing at; the reducer resolves which one. */
+	| { readonly type: "reply-started" }
+	| { readonly type: "reply-cancelled" }
 	| { readonly type: "notice"; readonly notice: Notice | null }
 	| { readonly type: "search-opened" }
 	| { readonly type: "search-closed" }
@@ -74,6 +85,7 @@ export const emptyState: AppState = {
 	focus: "conversations",
 	scroll: 0,
 	draft: "",
+	replyToId: null,
 	notice: null,
 	search: null,
 };
@@ -95,16 +107,33 @@ export function reduce(state: AppState, action: Action): AppState {
 				// Only a different conversation starts at its newest message. A reorder
 				// keeps the offset because it is still the same thread.
 				scroll: selectedId === state.selectedId ? state.scroll : 0,
+				// A reply belongs to the thread it was started in.
+				replyToId: selectedId === state.selectedId ? state.replyToId : null,
 			};
 		}
-		case "messages-loaded":
+		case "messages-loaded": {
+			const loaded = action.messages;
+			// A row that stays in the list can still stop being answerable: a
+			// delete-for-everyone and a timer both keep the row and blank its text. Keeping
+			// the target in that case is what makes the composer claim a reply the send path
+			// then refuses — the message goes out plain and the user is told nothing.
+			const forSelected = action.conversationId === state.selectedId;
+			const stillAnswerable =
+				state.replyToId !== null &&
+				loaded.some(
+					(message) =>
+						message.id === state.replyToId && canAnswerIn(message, action.conversationId),
+				);
 			return {
 				...state,
 				messagesByConversation: {
 					...state.messagesByConversation,
-					[action.conversationId]: action.messages,
+					[action.conversationId]: loaded,
 				},
+				replyToId:
+					state.replyToId !== null && (!forSelected || stillAnswerable) ? state.replyToId : null,
 			};
+		}
 		case "move-selection": {
 			const current = selectedIndex(state);
 			if (current === -1) {
@@ -117,7 +146,7 @@ export function reduce(state: AppState, action: Action): AppState {
 				? state
 				: // A different conversation always starts at its newest message. The
 					// other way round, the pane would open mid-history and look stale.
-					{ ...state, selectedId: next.id, scroll: 0 };
+					{ ...state, selectedId: next.id, scroll: 0, replyToId: null };
 		}
 		case "focus":
 			return state.focus === action.focus ? state : { ...state, focus: action.focus };
@@ -151,8 +180,32 @@ export function reduce(state: AppState, action: Action): AppState {
 			if (body.length === 0) {
 				return state;
 			}
-			return { ...state, draft: "", notice: { kind: "queued", text: `queued: ${body}` } };
+			return {
+				...state,
+				draft: "",
+				// The reply was sent with the text, so the next draft starts fresh.
+				replyToId: null,
+				notice: { kind: "queued", text: `queued: ${body}` },
+			};
 		}
+		case "reply-started": {
+			const target = pointedMessage(state);
+			const conversation = selectedConversation(state);
+			// Nothing to answer (an empty thread), or a row that is gone and cannot be
+			// answered at all: either way there is no reply to start.
+			if (
+				target === undefined ||
+				conversation === undefined ||
+				!canAnswerIn(target, conversation.id)
+			) {
+				return state;
+			}
+			return { ...state, replyToId: target.id, focus: "composer" };
+		}
+		case "reply-cancelled":
+			return state.replyToId === null && state.focus === "messages"
+				? state
+				: { ...state, replyToId: null, focus: "messages" };
 		case "search-opened":
 			return {
 				...state,
@@ -261,4 +314,20 @@ export function selectedMessages(state: AppState): readonly Message[] {
 		return [];
 	}
 	return state.messagesByConversation[conversation.id] ?? [];
+}
+
+/** State-shaped doors onto `./reply`, which takes messages and offsets instead. */
+export function pointedMessage(state: AppState): Message | undefined {
+	return pointedMessageIn(selectedMessages(state), state.scroll);
+}
+
+export function replyTarget(state: AppState): ReplyTargetIn | null {
+	const conversation = selectedConversation(state);
+	return conversation === undefined
+		? null
+		: replyTargetIn(selectedMessages(state), state.replyToId, conversation.id);
+}
+
+export function messageBeingAnswered(state: AppState): Message | undefined {
+	return messageBeingAnsweredIn(selectedMessages(state), state.replyToId);
 }

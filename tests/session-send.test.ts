@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createSession } from "../src/app/session";
+import { SELF_AUTHOR_ID } from "../src/domain/types";
 import { DIRECT_ID, FakeBackend, RecordingStore } from "./helpers/session-fakes";
 
 /** Sending: what goes to the backend, and what the store is told afterwards. */
@@ -87,5 +88,55 @@ describe("createSession sending", () => {
 
 		const [saved] = store.messages.get(DIRECT_ID) ?? [];
 		expect(saved?.expiresAt).toBeUndefined();
+	});
+
+	test("a reply hands the backend the message it answers", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		const session = createSession({ store, backend });
+
+		await session.send(DIRECT_ID, "agreed", {
+			sentAt: 10,
+			authorId: "uuid-marta",
+			text: "attachments path also needs the 4 MiB limit",
+		});
+
+		expect(backend.sent.at(-1)?.replyTo).toEqual({
+			sentAt: 10,
+			authorId: "uuid-marta",
+			text: "attachments path also needs the 4 MiB limit",
+		});
+	});
+
+	test("our own reply echoes with the marker, so it draws what it answers", async () => {
+		// Signal never sends the transcript back to the device that wrote the message, so
+		// without the marker our own reply would show no quote until another device echoed it.
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		const session = createSession({ store, backend, clock: () => 1_000 });
+
+		await session.send(DIRECT_ID, "adding to that", {
+			sentAt: 10,
+			authorId: SELF_AUTHOR_ID,
+			text: "on it, testing now",
+		});
+		await session.flush();
+
+		const [saved] = store.messages.get(DIRECT_ID) ?? [];
+		expect(saved?.isOutgoing).toBe(true);
+		// Only the identity: the quoted text is read from the message it names.
+		expect(saved?.quote).toEqual({ sentAt: 10, authorId: SELF_AUTHOR_ID });
+	});
+
+	test("a plain message carries no marker", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		const session = createSession({ store, backend });
+
+		await session.send(DIRECT_ID, "hello");
+		await session.flush();
+
+		const [saved] = store.messages.get(DIRECT_ID) ?? [];
+		expect(saved?.quote).toBeUndefined();
 	});
 });

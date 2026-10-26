@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "../app/session";
 import type { Action, AppState } from "../app/state";
-import { emptyState, reduce, selectedConversation } from "../app/state";
+import { emptyState, reduce, replyTarget, selectedConversation } from "../app/state";
 import type { MessageStore } from "../ports/store";
 import { App } from "./App";
 
@@ -35,8 +35,11 @@ export function Root({ store, session }: RootProps) {
 			if (action.type === "draft-submitted" && session !== undefined) {
 				const body = stateRef.current.draft.trim();
 				const conversation = selectedConversation(stateRef.current);
+				// Resolved before the reducer clears it: the target is what makes this a
+				// reply rather than a message, and only the state knows which row it names.
+				const replyTo = replyTarget(stateRef.current);
 				if (body.length > 0 && conversation !== undefined) {
-					void session.send(conversation.id, body).catch((error: unknown) => {
+					void session.send(conversation.id, body, replyTo ?? undefined).catch((error: unknown) => {
 						setState((current) =>
 							reduce(current, {
 								type: "notice",

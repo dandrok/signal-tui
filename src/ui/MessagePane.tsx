@@ -10,7 +10,10 @@ import {
 	quoteForDisplay,
 	textForDisplay,
 } from "../domain/layout";
-import type { Conversation, Message, QuotedMessage } from "../domain/types";
+import type { Conversation, Message, MessageId, QuotedMessage } from "../domain/types";
+
+/** What marks the message `r` would answer: one row, and part of the measured header. */
+export const CURSOR_MARKER = "▸ ";
 
 export interface MessagePaneProps {
 	readonly conversation: Conversation | undefined;
@@ -20,6 +23,8 @@ export interface MessagePaneProps {
 	readonly width?: number;
 	/** Messages hidden above the window; `0` is pinned to the newest. */
 	readonly scroll?: number;
+	/** The message `r` would answer, drawn with a marker on its header. */
+	readonly cursorId?: MessageId | undefined;
 	readonly isFocused?: boolean;
 	/** Renders message timestamps; the domain never reads the host timezone. */
 	readonly clock: Clock;
@@ -43,6 +48,7 @@ export function visibleWindow(
 	innerWidth: number,
 	clock: Clock,
 	lookup?: QuoteLookup,
+	cursorId?: MessageId,
 ): { readonly start: number; readonly end: number; readonly hiddenAbove: number } {
 	if (messages.length === 0) {
 		return { start: 0, end: 0, hiddenAbove: 0 };
@@ -57,7 +63,8 @@ export function visibleWindow(
 		if (previous === undefined) {
 			break;
 		}
-		const cost = messageRowCount(previous, innerWidth, clock, rows, lookup);
+		const marker = previous.id === cursorId ? CURSOR_MARKER : "";
+		const cost = messageRowCount(previous, innerWidth, clock, rows, lookup, marker);
 		if (used + cost > rows) {
 			break;
 		}
@@ -74,6 +81,7 @@ export function MessagePane({
 	height,
 	width = 80,
 	scroll = 0,
+	cursorId,
 	isFocused = false,
 	clock,
 }: MessagePaneProps) {
@@ -102,10 +110,10 @@ export function MessagePane({
 	// drawn inside: measuring the window tighter than the content is how a message
 	// ends up clipped at the top, where `justifyContent="flex-end"` hides it.
 	let rowBudget = contentRows;
-	let window = visibleWindow(messages, rowBudget, scroll, innerWidth, clock, lookup);
+	let window = visibleWindow(messages, rowBudget, scroll, innerWidth, clock, lookup, cursorId);
 	if (window.hiddenAbove > 0) {
 		rowBudget = Math.max(1, contentRows - 1);
-		window = visibleWindow(messages, rowBudget, scroll, innerWidth, clock, lookup);
+		window = visibleWindow(messages, rowBudget, scroll, innerWidth, clock, lookup, cursorId);
 	}
 	const visible = messages.slice(window.start, window.end);
 
@@ -135,6 +143,7 @@ export function MessagePane({
 					innerWidth={innerWidth}
 					clock={clock}
 					lookup={lookup}
+					isCursor={message.id === cursorId}
 				/>
 			))}
 		</Box>
@@ -152,14 +161,19 @@ function MessageRow({
 	innerWidth,
 	clock,
 	lookup,
+	isCursor,
 }: {
 	readonly message: Message;
 	readonly rowBudget: number;
 	readonly innerWidth: number;
 	readonly clock: Clock;
 	readonly lookup: QuoteLookup;
+	readonly isCursor: boolean;
 }) {
-	const fullHeader = headerLine(message, clock);
+	// Measured and drawn from one string: the marker is inside `fullHeader`, which is what
+	// `messageRowCount` measured the window with.
+	const marker = isCursor ? CURSOR_MARKER : "";
+	const fullHeader = headerLine(message, clock, marker);
 	// The suffix is one string for measurement and render: `headerLine` composes exactly
 	// clock + space + author + suffix, so a marker cannot be counted and not drawn.
 	const suffix = headerSuffix(message);
@@ -184,6 +198,7 @@ function MessageRow({
 		<Box flexDirection="column">
 			{header.text === fullHeader ? (
 				<Text>
+					{marker === "" ? null : <Text color="cyan">{marker}</Text>}
 					<Text dimColor>{clock(message.sentAt)} </Text>
 					<Text bold>{describeAuthor(message)}</Text>
 					{suffix === "" ? null : <Text dimColor>{suffix}</Text>}

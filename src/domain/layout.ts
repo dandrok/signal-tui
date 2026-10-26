@@ -133,6 +133,20 @@ export function quoteForDisplay(
 	) {
 		return { text: "", truncated: false, rows: 0 };
 	}
+	return quoteBlockFor(quote, lookup, clock, innerWidth);
+}
+
+/**
+ * The quoted block on its own, for a caller that has the target but no reply row yet: the
+ * composer draws it while a reply is being written. `quoteForDisplay` is this plus the rule
+ * about rows that are gone, so both surfaces show one composition.
+ */
+export function quoteBlockFor(
+	quote: QuotedMessage,
+	lookup: QuoteLookup | undefined,
+	clock: Clock,
+	innerWidth: number,
+): DisplayBody {
 	const target = lookup?.(quote);
 	const author =
 		target !== undefined
@@ -157,9 +171,10 @@ export function messageOverheadRows(
 	innerWidth: number,
 	clock: Clock,
 	lookup?: QuoteLookup,
+	marker = "",
 ): number {
 	const width = Math.max(1, innerWidth);
-	const header = wrappedRows(headerLine(message, clock), width);
+	const header = wrappedRows(headerLine(message, clock, marker), width);
 	const quoted = quoteForDisplay(message, width, clock, lookup).rows;
 	const files = message.isDeleted
 		? 0
@@ -186,9 +201,10 @@ export function messageRowCount(
 	clock: Clock,
 	maxRows = 60,
 	lookup?: QuoteLookup,
+	marker = "",
 ): number {
 	const rows = Math.max(1, maxRows);
-	const overhead = messageOverheadRows(message, innerWidth, clock, lookup);
+	const overhead = messageOverheadRows(message, innerWidth, clock, lookup, marker);
 	const budget = Math.max(0, rows - overhead);
 	const body = showsBody(message) ? bodyForDisplay(message, budget, innerWidth) : { rows: 0 };
 	return Math.min(rows, overhead + body.rows);

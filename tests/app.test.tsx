@@ -77,7 +77,7 @@ describe("App", () => {
 		await tick();
 		const frame = plain(lastFrame() ?? "");
 		// Back to the message pane, which is where you look after writing.
-		expect(frame).toContain("j/k scroll");
+		expect(frame).toContain("j/k select");
 		expect(frame).toContain("draft one");
 	});
 
@@ -90,7 +90,7 @@ describe("App", () => {
 
 		stdin.write("	");
 		await tick();
-		expect(plain(lastFrame() ?? "")).toContain("j/k scroll");
+		expect(plain(lastFrame() ?? "")).toContain("j/k select");
 
 		// j belongs to the message pane now. Asserting the dispatched action
 		// rather than the frame: from `scroll: 0` a `scroll-moved` of -1 clamps to
