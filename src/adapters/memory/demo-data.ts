@@ -129,4 +129,16 @@ export const demoMessages: readonly Message[] = [
 		// What a view-once message leaves behind: a row with no text and no files.
 		isViewOnce: true,
 	},
+	{
+		id: "m-10",
+		conversationId: "c-signal-devs",
+		author: "Adam",
+		body: "that is exactly why the loop is chunked",
+		sentAt: minutes(5),
+		isOutgoing: false,
+		isDeleted: false,
+		// A reply: the quoted text is not stored, only which message it answers, so
+		// `--demo` shows the quote block resolving against the thread above it.
+		quote: { sentAt: minutes(3), authorId: "uuid-marta" },
+	},
 ];

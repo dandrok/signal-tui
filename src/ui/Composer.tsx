@@ -1,5 +1,5 @@
 import { Box, Text } from "ink";
-import { draftTail } from "../domain/format";
+import { draftTail } from "../domain/layout";
 
 export interface ComposerProps {
 	readonly draft: string;
