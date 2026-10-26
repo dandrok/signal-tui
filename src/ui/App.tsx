@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import type { Action, AppState } from "../app/state";
 import { conversationRows } from "../app/state";
 import { displayLine } from "../domain/display";
-import { COMPOSER_HEIGHT, Composer } from "./Composer";
+import { COMPOSER_HEIGHT, Composer, REPLYING_COMPOSER_HEIGHT } from "./Composer";
 import { ConversationList } from "./ConversationList";
 import { clockFor, localTimeZone } from "./clock";
 import { useTerminalSize } from "./hooks/useTerminalSize";
@@ -18,12 +18,14 @@ export interface AppProps {
 /** Rows a page of `j`/`k` covers while the message pane owns the keyboard. */
 const SCROLL_STEP = 10;
 
-const hintsFor = (isComposing: boolean, focus: AppState["focus"]): string => {
+const hintsFor = (isComposing: boolean, focus: AppState["focus"], isReplying: boolean): string => {
 	if (isComposing) {
-		return "⏎ send · esc back · tab panes";
+		return isReplying ? "⏎ send · esc cancel reply · tab panes" : "⏎ send · esc back · tab panes";
 	}
 	const panes = "tab panes · i compose · / search · q quit";
-	return focus === "messages" ? `j/k scroll · ⇞/⇟ page · ${panes}` : `j/k move · ${panes}`;
+	return focus === "messages"
+		? `j/k scroll · r reply · ⇞/⇟ page · ${panes}`
+		: `j/k move · ${panes}`;
 };
 
 export function App({ state, dispatch }: AppProps) {
@@ -39,6 +41,12 @@ export function App({ state, dispatch }: AppProps) {
 		conversation === undefined ? [] : (state.messagesByConversation[conversation.id] ?? []);
 	const isSearching = state.search !== null;
 	const isComposing = state.focus === "composer" && !isSearching;
+	// The message being answered, resolved once per messages change rather than per frame.
+	const messagesById = useMemo(
+		() => new Map(messages.map((message) => [message.id, message] as const)),
+		[messages],
+	);
+	const replyTo = state.replyToId === null ? undefined : messagesById.get(state.replyToId);
 
 	useInput((input, key) => {
 		if (key.ctrl && input === "c") {
@@ -88,7 +96,13 @@ export function App({ state, dispatch }: AppProps) {
 				return;
 			}
 			if (key.escape) {
-				dispatch({ type: "focus", focus: "messages" });
+				// A reply is a mode: leaving it drops the target rather than leaving the
+				// composer claiming to answer something the next draft is not.
+				dispatch(
+					state.replyToId === null
+						? { type: "focus", focus: "messages" }
+						: { type: "reply-cancelled" },
+				);
 				return;
 			}
 			if (key.backspace || key.delete) {
@@ -113,6 +127,10 @@ export function App({ state, dispatch }: AppProps) {
 		}
 
 		const inMessages = state.focus === "messages";
+		if (inMessages && input === "r") {
+			dispatch({ type: "reply-started" });
+			return;
+		}
 		if (inMessages && key.pageUp) {
 			dispatch({ type: "scroll-moved", delta: SCROLL_STEP });
 			return;
@@ -139,7 +157,8 @@ export function App({ state, dispatch }: AppProps) {
 	const clock = useMemo(() => clockFor(localTimeZone()), []);
 	const listWidth = Math.max(22, Math.min(32, Math.floor(columns * 0.3)));
 	const bodyHeight = Math.max(8, rows - 1);
-	const messageHeight = Math.max(5, bodyHeight - COMPOSER_HEIGHT);
+	const composerHeight = replyTo === undefined ? COMPOSER_HEIGHT : REPLYING_COMPOSER_HEIGHT;
+	const messageHeight = Math.max(5, bodyHeight - composerHeight);
 	const messageWidth = Math.max(20, columns - listWidth);
 
 	return (
@@ -165,13 +184,19 @@ export function App({ state, dispatch }: AppProps) {
 							isFocused={state.focus === "messages"}
 							clock={clock}
 						/>
-						<Composer draft={state.draft} isFocused={isComposing} width={messageWidth} />
+						<Composer
+							draft={state.draft}
+							isFocused={isComposing}
+							width={messageWidth}
+							replyTo={replyTo}
+							clock={clock}
+						/>
 					</Box>
 				</Box>
 			)}
 
 			<Box paddingX={1}>
-				<Text dimColor>{hintsFor(isComposing, state.focus)}</Text>
+				<Text dimColor>{hintsFor(isComposing, state.focus, replyTo !== undefined)}</Text>
 				{state.notice ? <Text color="green"> · {displayLine(state.notice.text)}</Text> : null}
 			</Box>
 		</Box>

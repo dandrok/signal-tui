@@ -1,4 +1,4 @@
-import type { Conversation, ConversationId, Message } from "../domain/types";
+import type { Conversation, ConversationId, Message, MessageId } from "../domain/types";
 
 export type Focus = "conversations" | "messages" | "composer";
 
@@ -41,6 +41,12 @@ export interface AppState {
 	/** Messages hidden above the window; `0` is pinned to the newest. */
 	readonly scroll: number;
 	readonly draft: string;
+	/**
+	 * The message the draft answers, if any. An id rather than the message: the row it
+	 * names can be edited or deleted while the reply is being written, and the pane must
+	 * then show what actually happened to it.
+	 */
+	readonly replyToId: MessageId | null;
 	readonly notice: Notice | null;
 	readonly search: SearchState | null;
 }
@@ -59,6 +65,9 @@ export type Action =
 	| { readonly type: "scroll-moved"; readonly delta: number }
 	| { readonly type: "draft-changed"; readonly value: string }
 	| { readonly type: "draft-submitted" }
+	/** Answers the message the pane is pointing at; the reducer resolves which one. */
+	| { readonly type: "reply-started" }
+	| { readonly type: "reply-cancelled" }
 	| { readonly type: "notice"; readonly notice: Notice | null }
 	| { readonly type: "search-opened" }
 	| { readonly type: "search-closed" }
@@ -74,6 +83,7 @@ export const emptyState: AppState = {
 	focus: "conversations",
 	scroll: 0,
 	draft: "",
+	replyToId: null,
 	notice: null,
 	search: null,
 };
@@ -95,6 +105,8 @@ export function reduce(state: AppState, action: Action): AppState {
 				// Only a different conversation starts at its newest message. A reorder
 				// keeps the offset because it is still the same thread.
 				scroll: selectedId === state.selectedId ? state.scroll : 0,
+				// A reply belongs to the thread it was started in.
+				replyToId: selectedId === state.selectedId ? state.replyToId : null,
 			};
 		}
 		case "messages-loaded":
@@ -104,6 +116,14 @@ export function reduce(state: AppState, action: Action): AppState {
 					...state.messagesByConversation,
 					[action.conversationId]: action.messages,
 				},
+				// The row being answered can go away between keystrokes: a delete-for-everyone
+				// or a purge removes it from the list, and the composer must stop claiming to
+				// answer something that is no longer there.
+				replyToId:
+					state.replyToId !== null &&
+					action.messages.some((message) => message.id === state.replyToId)
+						? state.replyToId
+						: null,
 			};
 		case "move-selection": {
 			const current = selectedIndex(state);
@@ -117,7 +137,7 @@ export function reduce(state: AppState, action: Action): AppState {
 				? state
 				: // A different conversation always starts at its newest message. The
 					// other way round, the pane would open mid-history and look stale.
-					{ ...state, selectedId: next.id, scroll: 0 };
+					{ ...state, selectedId: next.id, scroll: 0, replyToId: null };
 		}
 		case "focus":
 			return state.focus === action.focus ? state : { ...state, focus: action.focus };
@@ -151,8 +171,27 @@ export function reduce(state: AppState, action: Action): AppState {
 			if (body.length === 0) {
 				return state;
 			}
-			return { ...state, draft: "", notice: { kind: "queued", text: `queued: ${body}` } };
+			return {
+				...state,
+				draft: "",
+				// The reply was sent with the text, so the next draft starts fresh.
+				replyToId: null,
+				notice: { kind: "queued", text: `queued: ${body}` },
+			};
 		}
+		case "reply-started": {
+			const target = pointedMessage(state);
+			// Nothing to answer (an empty thread), or a row that is gone and cannot be
+			// answered at all: either way there is no reply to start.
+			if (target === undefined || !canAnswer(target)) {
+				return state;
+			}
+			return { ...state, replyToId: target.id, focus: "composer" };
+		}
+		case "reply-cancelled":
+			return state.replyToId === null && state.focus === "messages"
+				? state
+				: { ...state, replyToId: null, focus: "messages" };
 		case "search-opened":
 			return {
 				...state,
@@ -261,4 +300,64 @@ export function selectedMessages(state: AppState): readonly Message[] {
 		return [];
 	}
 	return state.messagesByConversation[conversation.id] ?? [];
+}
+
+/**
+ * The message the pane is pointing at.
+ *
+ * There is no separate cursor: the scroll offset already names a message — the bottom-most
+ * one in the window — so `j`/`k` keep meaning what they meant, and a selection can never
+ * point at a row that is not on screen. That is what `r` answers.
+ */
+export function pointedMessage(state: AppState): Message | undefined {
+	const messages = selectedMessages(state);
+	if (messages.length === 0) {
+		return undefined;
+	}
+	const offset = Math.min(Math.max(0, state.scroll), messages.length - 1);
+	return messages[messages.length - 1 - offset];
+}
+
+/**
+ * Whether a message can be answered at all: a delete-for-everyone, an expired row and a
+ * view-once message have nothing to quote, and the engine needs an author that resolves to
+ * a number or a uuid — a row cached before schema v4 has no id to send.
+ */
+export function canAnswer(message: Message): boolean {
+	return (
+		!message.isDeleted &&
+		message.isExpired !== true &&
+		message.isViewOnce !== true &&
+		message.authorId !== undefined
+	);
+}
+
+/**
+ * What a submitted draft would send as its reply, or null when it would not send one.
+ *
+ * The text travels with the target because recipients render the quoted block from the
+ * payload; this cache keeps only the identity, so the words are read from the message at
+ * send time rather than stored a second time.
+ */
+export function replyTarget(state: AppState): {
+	readonly sentAt: number;
+	readonly authorId: string;
+	readonly text: string;
+} | null {
+	if (state.replyToId === null) {
+		return null;
+	}
+	const target = selectedMessages(state).find((message) => message.id === state.replyToId);
+	if (target === undefined || !canAnswer(target) || target.authorId === undefined) {
+		return null;
+	}
+	return { sentAt: target.sentAt, authorId: target.authorId, text: target.body };
+}
+
+/** The message a draft is answering, for the composer to draw. */
+export function messageBeingAnswered(state: AppState): Message | undefined {
+	if (state.replyToId === null) {
+		return undefined;
+	}
+	return selectedMessages(state).find((message) => message.id === state.replyToId);
 }

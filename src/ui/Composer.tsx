@@ -1,15 +1,23 @@
 import { Box, Text } from "ink";
-import { draftTail } from "../domain/layout";
+import type { Clock } from "../domain/format";
+import { draftTail, quoteBlockFor } from "../domain/layout";
+import type { Message } from "../domain/types";
 
 export interface ComposerProps {
 	readonly draft: string;
 	readonly isFocused: boolean;
 	/** Total pane width, borders included. */
 	readonly width?: number;
+	/** The message this draft answers, drawn above the input row. */
+	readonly replyTo?: Message | undefined;
+	readonly clock?: Clock;
 }
 
 /** Frame plus one typing line. Fixed so the pane stack above it never jumps. */
 export const COMPOSER_HEIGHT = 3;
+
+/** One more row while a reply is being written: the quoted block sits above the prompt. */
+export const REPLYING_COMPOSER_HEIGHT = COMPOSER_HEIGHT + 1;
 
 /** `› ` prompt, the block cursor, and the marker for a draft with earlier lines. */
 const PROMPT_CELLS = 2;
@@ -23,7 +31,7 @@ const ELLIPSIS_CELLS = 1;
  * Only the tail of a long draft is drawn: the box is one row, so rendering the
  * whole draft would wrap, overflow and scroll the cursor out of sight.
  */
-export function Composer({ draft, isFocused, width = 80 }: ComposerProps) {
+export function Composer({ draft, isFocused, width = 80, replyTo, clock }: ComposerProps) {
 	const empty = draft.length === 0;
 	const inner = Math.max(8, width - 4);
 	const room = Math.max(1, inner - PROMPT_CELLS - CURSOR_CELLS);
@@ -31,6 +39,17 @@ export function Composer({ draft, isFocused, width = 80 }: ComposerProps) {
 	// ellipsis, which costs the cell that decides whether it fits.
 	const measured = draftTail(draft, room);
 	const tail = measured.truncated ? draftTail(draft, Math.max(1, room - ELLIPSIS_CELLS)) : measured;
+	// One composition for the quoted block, shared with the pane: the composer resolves the
+	// target it already holds, so the line says the same thing the thread does.
+	const quote =
+		replyTo === undefined || clock === undefined
+			? undefined
+			: quoteBlockFor(
+					{ sentAt: replyTo.sentAt, authorId: replyTo.authorId ?? null },
+					() => replyTo,
+					clock,
+					inner,
+				);
 
 	return (
 		<Box
@@ -38,8 +57,9 @@ export function Composer({ draft, isFocused, width = 80 }: ComposerProps) {
 			borderStyle="round"
 			borderColor={isFocused ? "green" : "gray"}
 			paddingX={1}
-			height={COMPOSER_HEIGHT}
+			height={quote === undefined ? COMPOSER_HEIGHT : REPLYING_COMPOSER_HEIGHT}
 		>
+			{quote === undefined ? null : <Text dimColor>{quote.text}</Text>}
 			<Box>
 				<Text color={isFocused ? "green" : "gray"}>{isFocused ? "› " : "  "}</Text>
 				{tail.truncated ? <Text dimColor>…</Text> : null}

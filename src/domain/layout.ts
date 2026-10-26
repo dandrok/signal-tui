@@ -133,6 +133,20 @@ export function quoteForDisplay(
 	) {
 		return { text: "", truncated: false, rows: 0 };
 	}
+	return quoteBlockFor(quote, lookup, clock, innerWidth);
+}
+
+/**
+ * The quoted block on its own, for a caller that has the target but no reply row yet: the
+ * composer draws it while a reply is being written. `quoteForDisplay` is this plus the rule
+ * about rows that are gone, so both surfaces show one composition.
+ */
+export function quoteBlockFor(
+	quote: QuotedMessage,
+	lookup: QuoteLookup | undefined,
+	clock: Clock,
+	innerWidth: number,
+): DisplayBody {
 	const target = lookup?.(quote);
 	const author =
 		target !== undefined
