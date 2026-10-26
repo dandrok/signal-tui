@@ -62,6 +62,26 @@ export interface SendResult {
 
 export type ReceiptType = "read" | "viewed";
 
+/**
+ * The message a reply answers, as the transport needs it.
+ *
+ * `send` takes the target by timestamp plus its author, and both are mandatory once a
+ * quote is sent — the engine refuses a `quoteTimestamp` without a `quoteAuthor`. The text
+ * travels too: recipients render the quoted block from the payload, so omitting it would
+ * show them an empty quote.
+ */
+export interface ReplyTarget {
+	/** When the quoted message was sent; the identity Signal uses for it. */
+	readonly sentAt: number;
+	/**
+	 * The quoted author's number or uuid. `SELF_AUTHOR_ID` is neither, so the adapter
+	 * substitutes the account number for our own messages.
+	 */
+	readonly authorId: string;
+	/** What the quoted message says, as this cache renders it. */
+	readonly text: string;
+}
+
 export interface SignalBackend {
 	start(): Promise<void>;
 	stop(): Promise<void>;
@@ -74,6 +94,11 @@ export interface SignalBackend {
 		timestamps: readonly number[],
 		type?: ReceiptType,
 	): Promise<void>;
-	sendMessage(conversationId: ConversationId, body: string): Promise<SendResult>;
+	/** Sends `body`, optionally as a reply to an earlier message. */
+	sendMessage(
+		conversationId: ConversationId,
+		body: string,
+		replyTo?: ReplyTarget,
+	): Promise<SendResult>;
 	subscribe(listener: (event: BackendEvent) => void): () => void;
 }

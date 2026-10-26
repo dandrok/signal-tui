@@ -1,5 +1,12 @@
 import type { ConversationId } from "../../domain/types";
-import type { BackendEvent, ReceiptType, SendResult, SignalBackend } from "../../ports/backend";
+import { SELF_AUTHOR_ID } from "../../domain/types";
+import type {
+	BackendEvent,
+	ReceiptType,
+	ReplyTarget,
+	SendResult,
+	SignalBackend,
+} from "../../ports/backend";
 import { JsonRpcClient } from "./json-rpc-client";
 import { mapEnvelope } from "./map-envelope";
 import { createProcessStream } from "./process-stream";
@@ -110,11 +117,29 @@ export class SignalCliBackend implements SignalBackend {
 		this.#client.close("backend stopped");
 	}
 
-	async sendMessage(conversationId: ConversationId, body: string): Promise<SendResult> {
+	async sendMessage(
+		conversationId: ConversationId,
+		body: string,
+		replyTo?: ReplyTarget,
+	): Promise<SendResult> {
 		// Single-account mode: params carry no `account`, exactly as documented.
-		const params = this.#groupIds.has(conversationId)
-			? { groupId: conversationId, message: body }
-			: { recipient: [conversationId], message: body };
+		const address = this.#groupIds.has(conversationId)
+			? { groupId: conversationId }
+			: { recipient: [conversationId] };
+		// A quote names its target by timestamp *and* author, and the engine rejects the
+		// first without the second (`SendCommand` throws "Quote author parameter is
+		// missing"). Our own messages have `SELF_AUTHOR_ID`, which is not a number or a
+		// uuid — the account number is what the engine resolves back to us.
+		const params =
+			replyTo === undefined
+				? { ...address, message: body }
+				: {
+						...address,
+						message: body,
+						quoteTimestamp: replyTo.sentAt,
+						quoteAuthor: replyTo.authorId === SELF_AUTHOR_ID ? this.#account : replyTo.authorId,
+						quoteMessage: replyTo.text,
+					};
 		const result = await this.#client.request<{ timestamp?: unknown } | undefined>("send", params);
 		const timestamp = result?.timestamp;
 		return { timestamp: typeof timestamp === "number" ? timestamp : undefined };
