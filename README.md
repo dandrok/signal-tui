@@ -182,6 +182,11 @@ the last second of typing.
   a `▸`), `r`, type, `⏎`. The quoted text travels with the message; the cache still keeps
   only its identity. The selection is the bottom-most message in the window, so reaching an
   older one scrolls the thread down to it.
+- **notifications**: a message in a thread you are not reading rings the terminal bell and
+  sends a desktop notification (`OSC 9` — kitty, Ghostty, WezTerm, iTerm2 and Windows
+  Terminal show it; a terminal without it just rings), and the window title carries the
+  unread count. The text is sanitised and length-capped before it enters the sequence: a
+  notification is the one place a peer's words leave the pane.
 - **view-once messages** are recorded but never kept: their text and file references
   are not written to the cache or the search index, so the row says
   `view-once message · not stored` and there is nothing to recover later
@@ -199,8 +204,7 @@ the last second of typing.
 - quoting **attachments** in a reply, and replying to a view-once message — a reply whose
   target is outside the loaded window reads `not loaded`, because the quoted text is not
   stored
-- opening an attachment from the TUI (`xdg-open`), typing indicators, desktop
-  notifications
+- opening an attachment from the TUI (`xdg-open`), typing indicators
 - history from before you linked this device
 - **view-once messages are not shown at all**, only announced: this client keeps no copy,
   and files are not rendered yet, so there is nothing to open. Note that `signal-cli`

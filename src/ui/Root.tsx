@@ -4,12 +4,22 @@ import type { Action, AppState } from "../app/state";
 import { emptyState, reduce, replyTarget, selectedConversation } from "../app/state";
 import type { MessageStore } from "../ports/store";
 import { App } from "./App";
+import { incomingSequence, title, unreadTitle, type Writer } from "./notify";
 
 export interface RootProps {
 	readonly store: MessageStore;
 	/** Absent in demo mode: there is nothing to send to and nothing to listen for. */
 	readonly session?: Session | undefined;
+	/** Where notification sequences go. Injectable so tests can collect them. */
+	readonly write?: Writer | undefined;
 }
+
+/** Nothing is written unless a person is looking at a terminal: piped output stays clean. */
+const stdoutWriter: Writer = (chunk) => {
+	if (process.stdout.isTTY === true) {
+		process.stdout.write(chunk);
+	}
+};
 
 const describe = (error: unknown): string =>
 	error instanceof Error ? error.message : String(error);
@@ -21,7 +31,7 @@ const SEARCH_LIMIT = 20;
  * Owns app state and the two side effects it needs: a send when a draft is
  * submitted, and a reload when the session says the cache changed.
  */
-export function Root({ store, session }: RootProps) {
+export function Root({ store, session, write = stdoutWriter }: RootProps) {
 	const [state, setState] = useState<AppState>(emptyState);
 	const [version, setVersion] = useState(0);
 	const stateRef = useRef(state);
@@ -60,6 +70,26 @@ export function Root({ store, session }: RootProps) {
 		}
 		return session.onChange(() => setVersion((current) => current + 1));
 	}, [session]);
+
+	// A message nobody is looking at is the whole reason a notification exists: the thread
+	// on screen needs none, and the session only announces rows it actually stored.
+	useEffect(() => {
+		if (session === undefined) {
+			return;
+		}
+		return session.onIncoming((notice) => {
+			if (notice.message.conversationId === stateRef.current.selectedId) {
+				return;
+			}
+			write(incomingSequence(notice));
+		});
+	}, [session, write]);
+
+	// The title carries what the sidebar would say, for when the window is behind something.
+	useEffect(() => {
+		const unread = state.conversations.reduce((total, entry) => total + entry.unreadCount, 0);
+		write(title(unreadTitle(unread)));
+	}, [state.conversations, write]);
 
 	const conversationId = selectedConversation(state)?.id;
 	const searchQuery = state.search?.query ?? null;

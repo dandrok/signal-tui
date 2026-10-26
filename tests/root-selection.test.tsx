@@ -23,6 +23,7 @@ const fakeSession = (): { session: Session; notify: () => void } => {
 					listener = null;
 				};
 			},
+			onIncoming: () => () => undefined,
 			errors: [],
 		},
 		notify: () => listener?.(),
