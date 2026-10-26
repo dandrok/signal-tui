@@ -50,6 +50,11 @@ export function readAllMessages(db: Database, conversationId: ConversationId): M
 		.all(conversationId);
 }
 
+/**
+ * Full-text hits, strongest match first. Deleted rows are filtered here as well as in the
+ * view: a body the sender deleted must not be discoverable, and `markMessageDeleted` blanks
+ * it only for rows this build wrote.
+ */
 export function searchMessages(db: Database, query: string, limit: number): MessageRow[] {
 	const ftsQuery = toFtsQuery(query);
 	if (ftsQuery === null || limit <= 0) {

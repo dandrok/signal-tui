@@ -192,8 +192,8 @@ the last second of typing.
 - **sending a reaction** from the TUI: received ones are shown, but there is no key or
   mode for adding your own yet
 - **sending a reply** from the TUI: a reply that arrives shows what it answers, but there
-  is no key or mode for composing one yet — and a reply to a message this device never
-  cached reads `not in this cache`, because the quoted text is not stored
+  is no key or mode for composing one yet — and a reply whose target is outside the loaded
+  window reads `not loaded`, because the quoted text is not stored
 - opening an attachment from the TUI (`xdg-open`), typing indicators, desktop
   notifications
 - history from before you linked this device

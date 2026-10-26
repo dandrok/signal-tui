@@ -92,11 +92,21 @@ describe("MessagePane quotes", () => {
 		expect(rows(frame)).toBeLessThanOrEqual(6);
 	});
 
-	test("a reply with no resolvable target still says what it answers", () => {
-		// Only the identity is cached, so a thread without the quoted message is the case
-		// where the text is not stored anywhere — the pane says exactly that.
+	test("a reply whose target is outside the window still says what it answers", () => {
+		// Only the identity is cached, so a thread that does not hold the quoted message is
+		// the case where the pane cannot show its text — and it says so rather than quoting
+		// an empty line.
 		const frame = frameOfMessages([reply()]);
 
-		expect(frame).toContain("┃ 10:00 uuid-marta: not in this cache");
+		expect(frame).toContain("┃ 10:00 uuid-marta: not loaded");
+	});
+
+	test("a reply that was deleted for everyone draws no quote", () => {
+		// Its row already reports the deletion; naming what it answered would keep showing
+		// the reply's context after the sender asked for the message to go.
+		const frame = frameOfMessages([target(), reply({ isDeleted: true, body: "" })]);
+
+		expect(frame).toContain("message deleted");
+		expect(frame).not.toContain("┃ 10:00 Marta");
 	});
 });

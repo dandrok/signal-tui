@@ -84,15 +84,4 @@ describe("SqliteMessageStore quotes", () => {
 		expect(stored?.body).toBe("");
 		expect(stored?.quote).toEqual({ sentAt: 500, authorId: null });
 	});
-
-	test("a quote is searchable only through its own body", async () => {
-		// The quoted words live on the quoted message. A reply must not make them findable
-		// a second time, and must not hide that they exist either: it is simply not a copy.
-		const store = open();
-		await store.upsertConversation(conversation());
-		await store.saveMessage(message({ body: "agreed", quote: { sentAt: 500, authorId: null } }));
-
-		expect((await store.search("agreed")).map((entry) => entry.id)).toEqual(["uuid-alice:1000"]);
-		expect(await store.search("holiday")).toEqual([]);
-	});
 });

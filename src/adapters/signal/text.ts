@@ -54,6 +54,7 @@ export const textOf = (data: Textual): string => {
 	return captionOf(data) ?? "";
 };
 
+/** The body a message carries: its own text, or the caption of the first file that has one. */
 export const bodyOf = (data: Textual): string => {
 	const text = textOf(data);
 	if (text.length > 0) {

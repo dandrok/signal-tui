@@ -87,11 +87,13 @@ export type QuoteLookup = (quote: QuotedMessage) => Message | undefined;
 const UNKNOWN_QUOTED_AUTHOR = "unknown author";
 
 /**
- * What a quote shows when its target is not in the cache. The payload carried a copy of
- * that text and this cache deliberately did not keep it, so the honest answer is that the
- * message is missing here — not an empty line pretending the reply quoted nothing.
+ * What a quote shows when its target is not in the pane's window.
+ *
+ * The window is bounded (SQLite hands over the newest 50 messages, memory 200), so the
+ * quoted message can be in the durable cache and still be missing here — saying "never
+ * cached" would be a claim the pane cannot make, and "not loaded" is the one it can.
  */
-export const QUOTE_NOT_CACHED = "not in this cache";
+export const QUOTE_NOT_LOADED = "not loaded";
 
 /** Lead-in that marks a quoted block, so it cannot be read as the sender's own words. */
 const QUOTE_PREFIX = "┃ ";
@@ -109,6 +111,12 @@ const QUOTE_PREFIX = "┃ ";
  * `describeBody` instead of through a second, drifting copy of those notices. The author
  * is resolved the same way; only when the target is missing does the payload's identity
  * have to stand in for it.
+ *
+ * A reply that is itself gone draws no quote at all: its row already says "message
+ * deleted", "message expired" or "view-once message · not stored", and a line naming what
+ * it answered spends the same window on context for words nobody can read. The marker
+ * stays in the cache — it is an identity, not content — and this is the boundary where it
+ * stops being drawn, which a redelivered envelope cannot undo.
  */
 export function quoteForDisplay(
 	message: Message,
@@ -117,7 +125,12 @@ export function quoteForDisplay(
 	lookup?: QuoteLookup,
 ): DisplayBody {
 	const quote = message.quote;
-	if (quote === undefined) {
+	if (
+		quote === undefined ||
+		message.isDeleted ||
+		message.isExpired === true ||
+		message.isViewOnce === true
+	) {
 		return { text: "", truncated: false, rows: 0 };
 	}
 	const target = lookup?.(quote);
@@ -129,7 +142,7 @@ export function quoteForDisplay(
 			: quote.authorId === null
 				? UNKNOWN_QUOTED_AUTHOR
 				: displayLine(quote.authorId);
-	const body = target === undefined ? QUOTE_NOT_CACHED : describeBody(target);
+	const body = target === undefined ? QUOTE_NOT_LOADED : describeBody(target);
 	const head = `${QUOTE_PREFIX}${clock(quote.sentAt)} ${author}`;
 	return textForDisplay(body.length === 0 ? head : `${head}: ${body}`, 1, innerWidth);
 }
@@ -244,6 +257,7 @@ export interface DraftTail {
  */
 const TAIL_WINDOW = 2;
 
+/** The last line of a draft that fits one row, and whether earlier lines were dropped. */
 export function draftTail(draft: string, width: number): DraftTail {
 	const cells = Math.max(1, width);
 	const limit = Math.max(1, cells * TAIL_WINDOW);

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Clock } from "../src/domain/format";
 import { VIEW_ONCE_BODY } from "../src/domain/format";
-import { messageRowCount, QUOTE_NOT_CACHED, quoteForDisplay } from "../src/domain/layout";
+import { messageRowCount, QUOTE_NOT_LOADED, quoteForDisplay } from "../src/domain/layout";
 import type { Message } from "../src/domain/types";
 
 /** A stub clock: layout assertions must not depend on ICU formatting. */
@@ -70,13 +70,29 @@ describe("quoteForDisplay", () => {
 		expect(line(reply(), viewOnce)).toBe(`┃ 10:00 Marta: ${VIEW_ONCE_BODY}`);
 	});
 
-	test("a target that is not cached falls back to the payload's identity", () => {
-		// The cache keeps only the identity, so this is the case where the text really is
-		// not here — and saying so beats an empty line that looks like a quote of nothing.
-		expect(line(reply())).toBe(`┃ 10:00 uuid-marta: ${QUOTE_NOT_CACHED}`);
+	test("a target that is not loaded falls back to the payload's identity", () => {
+		// The window is bounded, so the quoted message may be in the cache and absent from
+		// the pane — the label says what the pane can know, and the payload's identity is
+		// what names the author it cannot resolve.
+		expect(line(reply())).toBe(`┃ 10:00 uuid-marta: ${QUOTE_NOT_LOADED}`);
 		expect(line(message({ quote: { sentAt: 500, authorId: null } }))).toBe(
-			`┃ 10:00 unknown author: ${QUOTE_NOT_CACHED}`,
+			`┃ 10:00 unknown author: ${QUOTE_NOT_LOADED}`,
 		);
+	});
+
+	test("a reply that is itself gone draws no quote", () => {
+		// The row already says what happened to it. Naming what it answered would spend a
+		// row of the window on context for words nobody can read, and a delete-for-everyone
+		// would still be telling the reader which message it answered.
+		const lookup = lookupFor(target(), reply());
+		const gone = (overrides: Partial<Message>): number =>
+			quoteForDisplay(reply({ body: "", ...overrides }), 60, clock, lookup).rows;
+
+		expect(gone({ isDeleted: true })).toBe(0);
+		expect(gone({ isExpired: true })).toBe(0);
+		expect(gone({ isViewOnce: true })).toBe(0);
+		// The control: the same reply, alive, does draw it.
+		expect(gone({})).toBe(1);
 	});
 
 	test("costs one row whatever the quoted message's length", () => {

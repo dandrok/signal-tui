@@ -27,6 +27,7 @@ export interface ConversationRow {
 	expires_in_seconds: number | null;
 }
 
+/** A stored row as the domain sees it: receipts and flags decoded, a quote resolved. */
 export function toMessage(row: MessageRow): Message {
 	const receipt = receiptFromRank(row.receipt_rank);
 	// A quote is identified by its timestamp alone: without one there is nothing to
