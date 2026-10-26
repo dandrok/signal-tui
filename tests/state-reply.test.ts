@@ -122,6 +122,9 @@ describe("starting a reply", () => {
 		// pane still showed a reply.
 		for (const gone of [{ isDeleted: true }, { isExpired: true }, { isViewOnce: true }]) {
 			const started = reduce(loaded(thread()), { type: "reply-started" });
+			// The reply has to exist before the reload, or this test would pass for the wrong
+			// reason: a no-op `reply-started` leaves `replyToId` null already.
+			expect(started.replyToId).toBe("c1:2000");
 			const next = reduce(started, {
 				type: "messages-loaded",
 				conversationId: "c1",
