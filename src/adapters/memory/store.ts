@@ -10,6 +10,7 @@ import type {
 } from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
 import { demoConversations, demoMessages } from "./demo-data";
+import { mergeMessage } from "./merge-message";
 
 const DEFAULT_LIMIT = 200;
 
@@ -115,54 +116,14 @@ export class InMemoryStore implements MessageStore {
 		const index = this.#messages.findIndex((existing) => existing.id === message.id);
 		const existing = this.#messages[index];
 		if (existing === undefined) {
+			// A view-once message keeps no content, however it was handed over.
 			this.#messages.push(
 				message.isViewOnce === true ? { ...message, body: "", attachments: [] } : message,
 			);
 			return { inserted: true };
 		}
-		// An absent `attachments` field means "this update says nothing about files",
-		// not "this message has none" — the rule the SQLite adapter already applies,
-		// or a partial update would silently drop files the store had.
-		const attachments = message.attachments ?? existing.attachments;
-		// Two rules, both about replays, and both mirrored in the SQLite adapter: a
-		// correction outranks the original text, and deletion is one-way — Signal has no
-		// undelete, so a redelivered envelope must not revive a tombstone.
-		const deleted = existing.isDeleted === true || message.isDeleted === true;
-		// Deleted, expired, or corrected: in all three the stored body is the newer truth.
-		const frozen =
-			existing.isDeleted === true || existing.isExpired === true || existing.isEdited === true;
-		// A view-once message keeps no content, ever: not on the first write, not on a
-		// replay, and not when an older cache still had the text. One-way, like deletion.
-		const viewOnce = existing.isViewOnce === true || message.isViewOnce === true;
-		const base: Message = {
-			...message,
-			isDeleted: deleted,
-			body: viewOnce ? "" : frozen ? existing.body : message.body,
-			...(viewOnce ? { isViewOnce: true } : {}),
-			...(existing.isEdited === true ? { isEdited: true } : {}),
-			// Same for expiry: the flag lives in the row, not in the payload.
-			...(existing.isExpired === true ? { isExpired: true } : {}),
-			// The stored deadline wins. A replay can supply one where none was known,
-			// never replace one: extending it would outlive what the sender promised.
-			...((existing.expiresAt ?? message.expiresAt) === undefined
-				? {}
-				: { expiresAt: (existing.expiresAt ?? message.expiresAt) as number }),
-			// A replay that carries no author id says nothing about the sender, not that
-			// there is none: dropping the stored one would silently downgrade the row to
-			// label matching, which the SQLite adapter avoids with COALESCE.
-			...(message.authorId === undefined && existing.authorId !== undefined
-				? { authorId: existing.authorId }
-				: {}),
-			// Same shape as the author id, and the fourth field to fail this way: a
-			// payload never carries a receipt, so spreading `...message` would erase the
-			// one the store already recorded and the ticks would vanish on a reconnect.
-			// The SQLite adapter leaves the column alone, so both agree.
-			...(message.receipt === undefined && existing.receipt !== undefined
-				? { receipt: existing.receipt }
-				: {}),
-		};
-		const kept = viewOnce || deleted || existing.isExpired === true ? [] : attachments;
-		this.#messages[index] = kept === undefined ? base : { ...base, attachments: kept };
+		// Every replay rule lives in `mergeMessage`, so this adapter and the SQLite one agree.
+		this.#messages[index] = mergeMessage(existing, message);
 		return { inserted: false };
 	}
 
@@ -211,7 +172,9 @@ export class InMemoryStore implements MessageStore {
 			}
 			purged += 1;
 			// Text, files and reactions all go: a message that is gone should not still name
-			// the path of the photo it carried, nor keep a 👍 on it.
+			// the path of the photo it carried, nor keep a 👍 on it. The quote stays: it is
+			// the identity of another message, holds none of this one's words, and the pane
+			// reads its text from that row — which says "message expired" on its own.
 			this.#reactions.delete(message.id);
 			return { ...message, body: "", attachments: [], isExpired: true };
 		});
@@ -270,7 +233,8 @@ export class InMemoryStore implements MessageStore {
 			return;
 		}
 		// Attachments go with the text: a deleted message should stop pointing at
-		// files, same as the SQLite adapter drops their rows.
+		// files, same as the SQLite adapter drops their rows. The quote marker stays —
+		// it names another message and holds no words of this one.
 		this.#messages[index] = { ...existing, isDeleted: true, body: "", attachments: [] };
 		this.#reactions.delete(messageId);
 	}

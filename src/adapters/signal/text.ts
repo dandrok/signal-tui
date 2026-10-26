@@ -1,6 +1,7 @@
 import { ATTACHMENT_BODY_PLACEHOLDER } from "../../domain/format";
-import type { Attachment } from "../../domain/types";
+import type { Attachment, QuotedMessage } from "../../domain/types";
 import { mapAttachments } from "./map-attachments";
+import type { Quote } from "./schemas";
 
 /**
  * The text and the timer of a data message, read from signal-cli's shape.
@@ -67,6 +68,30 @@ export interface Content {
 	readonly body: string;
 	readonly attachments: readonly Attachment[];
 	readonly isViewOnce?: true;
+	readonly quote?: QuotedMessage;
+}
+
+/**
+ * What a reply quotes, as the identity of the quoted message.
+ *
+ * The payload repeats the quoted message's text, and this cache deliberately drops that
+ * copy: keeping it would store somebody's words twice and give every delete and expiry
+ * rule a second place to chase. The pane resolves the text from the message itself — it
+ * has the whole thread — so a target that was deleted or expired reads as such for free,
+ * and a redelivered envelope cannot put words back that are gone.
+ *
+ * `quote.author` upstream is deprecated and repeats whichever identifier is present, so
+ * the identity comes from the uuid first — the same preference `peerId` uses.
+ */
+export function quotedOf(data: { readonly quote?: Quote | undefined }): QuotedMessage | undefined {
+	const quote = data.quote;
+	if (quote === undefined) {
+		return undefined;
+	}
+	return {
+		sentAt: quote.id,
+		authorId: quote.authorUuid ?? quote.authorNumber ?? null,
+	};
 }
 
 /**
@@ -74,13 +99,18 @@ export interface Content {
  *
  * A view-once message is the sender asking that it not be kept, and this cache is
  * plaintext on disk, so there is nothing to trade: the text and the file references are
- * dropped at the one point every payload passes through, and the row records only that
- * a view-once message arrived. The store enforces the same rule on write, because a
- * retention rule that lives only in the mapper is one adapter away from being lost.
+ * dropped at the one point every payload passes through, and the row records only that a
+ * view-once message arrived. The store enforces the same rule on write, because a
+ * retention rule that lives only in the mapper is one adapter away from being lost. The
+ * quote survives: it names another message and holds none of this one's words.
  */
-export function contentOf(data: Textual & { readonly viewOnce?: boolean | undefined }): Content {
+export function contentOf(
+	data: Textual & { readonly viewOnce?: boolean | undefined; readonly quote?: Quote | undefined },
+): Content {
+	const quote = quotedOf(data);
+	const reply = quote === undefined ? {} : { quote };
 	if (data.viewOnce === true) {
-		return { body: "", attachments: [], isViewOnce: true };
+		return { body: "", attachments: [], isViewOnce: true, ...reply };
 	}
-	return { body: bodyOf(data), attachments: mapAttachments(data.attachments) };
+	return { body: bodyOf(data), attachments: mapAttachments(data.attachments), ...reply };
 }

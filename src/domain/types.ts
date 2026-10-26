@@ -48,6 +48,26 @@ export interface Reaction {
  */
 export type ReceiptState = "delivered" | "read" | "viewed";
 
+/**
+ * What a reply quotes: the identity of the quoted message, not a copy of it.
+ *
+ * Signal names the quoted message by the timestamp it was sent at — the same identity an
+ * edit and a delete-for-everyone use — so the cache can resolve it against the thread it
+ * sits in, and the pane reads its text from that row. Keeping the payload's copy of the
+ * words instead would store somebody's text twice and make every delete and expiry rule
+ * chase it into the reply as well.
+ */
+export interface QuotedMessage {
+	readonly sentAt: number;
+	/**
+	 * Identity of the quoted author: their uuid, else their number, else null when the
+	 * payload named neither. The payload carries no display name for a third party, so the
+	 * label is resolved from the cached message when the thread still has it — and this is
+	 * what names the author when it does not.
+	 */
+	readonly authorId: string | null;
+}
+
 export interface Attachment {
 	readonly id: string | null;
 	readonly contentType: string | null;
@@ -108,6 +128,12 @@ export interface Message {
 	 * absent on rows cached before reactions were mapped.
 	 */
 	readonly reactions?: readonly Reaction[];
+	/**
+	 * What this message replies to. Absent when it is not a reply, and on rows cached
+	 * before quotes were mapped. Only the identity is stored: the text the pane shows comes
+	 * from the quoted message itself, so nothing of somebody's words is kept twice.
+	 */
+	readonly quote?: QuotedMessage;
 	/**
 	 * Optional so a caller that only cares about text is not forced to spell out
 	 * an empty list; `attachmentsOf` reads it without null checks.

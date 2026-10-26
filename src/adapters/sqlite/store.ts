@@ -152,6 +152,8 @@ export class SqliteMessageStore implements MessageStore {
 			number,
 			number | null,
 			number,
+			number | null,
+			string | null,
 		];
 		const params: SaveParams = [
 			message.id,
@@ -166,6 +168,10 @@ export class SqliteMessageStore implements MessageStore {
 			message.isDeleted ? 1 : 0,
 			message.expiresAt ?? null,
 			message.isViewOnce === true ? 1 : 0,
+			// The quote is an identity, not a copy: nothing of the quoted text is written
+			// here, so there is nothing for the delete or expiry rules to chase.
+			message.quote?.sentAt ?? null,
+			message.quote?.authorId ?? null,
 		];
 
 		// One write on the common path: a message seen once is inserted, and only a
@@ -178,8 +184,8 @@ export class SqliteMessageStore implements MessageStore {
 			// and loses whatever the replay was carrying.
 			const insertedRows = this.#db
 				.query<{ id: string }, SaveParams>(
-					`INSERT INTO messages (id, conversation_id, author, author_id, body, sent_at, is_outgoing, is_deleted, is_edited, expires_at, is_view_once)
-					 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, ?9, ?10)
+					`INSERT INTO messages (id, conversation_id, author, author_id, body, sent_at, is_outgoing, is_deleted, is_edited, expires_at, is_view_once, quote_sent_at, quote_author_id)
+					 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, ?9, ?10, ?11, ?12)
 					 ON CONFLICT(id) DO NOTHING
 					 RETURNING id`,
 				)
@@ -211,8 +217,14 @@ export class SqliteMessageStore implements MessageStore {
 					        -- A replay may supply one where none was known (NULL), and may
 					        -- never push out one that exists: that would extend the lifetime
 					        -- of a message the sender already expected to be gone.
-					        expires_at = COALESCE(expires_at, ?9)
-						 WHERE id = ?1 AND conversation_id = ?2`,
+					        expires_at = COALESCE(expires_at, ?9),
+					        -- A quote names an earlier message, so a payload that carries none
+					        -- says nothing about it: COALESCE keeps the one already stored.
+					        -- Nothing of the quoted text is kept either way, so a replay cannot
+					        -- restore words that a delete or a timer took away.
+					        quote_sent_at = COALESCE(quote_sent_at, ?11),
+					        quote_author_id = COALESCE(quote_author_id, ?12)
+						WHERE id = ?1 AND conversation_id = ?2`,
 					)
 					.run(...params);
 			}

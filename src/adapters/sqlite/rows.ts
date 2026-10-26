@@ -15,6 +15,8 @@ export interface MessageRow {
 	is_expired: number;
 	receipt_rank: number;
 	is_view_once: number;
+	quote_sent_at: number | null;
+	quote_author_id: string | null;
 }
 
 export interface ConversationRow {
@@ -27,6 +29,12 @@ export interface ConversationRow {
 
 export function toMessage(row: MessageRow): Message {
 	const receipt = receiptFromRank(row.receipt_rank);
+	// A quote is identified by its timestamp alone: without one there is nothing to
+	// resolve it against, so the author column is noise rather than a reply.
+	const quote =
+		row.quote_sent_at === null
+			? undefined
+			: { sentAt: row.quote_sent_at, authorId: row.quote_author_id };
 	return {
 		id: row.id,
 		conversationId: row.conversation_id,
@@ -43,6 +51,7 @@ export function toMessage(row: MessageRow): Message {
 		// row cached before receipts were stored, both report "no receipt seen".
 		...(receipt === undefined ? {} : { receipt }),
 		...(row.is_view_once === 1 ? { isViewOnce: true } : {}),
+		...(quote === undefined ? {} : { quote }),
 	};
 }
 
