@@ -1,5 +1,12 @@
 import type { Conversation, ConversationId, Message, MessageId } from "../domain/types";
 import { selectedConversation, selectedIndex, selectedMessages } from "./conversations";
+import {
+	applyMessagesLoaded,
+	applyOlderLoaded,
+	invalidateHistory,
+	releaseOlder,
+	requestOlder,
+} from "./history";
 
 export * from "./conversations";
 
@@ -84,6 +91,10 @@ export type Action =
 	| { readonly type: "draft-submitted" }
 	/** Asks for the page above the oldest loaded message. */
 	| { readonly type: "older-requested" }
+	/** The read failed: the pane must be able to ask again after a transient error. */
+	| { readonly type: "older-failed" }
+	/** A message older than the loaded history arrived: the thread may have more behind it. */
+	| { readonly type: "history-invalidated"; readonly conversationId: ConversationId }
 	| {
 			readonly type: "older-loaded";
 			readonly conversationId: ConversationId;
@@ -135,77 +146,21 @@ export function reduce(state: AppState, action: Action): AppState {
 				scroll: selectedId === state.selectedId ? state.scroll : 0,
 				// A reply belongs to the thread it was started in.
 				replyToId: selectedId === state.selectedId ? state.replyToId : null,
+				// So does a page request: leaving it pending would load history for whoever
+				// is selected when the read lands, and shift a pane nobody asked to move.
+				olderRequested: selectedId === state.selectedId ? state.olderRequested : false,
 			};
 		}
-		case "messages-loaded": {
-			const loaded = action.messages;
-			const previous = state.messagesByConversation[action.conversationId] ?? [];
-			// History the user walked back to survives a reload. The fresh page is the newest
-			// slice, so everything older than its first row is kept ahead of it — otherwise an
-			// incoming message would throw away the pages behind it and the pane would jump.
-			const oldestFresh = loaded[0]?.sentAt;
-			const older = oldestFresh === undefined ? [] : previous.filter((m) => m.sentAt < oldestFresh);
-			const merged = dedupeById([...older, ...loaded]);
-			// A row that stays in the list can still stop being answerable: a
-			// delete-for-everyone and a timer both keep the row and blank its text. Keeping
-			// the target in that case is what makes the composer claim a reply the send path
-			// then refuses — the message goes out plain and the user is told nothing.
-			const forSelected = action.conversationId === state.selectedId;
-			const stillAnswerable =
-				state.replyToId !== null &&
-				merged.some(
-					(message) =>
-						message.id === state.replyToId && canAnswerIn(message, action.conversationId),
-				);
-			return {
-				...state,
-				messagesByConversation: {
-					...state.messagesByConversation,
-					[action.conversationId]: merged,
-				},
-				// The window is anchored to the newest message, so the offset cannot exceed it.
-				scroll: Math.min(state.scroll, Math.max(0, merged.length - 1)),
-				replyToId:
-					state.replyToId !== null && (!forSelected || stillAnswerable) ? state.replyToId : null,
-			};
-		}
-		case "older-requested": {
-			const conversation = selectedConversation(state);
-			if (
-				conversation === undefined ||
-				state.olderRequested ||
-				state.historyComplete[conversation.id] === true
-			) {
-				return state;
-			}
-			return { ...state, olderRequested: true };
-		}
-		case "older-loaded": {
-			const conversationId = action.conversationId;
-			if (action.messages.length === 0) {
-				// A short (or empty) page is the beginning of the thread: stop asking.
-				return {
-					...state,
-					olderRequested: false,
-					historyComplete: { ...state.historyComplete, [conversationId]: true },
-				};
-			}
-			const current = state.messagesByConversation[conversationId] ?? [];
-			const merged = dedupeById([...action.messages, ...current]);
-			const added = merged.length - current.length;
-			return {
-				...state,
-				messagesByConversation: { ...state.messagesByConversation, [conversationId]: merged },
-				// The window is measured from the newest row: growing the list by N older ones
-				// hides N more above it, which is what keeps the message you were reading still.
-				scroll: state.scroll + added,
-				olderRequested: false,
-				historyComplete:
-					action.hasMore && state.historyComplete[conversationId] !== true
-						? state.historyComplete
-						: { ...state.historyComplete, [conversationId]: true },
-			};
-		}
+		case "messages-loaded":
+			return applyMessagesLoaded(state, action);
+		case "older-requested":
+			return requestOlder(state);
+		case "older-loaded":
+			return applyOlderLoaded(state, action);
+		case "older-failed":
+			return releaseOlder(state);
+		case "history-invalidated":
+			return invalidateHistory(state, action.conversationId);
 		case "move-selection": {
 			const current = selectedIndex(state);
 			if (current === -1) {
@@ -218,7 +173,7 @@ export function reduce(state: AppState, action: Action): AppState {
 				? state
 				: // A different conversation always starts at its newest message. The
 					// other way round, the pane would open mid-history and look stale.
-					{ ...state, selectedId: next.id, scroll: 0, replyToId: null };
+					{ ...state, selectedId: next.id, scroll: 0, replyToId: null, olderRequested: false };
 		}
 		case "focus":
 			return state.focus === action.focus ? state : { ...state, focus: action.focus };
@@ -349,15 +304,6 @@ export function reduce(state: AppState, action: Action): AppState {
 		default:
 			return state;
 	}
-}
-
-/** One copy of each message, in the order given; a later entry replaces an earlier one. */
-function dedupeById(messages: readonly Message[]): readonly Message[] {
-	const byId = new Map<string, Message>();
-	for (const message of messages) {
-		byId.set(message.id, message);
-	}
-	return [...byId.values()];
 }
 
 export function selectedSearchResult(state: AppState): Message | undefined {

@@ -43,6 +43,14 @@ export function Root({ store, session, write = stdoutWriter }: RootProps) {
 		stateRef.current = state;
 	}, [state]);
 
+	// Derived once per render: the effects below compare against the thread on screen, and
+	// the prompt says a value read by an effect belongs in its dependencies.
+	const conversationId = selectedConversation(state)?.id;
+	const oldestSentAt =
+		conversationId === undefined
+			? undefined
+			: state.messagesByConversation[conversationId]?.[0]?.sentAt;
+
 	const dispatch = useCallback(
 		(action: Action): void => {
 			if (action.type === "draft-submitted" && session !== undefined) {
@@ -85,11 +93,21 @@ export function Root({ store, session, write = stdoutWriter }: RootProps) {
 		const selectedId = state.selectedId;
 		return session.onIncoming((notice) => {
 			if (notice.message.conversationId === selectedId) {
+				// An arrival older than what is loaded means the store has history behind the
+				// page boundary, which a walked-to-the-beginning mark would refuse to reach.
+				if (oldestSentAt !== undefined && notice.message.sentAt < oldestSentAt) {
+					setState((current) =>
+						reduce(current, {
+							type: "history-invalidated",
+							conversationId: notice.message.conversationId,
+						}),
+					);
+				}
 				return;
 			}
 			write(incomingSequence(notice));
 		});
-	}, [session, write, state.selectedId]);
+	}, [session, write, state.selectedId, oldestSentAt]);
 
 	// The title carries what the sidebar would say, for when the window is behind something.
 	useEffect(() => {
@@ -97,7 +115,6 @@ export function Root({ store, session, write = stdoutWriter }: RootProps) {
 		write(title(unreadTitle(unread)));
 	}, [state.conversations, write]);
 
-	const conversationId = selectedConversation(state)?.id;
 	const searchQuery = state.search?.query ?? null;
 
 	// Search runs on every keystroke: the index is local, so a query is a millisecond.
@@ -160,10 +177,6 @@ export function Root({ store, session, write = stdoutWriter }: RootProps) {
 	// Walking back through history: one page per request, keyed on the oldest row loaded.
 	// The reducer clears `olderRequested` as it applies the page, so a held key cannot queue
 	// a read per repeat — the next request only arrives after this one landed.
-	const oldestSentAt =
-		conversationId === undefined
-			? undefined
-			: state.messagesByConversation[conversationId]?.[0]?.sentAt;
 	useEffect(() => {
 		if (!state.olderRequested || conversationId === undefined) {
 			return;
@@ -188,6 +201,9 @@ export function Root({ store, session, write = stdoutWriter }: RootProps) {
 				if (cancelled) {
 					return;
 				}
+				// The request has to be released, or one transient failure would make `k`
+				// a no-op for the rest of the session.
+				setState((current) => reduce(current, { type: "older-failed" }));
 				setState((current) =>
 					reduce(current, {
 						type: "notice",

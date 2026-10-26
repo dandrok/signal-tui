@@ -112,6 +112,59 @@ describe("asking for history", () => {
 	});
 });
 
+describe("a page request can fail, be dropped, or be overtaken", () => {
+	test("a failed read releases the request so the key works again", () => {
+		// One transient error must not make `k` a no-op for the rest of the session.
+		const asked = reduce(loaded(newestPage()), { type: "older-requested" });
+		const failed = reduce(asked, { type: "older-failed" });
+
+		expect(failed.olderRequested).toBe(false);
+		expect(failed.historyComplete.c1).toBeUndefined();
+		expect(reduce(failed, { type: "older-requested" }).olderRequested).toBe(true);
+	});
+
+	test("selecting another thread drops a request made in the old one", () => {
+		// Otherwise the pending flag survives the move, the effect re-runs for the new
+		// conversation and loads a page nobody asked for — shifting that pane.
+		const other: Conversation = { ...conversation, id: "c2", name: "Bob" };
+		const state = loaded(newestPage(), {
+			conversations: [conversation, other],
+			olderRequested: true,
+		});
+
+		const moved = reduce(state, { type: "move-selection", delta: 1 });
+
+		expect(moved.selectedId).toBe("c2");
+		expect(moved.olderRequested).toBe(false);
+	});
+
+	test("a conversation leaving the list drops it too", () => {
+		const state = loaded(newestPage(), { olderRequested: true });
+
+		const reloaded = reduce(state, { type: "conversations-loaded", conversations: [] });
+
+		expect(reloaded.olderRequested).toBe(false);
+	});
+
+	test("an older arrival reopens a thread that looked finished", () => {
+		// A message delivered out of order (or a replay of an old envelope) sits behind the
+		// page boundary, and the newest-N reload will never show it. Without this the pane
+		// would refuse to walk back to it until the app restarted.
+		const complete = loaded(newestPage(), { historyComplete: { c1: true } });
+		expect(reduce(complete, { type: "older-requested" })).toBe(complete);
+
+		const reopened = reduce(complete, { type: "history-invalidated", conversationId: "c1" });
+		expect(reopened.historyComplete.c1).toBeUndefined();
+		expect(reduce(reopened, { type: "older-requested" }).olderRequested).toBe(true);
+	});
+
+	test("invalidating a thread that was never finished changes nothing", () => {
+		const state = loaded(newestPage());
+
+		expect(reduce(state, { type: "history-invalidated", conversationId: "c1" })).toBe(state);
+	});
+});
+
 describe("a reload keeps the history behind it", () => {
 	test("pages walked back to survive an incoming message", async () => {
 		// The reload trigger is every envelope: without this, opening a page and then
