@@ -4,8 +4,7 @@ import { InMemoryStore } from "../src/adapters/memory/store";
 import type { IncomingNotice, Session } from "../src/app/session";
 import type { Message } from "../src/domain/types";
 import { Root } from "../src/ui/Root";
-
-const tick = (ms = 150): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+import { waitFor } from "./helpers/wait";
 
 /** Only what `Root` touches: a change listener, the incoming feed, and markRead on open. */
 const fakeSession = (): { session: Session; incoming: (notice: IncomingNotice) => void } => {
@@ -45,54 +44,49 @@ const message = (conversationId: string, overrides: Partial<Message> = {}): Mess
 const toasts = (chunks: readonly string[]): string[] =>
 	chunks.filter((chunk) => chunk.includes("\u001b]9;"));
 
+/** Renders `Root` and collects everything it writes, with a stable writer for the effect. */
+const rendered = (): {
+	written: string[];
+	incoming: (notice: IncomingNotice) => void;
+} => {
+	const chunks: string[] = [];
+	const write = (chunk: string): void => {
+		chunks.push(chunk);
+	};
+	const { session, incoming } = fakeSession();
+	render(<Root store={new InMemoryStore()} session={session} write={write} />);
+	return { written: chunks, incoming };
+};
+
 /**
- * The feature only exists if it fires for the right message: a toast for the thread on
- * screen would be noise, and a toast for nothing at all is the reason people turn
- * notifications off.
+ * The feature only exists if it fires for the right message: one toast for another thread,
+ * none for the thread on screen — both driven through the same path, in one run, so a
+ * `Root` that never subscribes at all fails here rather than passing quietly.
  */
 describe("Root notifications", () => {
-	test("announces a message in a conversation nobody is looking at", async () => {
-		const { session, incoming } = fakeSession();
-		const written: string[] = [];
-		render(
-			<Root store={new InMemoryStore()} session={session} write={(chunk) => written.push(chunk)} />,
-		);
-		await tick();
+	test("toasts another thread once and the open one not at all", async () => {
+		const { written, incoming } = rendered();
+		// Only the loaded store has an unread total: waiting for it is waiting for the
+		// conversation list, and therefore for the selection the check compares against.
+		await waitFor(() => written.some((chunk) => chunk.includes("9 unread")), "the store to load");
 
 		// The demo store opens on "Signal devs"; Family is another thread.
 		incoming({ message: message("c-family"), conversationName: "Family" });
-		await tick();
+		incoming({ message: message("c-signal-devs"), conversationName: "Signal devs" });
 
+		await waitFor(() => toasts(written).length > 0, "a toast");
 		const seen = toasts(written);
 		expect(seen).toHaveLength(1);
 		expect(seen[0]).toContain("Family · Mum: dinner at 7?");
 	});
 
-	test("says nothing for the conversation on screen", async () => {
-		const { session, incoming } = fakeSession();
-		const written: string[] = [];
-		render(
-			<Root store={new InMemoryStore()} session={session} write={(chunk) => written.push(chunk)} />,
-		);
-		await tick();
-
-		incoming({ message: message("c-signal-devs"), conversationName: "Signal devs" });
-		await tick();
-
-		expect(toasts(written)).toEqual([]);
-	});
-
 	test("keeps the unread count in the window title", async () => {
-		const { session } = fakeSession();
-		const written: string[] = [];
-		render(
-			<Root store={new InMemoryStore()} session={session} write={(chunk) => written.push(chunk)} />,
-		);
-		await tick();
+		const { written } = rendered();
 
-		// The demo data ships unread messages: 2 + 7 across the store.
-		const titles = written.filter((chunk) => chunk.includes("\u001b]2;"));
-		// 2 + 7 unread in the demo data: a fixed title would pass the old assertion.
-		expect(titles.at(-1)).toContain("9 unread");
+		// 2 + 7 unread in the demo data: a fixed title would pass a word-match.
+		await waitFor(
+			() => written.some((chunk) => chunk.includes("\u001b]2;signal-tui · 9 unread")),
+			"the unread title",
+		);
 	});
 });

@@ -72,18 +72,21 @@ export function Root({ store, session, write = stdoutWriter }: RootProps) {
 	}, [session]);
 
 	// A message nobody is looking at is the whole reason a notification exists: the thread
-	// on screen needs none, and the session only announces rows it actually stored.
+	// on screen needs none, and the session only announces rows it actually stored. The
+	// selected id is a dependency rather than a ref read, so the listener always compares
+	// against the conversation the pane is showing right now.
 	useEffect(() => {
 		if (session === undefined) {
 			return;
 		}
+		const selectedId = state.selectedId;
 		return session.onIncoming((notice) => {
-			if (notice.message.conversationId === stateRef.current.selectedId) {
+			if (notice.message.conversationId === selectedId) {
 				return;
 			}
 			write(incomingSequence(notice));
 		});
-	}, [session, write]);
+	}, [session, write, state.selectedId]);
 
 	// The title carries what the sidebar would say, for when the window is behind something.
 	useEffect(() => {
