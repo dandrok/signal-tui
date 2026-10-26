@@ -138,6 +138,68 @@ describe("what a submitted draft sends as its reply", () => {
 		});
 	});
 
+	test("answers a row whose author id was never cached, in a direct chat", () => {
+		// Rows cached before schema v4 have no author id, and this is what made `r` silently
+		// do nothing for anything but the newest message. In a direct chat the conversation
+		// *is* the peer, so that identity can stand in for the missing one.
+		const direct: Conversation = {
+			id: "4b1c9f1e-0000-4000-8000-000000000000",
+			name: "Marta",
+			unreadCount: 0,
+			lastActivityAt: 1,
+		};
+		const legacy: Message = {
+			id: "m-legacy",
+			conversationId: direct.id,
+			author: "Marta",
+			body: "written before v4",
+			sentAt: 500,
+			isOutgoing: false,
+			isDeleted: false,
+		};
+		const state: AppState = {
+			...emptyState,
+			conversations: [direct],
+			selectedId: direct.id,
+			messagesByConversation: { [direct.id]: [legacy] },
+			focus: "messages",
+		};
+
+		expect(reduce(state, { type: "reply-started" }).replyToId).toBe("m-legacy");
+		expect(replyTarget(reduce(state, { type: "reply-started" }))).toEqual({
+			sentAt: 500,
+			authorId: direct.id,
+			text: "written before v4",
+		});
+	});
+
+	test("still refuses one in a group, where a name is not an identifier", () => {
+		const group: Conversation = {
+			id: "dGhpcyBpcyBhIGdyb3VwIGlkPQ==",
+			name: "Signal devs",
+			unreadCount: 0,
+			lastActivityAt: 1,
+		};
+		const legacy: Message = {
+			id: "m-group-legacy",
+			conversationId: group.id,
+			author: "Marta",
+			body: "written before v4",
+			sentAt: 500,
+			isOutgoing: false,
+			isDeleted: false,
+		};
+		const state: AppState = {
+			...emptyState,
+			conversations: [group],
+			selectedId: group.id,
+			messagesByConversation: { [group.id]: [legacy] },
+			focus: "messages",
+		};
+
+		expect(reduce(state, { type: "reply-started" })).toBe(state);
+	});
+
 	test("is null when no reply was started", () => {
 		expect(replyTarget(loaded(thread()))).toBeNull();
 	});

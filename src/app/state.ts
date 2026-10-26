@@ -1,4 +1,6 @@
 import type { Conversation, ConversationId, Message, MessageId } from "../domain/types";
+import { SELF_AUTHOR_ID } from "../domain/types";
+import { isDirectConversationId } from "./session";
 
 export type Focus = "conversations" | "messages" | "composer";
 
@@ -181,9 +183,14 @@ export function reduce(state: AppState, action: Action): AppState {
 		}
 		case "reply-started": {
 			const target = pointedMessage(state);
+			const conversation = selectedConversation(state);
 			// Nothing to answer (an empty thread), or a row that is gone and cannot be
 			// answered at all: either way there is no reply to start.
-			if (target === undefined || !canAnswer(target)) {
+			if (
+				target === undefined ||
+				conversation === undefined ||
+				!canAnswer(target, conversation.id)
+			) {
 				return state;
 			}
 			return { ...state, replyToId: target.id, focus: "composer" };
@@ -319,16 +326,34 @@ export function pointedMessage(state: AppState): Message | undefined {
 }
 
 /**
- * Whether a message can be answered at all: a delete-for-everyone, an expired row and a
- * view-once message have nothing to quote, and the engine needs an author that resolves to
- * a number or a uuid — a row cached before schema v4 has no id to send.
+ * The author a reply has to name, or null when it cannot be resolved.
+ *
+ * `send` refuses a quote without a `quoteAuthor`, and that must be a number or a uuid, so a
+ * row whose id we never learned cannot be answered. Two fallbacks keep the common cases
+ * alive: our own message is always us, and in a direct chat the conversation *is* the peer —
+ * which covers rows cached before schema v4, when author ids were not stored at all. In a
+ * group there is nothing to fall back to, because a name is not an identifier.
  */
-export function canAnswer(message: Message): boolean {
+function quotedAuthor(message: Message, conversationId: ConversationId): string | null {
+	if (message.authorId !== undefined) {
+		return message.authorId;
+	}
+	if (message.isOutgoing) {
+		return SELF_AUTHOR_ID;
+	}
+	return isDirectConversationId(conversationId) ? conversationId : null;
+}
+
+/**
+ * Whether a message can be answered at all: a delete-for-everyone, an expired row and a
+ * view-once message have nothing to quote, and the author must be resolvable.
+ */
+export function canAnswer(message: Message, conversationId: ConversationId): boolean {
 	return (
 		!message.isDeleted &&
 		message.isExpired !== true &&
 		message.isViewOnce !== true &&
-		message.authorId !== undefined
+		quotedAuthor(message, conversationId) !== null
 	);
 }
 
@@ -347,11 +372,16 @@ export function replyTarget(state: AppState): {
 	if (state.replyToId === null) {
 		return null;
 	}
+	const conversation = selectedConversation(state);
 	const target = selectedMessages(state).find((message) => message.id === state.replyToId);
-	if (target === undefined || !canAnswer(target) || target.authorId === undefined) {
+	if (target === undefined || conversation === undefined) {
 		return null;
 	}
-	return { sentAt: target.sentAt, authorId: target.authorId, text: target.body };
+	const authorId = quotedAuthor(target, conversation.id);
+	if (authorId === null || !canAnswer(target, conversation.id)) {
+		return null;
+	}
+	return { sentAt: target.sentAt, authorId, text: target.body };
 }
 
 /** The message a draft is answering, for the composer to draw. */
