@@ -1,6 +1,6 @@
-import type { IncomingNotice } from "../app/session";
 import { displayLine } from "../domain/display";
 import { describeAuthor, describeBody } from "../domain/format";
+import type { IncomingNotice } from "./session";
 
 /**
  * Terminal notifications: a bell, a desktop toast, and the unread count in the title.

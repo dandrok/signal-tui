@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { incomingSequence, title, unreadTitle, type Writer } from "../app/notify";
 import type { Session } from "../app/session";
 import type { Action, AppState } from "../app/state";
 import { emptyState, reduce, replyTarget, selectedConversation } from "../app/state";
 import type { MessageStore } from "../ports/store";
 import { App } from "./App";
-import { incomingSequence, title, unreadTitle, type Writer } from "./notify";
 
 export interface RootProps {
 	readonly store: MessageStore;

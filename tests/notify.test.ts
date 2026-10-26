@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { Message } from "../src/domain/types";
 import {
 	bell,
 	incomingSequence,
@@ -8,7 +7,8 @@ import {
 	title,
 	toast,
 	unreadTitle,
-} from "../src/ui/notify";
+} from "../src/app/notify";
+import type { Message } from "../src/domain/types";
 
 const BEL = "\u0007";
 

@@ -92,6 +92,7 @@ describe("Root notifications", () => {
 
 		// The demo data ships unread messages: 2 + 7 across the store.
 		const titles = written.filter((chunk) => chunk.includes("\u001b]2;"));
-		expect(titles.at(-1)).toContain("unread");
+		// 2 + 7 unread in the demo data: a fixed title would pass the old assertion.
+		expect(titles.at(-1)).toContain("9 unread");
 	});
 });
