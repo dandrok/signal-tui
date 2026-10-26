@@ -23,6 +23,15 @@ function dedupeById(messages: readonly Message[]): readonly Message[] {
 	return [...byId.values()];
 }
 
+/** The completion marks minus one thread. */
+function withoutKey(
+	marks: Readonly<Record<string, true>>,
+	conversationId: string,
+): Readonly<Record<string, true>> {
+	const { [conversationId]: _dropped, ...rest } = marks;
+	return rest;
+}
+
 type LoadedAction = Extract<Action, { type: "messages-loaded" }>;
 type OlderAction = Extract<Action, { type: "older-loaded" }>;
 
@@ -33,7 +42,15 @@ export function applyMessagesLoaded(state: AppState, action: LoadedAction): AppS
 	// slice, so everything older than its first row is kept ahead of it — otherwise an
 	// incoming message would throw away the pages behind it and the pane would jump.
 	const oldestFresh = loaded[0]?.sentAt;
-	const older = oldestFresh === undefined ? [] : previous.filter((m) => m.sentAt < oldestFresh);
+	const newestPrevious = previous.at(-1)?.sentAt;
+	// Kept history is only contiguous with the fresh page if the page reaches back to it.
+	// A conversation left unselected while more than a page arrived comes back with a gap
+	// between the rows we kept and the newest slice — and that gap is unreachable, because
+	// paging walks from `merged[0]`. Drop the stale prefix instead of showing a hole.
+	const contiguous =
+		oldestFresh === undefined || newestPrevious === undefined || oldestFresh <= newestPrevious;
+	const older =
+		contiguous && oldestFresh !== undefined ? previous.filter((m) => m.sentAt < oldestFresh) : [];
 	const merged = dedupeById([...older, ...loaded]);
 	// A row that stays in the list can still stop being answerable: a
 	// delete-for-everyone and a timer both keep the row and blank its text. Keeping
@@ -55,6 +72,10 @@ export function applyMessagesLoaded(state: AppState, action: LoadedAction): AppS
 		scroll: Math.min(state.scroll, Math.max(0, merged.length - 1)),
 		replyToId:
 			state.replyToId !== null && (!forSelected || stillAnswerable) ? state.replyToId : null,
+		// Rows were dropped, so anything known about the beginning is no longer true.
+		...(contiguous
+			? {}
+			: { historyComplete: withoutKey(state.historyComplete, action.conversationId) }),
 	};
 }
 

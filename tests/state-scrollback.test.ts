@@ -182,6 +182,44 @@ describe("a reload keeps the history behind it", () => {
 		expect(next.messagesByConversation.c1?.at(-1)?.body).toBe("message-100");
 	});
 
+	test("a gap between kept history and the fresh page is not papered over", () => {
+		// Thread A left unselected while more than a page arrived: the newest slice no longer
+		// reaches back to what was kept, and every kept row is older than it, so the merge
+		// would show a hole. Paging walks from the first row, so the hole would be
+		// unreachable — drop the prefix and let the thread be walked again.
+		const stale = loaded([...olderPage(), ...newestPage()], {
+			scroll: 50,
+			historyComplete: { c1: true },
+		});
+
+		const next = reduce(stale, {
+			type: "messages-loaded",
+			conversationId: "c1",
+			messages: Array.from({ length: 50 }, (_unused, index) => message(300 + index)),
+		});
+
+		expect(next.messagesByConversation.c1).toHaveLength(50);
+		expect(next.messagesByConversation.c1?.[0]?.body).toBe("message-300");
+		// The beginning is no longer known: rows behind the boundary were never read.
+		expect(next.historyComplete.c1).toBeUndefined();
+	});
+
+	test("an overlapping reload keeps the history and the completion mark", () => {
+		const withHistory = loaded([...olderPage(), ...newestPage()], {
+			scroll: 50,
+			historyComplete: { c1: true },
+		});
+
+		const next = reduce(withHistory, {
+			type: "messages-loaded",
+			conversationId: "c1",
+			messages: [...newestPage(), message(100)],
+		});
+
+		expect(next.messagesByConversation.c1).toHaveLength(101);
+		expect(next.historyComplete.c1).toBe(true);
+	});
+
 	test("an offset past the end of the thread is clamped", () => {
 		const state = loaded(newestPage(), { scroll: 49 });
 
