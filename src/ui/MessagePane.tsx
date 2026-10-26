@@ -83,6 +83,13 @@ export function MessagePane({
 	// target by timestamp, and the label it shows lives on that other row. Building this
 	// map here keeps every frame at O(visible rows) afterwards — the pane would otherwise
 	// rescan the whole conversation for each quoted message it draws.
+	//
+	// One entry per timestamp is enough because a message's id *is* its conversation and
+	// instant (`<conversationId>:<sentAt>`, the primary key), so two rows in one thread can
+	// never share a `sentAt` — a second one merges into the first. Pinning that invariant is
+	// `tests/map-envelope-quotes.test.ts`'s "two envelopes at the same instant" case; a
+	// producer that invented its own id would break it, and this lookup would be the first
+	// thing to notice.
 	const lookup = useMemo<QuoteLookup>(() => {
 		const bySentAt = new Map<number, Message>();
 		for (const message of messages) {

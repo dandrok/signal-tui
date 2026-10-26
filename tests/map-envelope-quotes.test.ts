@@ -48,6 +48,25 @@ describe("mapEnvelope quotes", () => {
 		expect(withNeither.message?.quote).toEqual({ sentAt: 500, authorId: null });
 	});
 
+	test("two envelopes at the same instant are one message, not two", () => {
+		// This is what lets the pane key its quote lookup on the timestamp alone: the id is
+		// `<conversation>:<sentAt>` and it is the primary key, so a second row for the same
+		// instant in one thread cannot exist — it merges into the first. A producer that
+		// invented its own id would break this, and the lookup would then have two candidates
+		// for one quote.
+		const first = mapEnvelope(
+			reply({ id: 500, authorUuid: "uuid-marta", text: "the original words" }),
+		);
+		const again = mapEnvelope(
+			envelope({
+				dataMessage: { timestamp: 900, message: "agreed" } as Envelope["dataMessage"],
+			}),
+		);
+
+		expect(again.message?.id).toBe(first.message?.id);
+		expect(first.message?.id).toBe("b5b0c3d2-0000-4000-8000-000000000000:900");
+	});
+
 	test("a message that is not a reply has no quote", () => {
 		const mapped = mapEnvelope(
 			envelope({
