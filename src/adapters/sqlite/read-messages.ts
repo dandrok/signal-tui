@@ -39,6 +39,33 @@ export function readMessages(
 		.all(conversationId, limit);
 }
 
+/**
+ * One page older than a cursor, in reading order.
+ *
+ * The comparison is on `sent_at` alone because a message's id *is* its conversation and
+ * instant — two rows in a thread cannot share one — and it rides the
+ * `(conversation_id, sent_at DESC)` index, so walking back through history stays a range
+ * scan instead of a sort of the whole conversation.
+ */
+export function readMessagesBefore(
+	db: Database,
+	conversationId: ConversationId,
+	beforeSentAt: number,
+	limit: number,
+): MessageRow[] {
+	return db
+		.query<MessageRow, [string, number, number]>(
+			`SELECT * FROM (
+				SELECT ${selectMessageColumns}
+				FROM messages
+				WHERE conversation_id = ?1 AND sent_at < ?2
+				ORDER BY sent_at DESC
+				LIMIT ?3
+			 ) ORDER BY sent_at ASC`,
+		)
+		.all(conversationId, beforeSentAt, limit);
+}
+
 export function readAllMessages(db: Database, conversationId: ConversationId): MessageRow[] {
 	return db
 		.query<MessageRow, [string]>(

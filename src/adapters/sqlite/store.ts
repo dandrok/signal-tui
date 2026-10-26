@@ -14,7 +14,13 @@ import { applyEditRow, applyReceiptRows, purgeExpiredRows } from "./message-rule
 import { migrations } from "./migrations";
 import { restrictCachePermissions } from "./private-cache";
 import { applyReactionRow, deleteReactions, loadReactions } from "./reactions";
-import { readAllMessages, readConversations, readMessages, searchMessages } from "./read-messages";
+import {
+	readAllMessages,
+	readConversations,
+	readMessages,
+	readMessagesBefore,
+	searchMessages,
+} from "./read-messages";
 import { toConversation, toMessage } from "./rows";
 
 const DEFAULT_MESSAGE_LIMIT = 50;
@@ -78,6 +84,19 @@ export class SqliteMessageStore implements MessageStore {
 			return [];
 		}
 		return this.#hydrate(readMessages(this.#db, conversationId, limit).map(toMessage));
+	}
+
+	async listMessagesBefore(
+		conversationId: ConversationId,
+		beforeSentAt: number,
+		limit = this.#messageLimit,
+	): Promise<readonly Message[]> {
+		if (limit <= 0) {
+			return [];
+		}
+		return this.#hydrate(
+			readMessagesBefore(this.#db, conversationId, beforeSentAt, limit).map(toMessage),
+		);
 	}
 
 	async listAllMessages(conversationId: ConversationId): Promise<readonly Message[]> {

@@ -27,6 +27,9 @@ const describe = (error: unknown): string =>
 /** Results shown at once; the pane truncates rather than pages. */
 const SEARCH_LIMIT = 20;
 
+/** Messages per page: the first screenful, and every screenful of history behind it. */
+const MESSAGE_PAGE = 50;
+
 /**
  * Owns app state and the two side effects it needs: a send when a draft is
  * submitted, and a reload when the session says the cache changed.
@@ -154,6 +157,49 @@ export function Root({ store, session, write = stdoutWriter }: RootProps) {
 		};
 	}, [store, version]);
 
+	// Walking back through history: one page per request, keyed on the oldest row loaded.
+	// The reducer clears `olderRequested` as it applies the page, so a held key cannot queue
+	// a read per repeat — the next request only arrives after this one landed.
+	const oldestSentAt =
+		conversationId === undefined
+			? undefined
+			: state.messagesByConversation[conversationId]?.[0]?.sentAt;
+	useEffect(() => {
+		if (!state.olderRequested || conversationId === undefined) {
+			return;
+		}
+		let cancelled = false;
+		void store
+			.listMessagesBefore(conversationId, oldestSentAt ?? Number.MAX_SAFE_INTEGER, MESSAGE_PAGE)
+			.then((messages) => {
+				if (cancelled) {
+					return;
+				}
+				setState((current) =>
+					reduce(current, {
+						type: "older-loaded",
+						conversationId,
+						messages,
+						hasMore: messages.length === MESSAGE_PAGE,
+					}),
+				);
+			})
+			.catch((error: unknown) => {
+				if (cancelled) {
+					return;
+				}
+				setState((current) =>
+					reduce(current, {
+						type: "notice",
+						notice: { kind: "info", text: `cannot read older messages: ${describe(error)}` },
+					}),
+				);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [state.olderRequested, conversationId, oldestSentAt, store]);
+
 	// The conversation on screen is read: clear its badge on open, and keep it
 	// clear while messages arrive (`version` changes on every update).
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `version` triggers the re-run, it is not read here.
@@ -171,7 +217,7 @@ export function Root({ store, session, write = stdoutWriter }: RootProps) {
 		}
 		let cancelled = false;
 		void store
-			.listMessages(conversationId)
+			.listMessages(conversationId, MESSAGE_PAGE)
 			.then((messages) => {
 				if (cancelled) {
 					return;

@@ -170,6 +170,11 @@ the last second of typing.
   conversation. Your own sent messages inherit the conversation's timer, because
   Signal never echoes them back to the device that wrote them.
 - local full-text search over cached bodies (`/`)
+- **history in pages**: the newest 50 messages load first, and `k` at the top of what is
+  loaded asks for the page behind it (keyset, so messages arriving mid-scroll cannot shift a
+  page into a duplicate or a hole). Pages already walked back to survive an incoming message
+  instead of being thrown away.
+
 - files shown by name and size, with the caption when the sender wrote one
 - **reactions**: an emoji a peer adds is shown on the message's author row (`👍 2`), a
   second emoji from the same person replaces the first, and a removal takes it away
@@ -198,7 +203,6 @@ the last second of typing.
 
 - **Your own edits made on another device** are not applied here — those arrive on a
   second path (`syncMessage.sentMessage`) that is not mapped yet
-- scrollback beyond the messages a conversation holds in the window
 - **sending a reaction** from the TUI: received ones are shown, but there is no key or
   mode for adding your own yet
 - quoting **attachments** in a reply, and replying to a view-once message — a reply whose
