@@ -1,5 +1,5 @@
 import { SELF_LABEL } from "../domain/format";
-import type { ConversationId } from "../domain/types";
+import type { ConversationId, Message } from "../domain/types";
 import { SELF_AUTHOR_ID } from "../domain/types";
 import type { BackendEvent, ReplyTarget, SignalBackend } from "../ports/backend";
 import type { MessageStore } from "../ports/store";
@@ -21,6 +21,14 @@ export interface SessionDeps {
 	readonly clock?: () => number;
 }
 
+/** What the UI needs to announce an arriving message, and nothing more. */
+export interface IncomingNotice {
+	/** The message as the store will keep it — the UI renders it through `describeBody`. */
+	readonly message: Message;
+	/** The name the cache knows for that conversation; empty when it has none yet. */
+	readonly conversationName: string;
+}
+
 /**
  * Joins the transport to the cache: every backend event is persisted, then
  * listeners are told something changed. Writes are serialised through one queue
@@ -37,18 +45,41 @@ export interface Session {
 	/** Resolves once every queued write has been applied. */
 	flush(): Promise<void>;
 	onChange(listener: () => void): () => void;
+	/**
+	 * Fires once per message that was *newly* stored and came from someone else — the
+	 * event a notification is made of. A replayed envelope does not fire it, and neither
+	 * does our own echo: the point is "something arrived that you have not seen".
+	 */
+	onIncoming(listener: (notice: IncomingNotice) => void): () => void;
 	readonly errors: readonly string[];
 }
 
 export function createSession({ store, backend, clock = Date.now }: SessionDeps): Session {
 	const now = (): number => clock();
 	const listeners = new Set<() => void>();
+	const incomingListeners = new Set<(notice: IncomingNotice) => void>();
+	/**
+	 * Names learned from `conversation-updated`, which the backend emits before the message
+	 * it belongs to. A notification needs a name, and asking the store for it inside the
+	 * envelope queue would put a read in front of every write.
+	 */
+	const names = new Map<ConversationId, string>();
 	const errors: string[] = [];
 	let queue: Promise<void> = Promise.resolve();
 
 	const notify = (): void => {
 		for (const listener of listeners) {
 			listener();
+		}
+	};
+
+	const announce = (message: Message): void => {
+		const notice: IncomingNotice = {
+			message,
+			conversationName: names.get(message.conversationId) ?? "",
+		};
+		for (const listener of incomingListeners) {
+			listener(notice);
 		}
 	};
 
@@ -67,12 +98,19 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 		switch (event.kind) {
 			case "conversation-updated":
 				await store.upsertConversation(event.conversation);
+				// Kept for the notification: the name arrives before the message that needs it.
+				if (event.conversation.name.length > 0) {
+					names.set(event.conversation.id, event.conversation.name);
+				}
 				break;
 			case "message": {
 				const { inserted } = await store.saveMessage(event.message);
 				// A replayed envelope must not count twice, so only a new row increments.
 				if (inserted && !event.message.isOutgoing) {
 					await store.incrementUnread(event.message.conversationId, 1);
+					// Announced after the write, so a notice never describes something the cache
+					// refused to keep — and never a replay of it.
+					announce(event.message);
 				}
 				break;
 			}
@@ -217,6 +255,12 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 			listeners.add(listener);
 			return () => {
 				listeners.delete(listener);
+			};
+		},
+		onIncoming(listener: (notice: IncomingNotice) => void): () => void {
+			incomingListeners.add(listener);
+			return () => {
+				incomingListeners.delete(listener);
 			};
 		},
 		get errors(): readonly string[] {
