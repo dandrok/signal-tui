@@ -1,4 +1,8 @@
 import type { Conversation, ConversationId, Message, MessageId } from "../domain/types";
+import { selectedConversation, selectedIndex, selectedMessages } from "./conversations";
+
+export * from "./conversations";
+
 import type { ReplyTargetIn } from "./reply";
 import { canAnswerIn, messageBeingAnsweredIn, pointedMessageIn, replyTargetIn } from "./reply";
 
@@ -281,39 +285,6 @@ export function reduce(state: AppState, action: Action): AppState {
 
 export function selectedSearchResult(state: AppState): Message | undefined {
 	return state.search?.results[state.search.selectedIndex];
-}
-
-export function selectedConversation(state: AppState): Conversation | undefined {
-	return state.conversations.find((entry) => entry.id === state.selectedId);
-}
-
-/**
- * Row of the selected conversation, or -1 when nothing is selected. A render fact
- * derived on demand: storing the row is what made the pane follow the row instead
- * of the conversation.
- */
-export function selectedIndex(state: AppState): number {
-	return state.conversations.findIndex((entry) => entry.id === state.selectedId);
-}
-
-/**
- * Id → row for one conversation list, for callers that resolve the selection on every
- * frame. Kept here as a pure function so what a row *is* stays in one place; the UI
- * decides when to rebuild it (memoized on the list, not on each keystroke), which is
- * what keeps a redraw from rescanning the whole list.
- */
-export function conversationRows(
-	conversations: readonly Conversation[],
-): ReadonlyMap<ConversationId, number> {
-	return new Map(conversations.map((entry, position) => [entry.id, position] as const));
-}
-
-export function selectedMessages(state: AppState): readonly Message[] {
-	const conversation = selectedConversation(state);
-	if (!conversation) {
-		return [];
-	}
-	return state.messagesByConversation[conversation.id] ?? [];
 }
 
 /** State-shaped doors onto `./reply`, which takes messages and offsets instead. */
