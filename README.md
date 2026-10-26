@@ -116,9 +116,10 @@ you linked that device is not available — Signal does not backfill it.
 | `j` / `k` | move the selection, or scroll the message pane when it has focus |
 | `PgUp` / `PgDn` | scroll by ten messages |
 | `i` or `⏎` | focus the composer |
+| `r` | reply to the selected message (message pane) |
 | `⏎` | send (while composing) |
 | `/` | search your cached history |
-| `Esc` | leave the composer, close search |
+| `Esc` | leave the composer, cancel a reply, close search |
 | `q` | quit |
 
 The pane border shows which box has the keyboard.
@@ -177,6 +178,10 @@ the last second of typing.
   quote of something deleted or expired reads `message deleted` / `message expired` rather
   than reviving text that is gone — the cache keeps only *which* message is quoted, never a
   second copy of its words.
+- **composing a reply**: `Tab` to the message pane, `j`/`k` to pick the message (it carries
+  a `▸`), `r`, type, `⏎`. The quoted text travels with the message; the cache still keeps
+  only its identity. The selection is the bottom-most message in the window, so reaching an
+  older one scrolls the thread down to it.
 - **view-once messages** are recorded but never kept: their text and file references
   are not written to the cache or the search index, so the row says
   `view-once message · not stored` and there is nothing to recover later
@@ -191,9 +196,9 @@ the last second of typing.
 - scrollback beyond the messages a conversation holds in the window
 - **sending a reaction** from the TUI: received ones are shown, but there is no key or
   mode for adding your own yet
-- **sending a reply** from the TUI: a reply that arrives shows what it answers, but there
-  is no key or mode for composing one yet — and a reply whose target is outside the loaded
-  window reads `not loaded`, because the quoted text is not stored
+- quoting **attachments** in a reply, and replying to a view-once message — a reply whose
+  target is outside the loaded window reads `not loaded`, because the quoted text is not
+  stored
 - opening an attachment from the TUI (`xdg-open`), typing indicators, desktop
   notifications
 - history from before you linked this device
