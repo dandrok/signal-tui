@@ -1,86 +1,27 @@
-import type { Conversation, ConversationId, Message, MessageId } from "../domain/types";
+import type { Message } from "../domain/types";
 import { selectedConversation, selectedIndex, selectedMessages } from "./conversations";
+import {
+	applyMessagesLoaded,
+	applyOlderLoaded,
+	invalidateHistory,
+	releaseOlder,
+	requestOlder,
+} from "./history";
 
 export * from "./conversations";
 
 import type { ReplyTargetIn } from "./reply";
 import { canAnswerIn, messageBeingAnsweredIn, pointedMessageIn, replyTargetIn } from "./reply";
 
-export type Focus = "conversations" | "messages" | "composer";
+import type { Action, AppState, Focus } from "./state-types";
+
+export type { Action, AppState, Focus, Notice, NoticeKind, SearchState } from "./state-types";
 
 /**
  * Tab order for the panes. Cycling reads this list rather than a chain of `if`s,
  * so a fourth pane is one array entry plus its own key handling.
  */
 export const FOCUS_ORDER: readonly Focus[] = ["conversations", "messages", "composer"];
-
-/** Notices are typed so a transient send confirmation is never confused with an error. */
-export type NoticeKind = "queued" | "info";
-
-export interface Notice {
-	readonly kind: NoticeKind;
-	readonly text: string;
-}
-
-/** Search is a mode, not a pane: while it is open the keyboard belongs to it. */
-export interface SearchState {
-	readonly query: string;
-	readonly results: readonly Message[];
-	readonly selectedIndex: number;
-	/** True once a query has been run, so "no results" is distinguishable. */
-	readonly ran: boolean;
-}
-
-export interface AppState {
-	readonly conversations: readonly Conversation[];
-	readonly messagesByConversation: Readonly<Record<ConversationId, readonly Message[]>>;
-	/**
-	 * Which conversation is selected, by id rather than by its row in the list.
-	 *
-	 * The list is ordered by activity, so it reorders whenever a message arrives or is
-	 * sent: an index would then point at whoever moved into that row, and the message
-	 * pane would silently switch to a different person. The selection is about a
-	 * conversation, so it has to survive the list moving.
-	 */
-	readonly selectedId: ConversationId | null;
-	readonly focus: Focus;
-	/** Messages hidden above the window; `0` is pinned to the newest. */
-	readonly scroll: number;
-	readonly draft: string;
-	/**
-	 * The message the draft answers, if any. An id rather than the message: the row it
-	 * names can be edited or deleted while the reply is being written, and the pane must
-	 * then show what actually happened to it.
-	 */
-	readonly replyToId: MessageId | null;
-	readonly notice: Notice | null;
-	readonly search: SearchState | null;
-}
-
-export type Action =
-	| { readonly type: "conversations-loaded"; readonly conversations: readonly Conversation[] }
-	| {
-			readonly type: "messages-loaded";
-			readonly conversationId: ConversationId;
-			readonly messages: readonly Message[];
-	  }
-	| { readonly type: "move-selection"; readonly delta: number }
-	| { readonly type: "focus"; readonly focus: Focus }
-	| { readonly type: "focus-next" }
-	| { readonly type: "focus-prev" }
-	| { readonly type: "scroll-moved"; readonly delta: number }
-	| { readonly type: "draft-changed"; readonly value: string }
-	| { readonly type: "draft-submitted" }
-	/** Answers the message the pane is pointing at; the reducer resolves which one. */
-	| { readonly type: "reply-started" }
-	| { readonly type: "reply-cancelled" }
-	| { readonly type: "notice"; readonly notice: Notice | null }
-	| { readonly type: "search-opened" }
-	| { readonly type: "search-closed" }
-	| { readonly type: "search-changed"; readonly query: string }
-	| { readonly type: "search-results"; readonly results: readonly Message[] }
-	| { readonly type: "search-moved"; readonly delta: number }
-	| { readonly type: "search-selected" };
 
 export const emptyState: AppState = {
 	conversations: [],
@@ -90,6 +31,8 @@ export const emptyState: AppState = {
 	scroll: 0,
 	draft: "",
 	replyToId: null,
+	olderRequested: false,
+	historyComplete: {},
 	notice: null,
 	search: null,
 };
@@ -113,31 +56,21 @@ export function reduce(state: AppState, action: Action): AppState {
 				scroll: selectedId === state.selectedId ? state.scroll : 0,
 				// A reply belongs to the thread it was started in.
 				replyToId: selectedId === state.selectedId ? state.replyToId : null,
+				// So does a page request: leaving it pending would load history for whoever
+				// is selected when the read lands, and shift a pane nobody asked to move.
+				olderRequested: selectedId === state.selectedId ? state.olderRequested : false,
 			};
 		}
-		case "messages-loaded": {
-			const loaded = action.messages;
-			// A row that stays in the list can still stop being answerable: a
-			// delete-for-everyone and a timer both keep the row and blank its text. Keeping
-			// the target in that case is what makes the composer claim a reply the send path
-			// then refuses — the message goes out plain and the user is told nothing.
-			const forSelected = action.conversationId === state.selectedId;
-			const stillAnswerable =
-				state.replyToId !== null &&
-				loaded.some(
-					(message) =>
-						message.id === state.replyToId && canAnswerIn(message, action.conversationId),
-				);
-			return {
-				...state,
-				messagesByConversation: {
-					...state.messagesByConversation,
-					[action.conversationId]: loaded,
-				},
-				replyToId:
-					state.replyToId !== null && (!forSelected || stillAnswerable) ? state.replyToId : null,
-			};
-		}
+		case "messages-loaded":
+			return applyMessagesLoaded(state, action);
+		case "older-requested":
+			return requestOlder(state);
+		case "older-loaded":
+			return applyOlderLoaded(state, action);
+		case "older-failed":
+			return releaseOlder(state);
+		case "history-invalidated":
+			return invalidateHistory(state, action.conversationId);
 		case "move-selection": {
 			const current = selectedIndex(state);
 			if (current === -1) {
@@ -150,7 +83,7 @@ export function reduce(state: AppState, action: Action): AppState {
 				? state
 				: // A different conversation always starts at its newest message. The
 					// other way round, the pane would open mid-history and look stale.
-					{ ...state, selectedId: next.id, scroll: 0, replyToId: null };
+					{ ...state, selectedId: next.id, scroll: 0, replyToId: null, olderRequested: false };
 		}
 		case "focus":
 			return state.focus === action.focus ? state : { ...state, focus: action.focus };

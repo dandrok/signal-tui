@@ -27,6 +27,9 @@ const describe = (error: unknown): string =>
 /** Results shown at once; the pane truncates rather than pages. */
 const SEARCH_LIMIT = 20;
 
+/** Messages per page: the first screenful, and every screenful of history behind it. */
+const MESSAGE_PAGE = 50;
+
 /**
  * Owns app state and the two side effects it needs: a send when a draft is
  * submitted, and a reload when the session says the cache changed.
@@ -39,6 +42,14 @@ export function Root({ store, session, write = stdoutWriter }: RootProps) {
 	useEffect(() => {
 		stateRef.current = state;
 	}, [state]);
+
+	// Derived once per render: the effects below compare against the thread on screen, and
+	// the prompt says a value read by an effect belongs in its dependencies.
+	const conversationId = selectedConversation(state)?.id;
+	const oldestSentAt =
+		conversationId === undefined
+			? undefined
+			: state.messagesByConversation[conversationId]?.[0]?.sentAt;
 
 	const dispatch = useCallback(
 		(action: Action): void => {
@@ -82,11 +93,21 @@ export function Root({ store, session, write = stdoutWriter }: RootProps) {
 		const selectedId = state.selectedId;
 		return session.onIncoming((notice) => {
 			if (notice.message.conversationId === selectedId) {
+				// An arrival older than what is loaded means the store has history behind the
+				// page boundary, which a walked-to-the-beginning mark would refuse to reach.
+				if (oldestSentAt !== undefined && notice.message.sentAt < oldestSentAt) {
+					setState((current) =>
+						reduce(current, {
+							type: "history-invalidated",
+							conversationId: notice.message.conversationId,
+						}),
+					);
+				}
 				return;
 			}
 			write(incomingSequence(notice));
 		});
-	}, [session, write, state.selectedId]);
+	}, [session, write, state.selectedId, oldestSentAt]);
 
 	// The title carries what the sidebar would say, for when the window is behind something.
 	useEffect(() => {
@@ -94,7 +115,6 @@ export function Root({ store, session, write = stdoutWriter }: RootProps) {
 		write(title(unreadTitle(unread)));
 	}, [state.conversations, write]);
 
-	const conversationId = selectedConversation(state)?.id;
 	const searchQuery = state.search?.query ?? null;
 
 	// Search runs on every keystroke: the index is local, so a query is a millisecond.
@@ -154,6 +174,48 @@ export function Root({ store, session, write = stdoutWriter }: RootProps) {
 		};
 	}, [store, version]);
 
+	// Walking back through history: one page per request, keyed on the oldest row loaded.
+	// The reducer clears `olderRequested` as it applies the page, so a held key cannot queue
+	// a read per repeat — the next request only arrives after this one landed.
+	useEffect(() => {
+		if (!state.olderRequested || conversationId === undefined) {
+			return;
+		}
+		let cancelled = false;
+		void store
+			.listMessagesBefore(conversationId, oldestSentAt ?? Number.MAX_SAFE_INTEGER, MESSAGE_PAGE)
+			.then((messages) => {
+				if (cancelled) {
+					return;
+				}
+				setState((current) =>
+					reduce(current, {
+						type: "older-loaded",
+						conversationId,
+						messages,
+						hasMore: messages.length === MESSAGE_PAGE,
+					}),
+				);
+			})
+			.catch((error: unknown) => {
+				if (cancelled) {
+					return;
+				}
+				// The request has to be released, or one transient failure would make `k`
+				// a no-op for the rest of the session.
+				setState((current) => reduce(current, { type: "older-failed" }));
+				setState((current) =>
+					reduce(current, {
+						type: "notice",
+						notice: { kind: "info", text: `cannot read older messages: ${describe(error)}` },
+					}),
+				);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [state.olderRequested, conversationId, oldestSentAt, store]);
+
 	// The conversation on screen is read: clear its badge on open, and keep it
 	// clear while messages arrive (`version` changes on every update).
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `version` triggers the re-run, it is not read here.
@@ -171,7 +233,7 @@ export function Root({ store, session, write = stdoutWriter }: RootProps) {
 		}
 		let cancelled = false;
 		void store
-			.listMessages(conversationId)
+			.listMessages(conversationId, MESSAGE_PAGE)
 			.then((messages) => {
 				if (cancelled) {
 					return;

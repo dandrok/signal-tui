@@ -46,6 +46,17 @@ export class RecordingStore implements MessageStore {
 		return this.messages.get(conversationId) ?? [];
 	}
 
+	async listMessagesBefore(
+		conversationId: string,
+		beforeSentAt: number,
+		limit = 50,
+	): Promise<readonly Message[]> {
+		return (this.messages.get(conversationId) ?? [])
+			.filter((entry) => entry.sentAt < beforeSentAt)
+			.sort((left, right) => left.sentAt - right.sentAt)
+			.slice(-limit);
+	}
+
 	async listAllMessages(conversationId: string): Promise<readonly Message[]> {
 		return this.messages.get(conversationId) ?? [];
 	}

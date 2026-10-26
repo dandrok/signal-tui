@@ -146,9 +146,17 @@ export function App({ state, dispatch }: AppProps) {
 			return;
 		}
 		if (input === "k") {
-			dispatch(
-				inMessages ? { type: "scroll-moved", delta: 1 } : { type: "move-selection", delta: -1 },
-			);
+			if (!inMessages) {
+				dispatch({ type: "move-selection", delta: -1 });
+				return;
+			}
+			// At the top of what is loaded there is nothing left to scroll to: ask for the
+			// page above it instead, so history past the first page is reachable at all.
+			if (state.scroll >= messages.length - 1) {
+				dispatch({ type: "older-requested" });
+				return;
+			}
+			dispatch({ type: "scroll-moved", delta: 1 });
 		}
 	});
 

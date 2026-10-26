@@ -17,6 +17,20 @@ export interface MessageReader {
 	listConversations(): Promise<readonly Conversation[]>;
 	listMessages(conversationId: ConversationId, limit?: number): Promise<readonly Message[]>;
 	/**
+	 * A page of messages older than `beforeSentAt`, oldest first — the key a pane uses to
+	 * walk back through history it has not loaded.
+	 *
+	 * Keyset, not offset: messages arrive while the user scrolls, and an offset would then
+	 * return rows that shifted under it (a duplicate, or a hole). `sent_at` is the identity
+	 * within a conversation — it is part of the message id — so it is both the cursor and
+	 * the sort key.
+	 */
+	listMessagesBefore(
+		conversationId: ConversationId,
+		beforeSentAt: number,
+		limit?: number,
+	): Promise<readonly Message[]>;
+	/**
 	 * Every cached message in a conversation, oldest first. Needed where a page is
 	 * not enough — e.g. acknowledging a backlog with read receipts.
 	 */

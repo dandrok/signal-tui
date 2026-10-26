@@ -43,6 +43,26 @@ export class InMemoryStore implements MessageStore {
 			.map((message) => hydrate(message, this.#reactions.get(message.id)));
 	}
 
+	async listMessagesBefore(
+		conversationId: ConversationId,
+		beforeSentAt: number,
+		limit = DEFAULT_LIMIT,
+	): Promise<readonly Message[]> {
+		if (limit <= 0) {
+			return [];
+		}
+		return (
+			this.#messages
+				.filter((message) => message.conversationId === conversationId)
+				.filter((message) => message.sentAt < beforeSentAt)
+				// The store keeps insertion order; history is read in send order, which is what
+				// the page after this one will expect of the rows it was cut from.
+				.sort((left, right) => left.sentAt - right.sentAt)
+				.slice(-limit)
+				.map((message) => hydrate(message, this.#reactions.get(message.id)))
+		);
+	}
+
 	async listAllMessages(conversationId: ConversationId): Promise<readonly Message[]> {
 		return this.#messages
 			.filter((entry) => entry.conversationId === conversationId)
