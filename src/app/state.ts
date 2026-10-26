@@ -111,22 +111,29 @@ export function reduce(state: AppState, action: Action): AppState {
 				replyToId: selectedId === state.selectedId ? state.replyToId : null,
 			};
 		}
-		case "messages-loaded":
+		case "messages-loaded": {
+			const loaded = action.messages;
+			// A row that stays in the list can still stop being answerable: a
+			// delete-for-everyone and a timer both keep the row and blank its text. Keeping
+			// the target in that case is what makes the composer claim a reply the send path
+			// then refuses — the message goes out plain and the user is told nothing.
+			const forSelected = action.conversationId === state.selectedId;
+			const stillAnswerable =
+				state.replyToId !== null &&
+				loaded.some(
+					(message) =>
+						message.id === state.replyToId && canAnswerIn(message, action.conversationId),
+				);
 			return {
 				...state,
 				messagesByConversation: {
 					...state.messagesByConversation,
-					[action.conversationId]: action.messages,
+					[action.conversationId]: loaded,
 				},
-				// The row being answered can go away between keystrokes: a delete-for-everyone
-				// or a purge removes it from the list, and the composer must stop claiming to
-				// answer something that is no longer there.
 				replyToId:
-					state.replyToId !== null &&
-					action.messages.some((message) => message.id === state.replyToId)
-						? state.replyToId
-						: null,
+					state.replyToId !== null && (!forSelected || stillAnswerable) ? state.replyToId : null,
 			};
+		}
 		case "move-selection": {
 			const current = selectedIndex(state);
 			if (current === -1) {

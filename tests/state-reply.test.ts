@@ -116,6 +116,44 @@ describe("starting a reply", () => {
 		expect(next.replyToId).toBeNull();
 	});
 
+	test("a target that is still in the list but no longer answerable drops it", () => {
+		// A delete-for-everyone and a timer keep the row and blank its text. The composer
+		// must stop claiming to answer it, or Enter would send a plain message while the
+		// pane still showed a reply.
+		for (const gone of [{ isDeleted: true }, { isExpired: true }, { isViewOnce: true }]) {
+			const started = reduce(loaded(thread()), { type: "reply-started" });
+			const next = reduce(started, {
+				type: "messages-loaded",
+				conversationId: "c1",
+				messages: [message({ id: "c1:2000", sentAt: 2_000, body: "", ...gone })],
+			});
+
+			expect(next.replyToId).toBeNull();
+		}
+	});
+
+	test("a reload that keeps the target answerable keeps the reply", () => {
+		const started = reduce(loaded(thread()), { type: "reply-started" });
+		const next = reduce(started, {
+			type: "messages-loaded",
+			conversationId: "c1",
+			messages: thread(),
+		});
+
+		expect(next.replyToId).toBe("c1:2000");
+	});
+
+	test("a reload for another conversation leaves the reply alone", () => {
+		const started = reduce(loaded(thread()), { type: "reply-started" });
+		const next = reduce(started, {
+			type: "messages-loaded",
+			conversationId: "c2",
+			messages: [],
+		});
+
+		expect(next.replyToId).toBe("c1:2000");
+	});
+
 	test("submitting a draft clears it", () => {
 		const started = reduce(loaded(thread(), { draft: "agreed" }), { type: "reply-started" });
 		const submitted = reduce(started, { type: "draft-submitted" });
