@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "../../app/session";
 import type { Action, AppState } from "../../app/state";
-import { emptyState, reduce, replyTarget, selectedConversation } from "../../app/state";
-import { reactionFor, targetedMessage } from "../../app/usecases/react";
+import {
+	emptyState,
+	pointedMessage,
+	reduce,
+	replyTarget,
+	selectedConversation,
+} from "../../app/state";
+import { deleteFor } from "../../app/usecases/delete";
+import { editFor } from "../../app/usecases/edit";
+import { emojiInputSummary, reactionFor, targetedMessage } from "../../app/usecases/react";
 
 /**
  * The reducer plus the side effects it cannot perform itself: a submitted draft is sent
@@ -29,14 +37,32 @@ export function useRootState(session: Session | undefined): RootState {
 	const [version, setVersion] = useState(0);
 	const stateRef = useRef(state);
 
-	useEffect(() => {
-		stateRef.current = state;
-	}, [state]);
+	/**
+	 * Reduce now, and keep the ref exact.
+	 *
+	 * `setState` does not update `stateRef` until the next render, so two keystrokes in one
+	 * tick both read the *previous* state — which is how an emoji typed and confirmed quickly
+	 * reached the send path as an empty draft ("not one emoji: nothing sent", with the emoji
+	 * plainly visible in the prompt). Reducing here and storing the result makes the ref
+	 * exact at the moment of the dispatch, for whatever the next keystroke reads.
+	 */
+	const apply = useCallback((action: Action): void => {
+		const next = reduce(stateRef.current, action);
+		stateRef.current = next;
+		setState(next);
+	}, []);
 
 	const dispatch = useCallback(
 		(action: Action): void => {
 			const current = stateRef.current;
 			const conversation = selectedConversation(current);
+			const refused = (text: string): void => {
+				apply({ type: "notice", notice: { kind: "info", text } });
+			};
+			const failed =
+				(what: string) =>
+				(error: unknown): void =>
+					refused(`${what} failed: ${describe(error)}`);
 
 			if (action.type === "draft-submitted" && session !== undefined) {
 				const body = current.draft.trim();
@@ -55,41 +81,63 @@ export function useRootState(session: Session | undefined): RootState {
 				}
 			}
 
-			if (action.type === "reaction-submitted" && session !== undefined) {
-				const prompt = current.reaction;
+			if (action.type === "prompt-submitted" && session !== undefined) {
+				const prompt = current.prompt;
 				if (prompt !== null && conversation !== undefined) {
+					// Resolved from the pre-dispatch state, like the reply target: the reducer is
+					// about to forget which row the prompt named.
 					const message = targetedMessage(
 						current.messagesByConversation[conversation.id] ?? [],
 						prompt.targetId,
 					);
-					const request = reactionFor(message, conversation.id, prompt.draft);
-					if (request === null) {
+
+					if (prompt.kind === "reaction") {
+						const request = reactionFor(message, conversation.id, prompt.draft, prompt.pick);
 						// The prompt closed either way; saying why is the difference between a
 						// refusal and a reaction that vanished.
-						setState((inner) =>
-							reduce(inner, {
-								type: "notice",
-								notice: { kind: "info", text: "not one emoji: nothing sent" },
-							}),
-						);
-					} else {
-						void session
-							.react(conversation.id, request.target, request.emoji)
-							.catch((error: unknown) => {
-								setState((inner) =>
-									reduce(inner, {
-										type: "notice",
-										notice: { kind: "info", text: `reaction failed: ${describe(error)}` },
-									}),
-								);
-							});
+						if (request === null) {
+							refused(`not one emoji: ${emojiInputSummary(prompt.draft)}`);
+						} else {
+							void session
+								.react(conversation.id, request.target, request.emoji, request.isRemove)
+								.catch(failed("reaction"));
+						}
+					}
+
+					if (prompt.kind === "edit") {
+						const request = editFor(message, conversation.id, prompt.draft);
+						if (request === null) {
+							refused("nothing to change");
+						} else {
+							void session
+								.edit(conversation.id, request.target, request.body)
+								.catch(failed("edit"));
+						}
+					}
+
+					if (prompt.kind === "delete") {
+						const target = deleteFor(message, conversation.id);
+						if (target === null) {
+							refused("only your own message can be deleted for everyone");
+						} else {
+							void session.remove(conversation.id, target).catch(failed("delete"));
+						}
 					}
 				}
 			}
 
-			setState((inner) => reduce(inner, action));
+			if (action.type === "hide-requested" && session !== undefined) {
+				// Local, immediate, and reversible only by another copy of the thread: there is
+				// nothing to confirm, so `D` writes at once.
+				const target = pointedMessage(current);
+				if (target !== undefined) {
+					void session.hide(target.conversationId, target.id).catch(failed("hide"));
+				}
+			}
+
+			apply(action);
 		},
-		[session],
+		[apply, session],
 	);
 
 	useEffect(() => {

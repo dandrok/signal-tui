@@ -119,30 +119,87 @@ describe("keymap", () => {
 		expect(keyAction({ ...thread, focus: "conversations" }, "r", key())).toBeNull();
 	});
 
-	test("x opens the emoji prompt, and only where a message is pointed at", () => {
+	test("x, e and d open their prompts, and only where a message is pointed at", () => {
 		expect(keyAction(thread, "x", key())).toEqual({
 			kind: "action",
-			action: { type: "reaction-started" },
+			action: { type: "prompt-opened", kind: "reaction" },
 		});
-		expect(keyAction({ ...thread, focus: "conversations" }, "x", key())).toBeNull();
+		expect(keyAction(thread, "e", key())).toEqual({
+			kind: "action",
+			action: { type: "prompt-opened", kind: "edit" },
+		});
+		expect(keyAction(thread, "d", key())).toEqual({
+			kind: "action",
+			action: { type: "prompt-opened", kind: "delete" },
+		});
+		expect(keyAction(thread, "D", key())).toEqual({
+			kind: "action",
+			action: { type: "hide-requested" },
+		});
+		for (const input of ["x", "e", "d", "D"]) {
+			expect(keyAction({ ...thread, focus: "conversations" }, input, key())).toBeNull();
+		}
 	});
 
-	test("an open reaction prompt owns the keyboard", () => {
+	test("an open prompt owns the keyboard", () => {
 		// Modal, like search: `j` must type into the prompt rather than move the selection,
 		// and escape has to leave the prompt before it does anything else.
-		const prompting: AppState = { ...thread, reaction: { targetId: "uuid-alice:2", draft: "👍" } };
+		const prompting: AppState = {
+			...thread,
+			prompt: { kind: "reaction", targetId: "uuid-alice:2", draft: "👍", pick: 0 },
+		};
 
 		expect(keyAction(prompting, "j", key())).toEqual({
 			kind: "action",
-			action: { type: "reaction-changed", value: "👍j" },
+			action: { type: "prompt-changed", value: "👍j" },
 		});
 		expect(keyAction(prompting, "", key({ return: true }))).toEqual({
 			kind: "action",
-			action: { type: "reaction-submitted" },
+			action: { type: "prompt-submitted" },
 		});
 		expect(keyAction(prompting, "", key({ escape: true }))).toEqual({
 			kind: "action",
-			action: { type: "reaction-cancelled" },
+			action: { type: "prompt-cancelled" },
+		});
+	});
+
+	test("a delete is confirmed, never typed into", () => {
+		// The one prompt whose keystroke removes a message from other people's phones: `y` or
+		// enter confirms, `n` and escape leave, and anything else is ignored rather than
+		// accumulating characters nobody asked for.
+		const confirming: AppState = {
+			...thread,
+			prompt: { kind: "delete", targetId: "uuid-alice:2", draft: "", pick: 0 },
+		};
+
+		expect(keyAction(confirming, "y", key())).toEqual({
+			kind: "action",
+			action: { type: "prompt-submitted" },
+		});
+		expect(keyAction(confirming, "", key({ return: true }))).toEqual({
+			kind: "action",
+			action: { type: "prompt-submitted" },
+		});
+		expect(keyAction(confirming, "n", key())).toEqual({
+			kind: "action",
+			action: { type: "prompt-cancelled" },
+		});
+		expect(keyAction(confirming, "z", key())).toBeNull();
+	});
+
+	test("an edit prompt starts from the body it replaces, and types over it", () => {
+		const editing: AppState = {
+			...thread,
+			prompt: { kind: "edit", targetId: "uuid-alice:2", draft: "hell", pick: 0 },
+		};
+
+		expect(keyAction(editing, "o", key())).toEqual({
+			kind: "action",
+			action: { type: "prompt-changed", value: "hello" },
+		});
+		expect(keyAction(editing, "", key({ backspace: true }))).toEqual({
+			kind: "action",
+			action: { type: "prompt-changed", value: "hel" },
 		});
 	});
 

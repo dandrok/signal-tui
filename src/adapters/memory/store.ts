@@ -34,6 +34,8 @@ export class InMemoryStore implements MessageStore {
 	#messages: Message[];
 	/** Keyed by message id: reactions arrive after the message, one list per message. */
 	#reactions: Map<string, readonly Reaction[]> = new Map();
+	/** Messages hidden on this device only; the rows stay, the reads skip them. */
+	#hidden = new Set<MessageId>();
 
 	constructor(options: InMemoryStoreOptions = {}) {
 		const { conversations, messages } = initialContent(options);
@@ -49,7 +51,7 @@ export class InMemoryStore implements MessageStore {
 		conversationId: ConversationId,
 		limit = DEFAULT_LIMIT,
 	): Promise<readonly Message[]> {
-		return readMessages(this.#messages, this.#reactions, conversationId, limit);
+		return readMessages(this.#messages, this.#reactions, this.#hidden, conversationId, limit);
 	}
 
 	async listMessagesBefore(
@@ -57,15 +59,22 @@ export class InMemoryStore implements MessageStore {
 		beforeSentAt: number,
 		limit = DEFAULT_LIMIT,
 	): Promise<readonly Message[]> {
-		return readMessagesBefore(this.#messages, this.#reactions, conversationId, beforeSentAt, limit);
+		return readMessagesBefore(
+			this.#messages,
+			this.#reactions,
+			this.#hidden,
+			conversationId,
+			beforeSentAt,
+			limit,
+		);
 	}
 
 	async listAllMessages(conversationId: ConversationId): Promise<readonly Message[]> {
-		return readAllMessages(this.#messages, this.#reactions, conversationId);
+		return readAllMessages(this.#messages, this.#reactions, this.#hidden, conversationId);
 	}
 
 	async search(query: string, limit = 20): Promise<readonly Message[]> {
-		return searchMessages(this.#messages, this.#reactions, query, limit);
+		return searchMessages(this.#messages, this.#reactions, this.#hidden, query, limit);
 	}
 
 	async upsertConversation(conversation: Conversation): Promise<void> {
@@ -142,6 +151,19 @@ export class InMemoryStore implements MessageStore {
 		for (const id of dropped) {
 			this.#reactions.delete(id);
 		}
+	}
+
+	async hideMessage(conversationId: ConversationId, messageId: MessageId): Promise<boolean> {
+		const target = this.#messages.find(
+			(entry) => entry.id === messageId && entry.conversationId === conversationId,
+		);
+		// A message that is not here, or already hidden, reports no change — the same answer
+		// SQLite's guarded UPDATE gives, so both adapters redraw identically.
+		if (target === undefined || this.#hidden.has(messageId)) {
+			return false;
+		}
+		this.#hidden.add(messageId);
+		return true;
 	}
 
 	async applyReceipt(

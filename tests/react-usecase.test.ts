@@ -63,6 +63,7 @@ describe("reactionFor", () => {
 		expect(reactionFor(incoming(), DIRECT_ID, "👍")).toEqual({
 			target: { sentAt: 1_000, authorId: "uuid-alice" },
 			emoji: "👍",
+			isRemove: false,
 		});
 	});
 
@@ -72,10 +73,28 @@ describe("reactionFor", () => {
 		expect(reactionFor(mine, DIRECT_ID, "👍")?.target.authorId).toBe(SELF_AUTHOR_ID);
 	});
 
-	test("refuses a row that is gone, an unknown target, and an empty prompt", () => {
+	test("refuses a row that is gone and an unknown target", () => {
 		expect(reactionFor(incoming({ isDeleted: true }), DIRECT_ID, "👍")).toBeNull();
 		expect(reactionFor(undefined, DIRECT_ID, "👍")).toBeNull();
-		expect(reactionFor(incoming(), DIRECT_ID, "   ")).toBeNull();
+	});
+
+	test("an empty prompt sends the picker's best suggestion", () => {
+		// The point of the picker: `x` then `⏎` is a complete action in a terminal that cannot
+		// insert an emoji by itself.
+		expect(reactionFor(incoming(), DIRECT_ID, "")?.emoji).toBe("👍");
+		expect(reactionFor(incoming(), DIRECT_ID, "", 1)?.emoji).toBe("❤️");
+	});
+
+	test("a name is resolved, so nobody has to know an emoji", () => {
+		expect(reactionFor(incoming(), DIRECT_ID, "heart")?.emoji).toBe("❤️");
+		expect(reactionFor(incoming(), DIRECT_ID, "redheart")?.emoji).toBe("❤️");
+		expect(reactionFor(incoming(), DIRECT_ID, "red heart")?.emoji).toBe("❤️");
+		expect(reactionFor(incoming(), DIRECT_ID, ":tada:")?.emoji).toBe("🎉");
+		expect(reactionFor(incoming(), DIRECT_ID, "laugh")?.emoji).toBe("😂");
+	});
+
+	test("a name that matches nothing is refused, with the input named", () => {
+		expect(reactionFor(incoming(), DIRECT_ID, "zzzz")).toBeNull();
 	});
 
 	test("refuses two emoji, and says so by sending nothing", () => {
@@ -107,5 +126,24 @@ describe("targetedMessage", () => {
 		expect(targetedMessage(thread, "m2")?.sentAt).toBe(2_000);
 		expect(targetedMessage(thread, "m9")).toBeUndefined();
 		expect(targetedMessage(thread, null)).toBeUndefined();
+	});
+
+	test("the same emoji again is a removal, not a second reaction", () => {
+		// Signal clients behave this way, and the wire already takes `remove`: typing the emoji
+		// you already added is how a reaction is taken back.
+		const reacted = incoming({
+			reactions: [{ emoji: "👍", author: "You", authorId: SELF_AUTHOR_ID }],
+		});
+
+		expect(reactionFor(reacted, DIRECT_ID, "👍")?.isRemove).toBe(true);
+		expect(reactionFor(reacted, DIRECT_ID, "🎉")?.isRemove).toBe(false);
+	});
+
+	test("someone else's reaction is not ours to replace", () => {
+		const reacted = incoming({
+			reactions: [{ emoji: "👍", author: "Alice", authorId: "uuid-alice" }],
+		});
+
+		expect(reactionFor(reacted, DIRECT_ID, "👍")?.isRemove).toBe(false);
 	});
 });

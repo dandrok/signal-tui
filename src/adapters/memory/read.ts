@@ -27,9 +27,14 @@ export function readConversations(conversations: readonly Conversation[]): reado
 const inSendOrder = (messages: readonly Message[]): readonly Message[] =>
 	[...messages].sort((left, right) => left.sentAt - right.sentAt || (left.id < right.id ? -1 : 1));
 
+/** Hidden rows never leave the store: the set is a filter on every read, not a flag. */
+const visible = (messages: readonly Message[], hidden: ReadonlySet<string>): readonly Message[] =>
+	messages.filter((message) => !hidden.has(message.id));
+
 export function readMessages(
 	messages: readonly Message[],
 	reactions: ReadonlyMap<string, readonly Reaction[]>,
+	hidden: ReadonlySet<string>,
 	conversationId: ConversationId,
 	limit = DEFAULT_LIMIT,
 ): readonly Message[] {
@@ -37,7 +42,9 @@ export function readMessages(
 	if (limit <= 0) {
 		return [];
 	}
-	return inSendOrder(messages.filter((message) => message.conversationId === conversationId))
+	return inSendOrder(
+		visible(messages, hidden).filter((message) => message.conversationId === conversationId),
+	)
 		.slice(-limit)
 		.map((message) => hydrate(message, reactions.get(message.id)));
 }
@@ -45,6 +52,7 @@ export function readMessages(
 export function readMessagesBefore(
 	messages: readonly Message[],
 	reactions: ReadonlyMap<string, readonly Reaction[]>,
+	hidden: ReadonlySet<string>,
 	conversationId: ConversationId,
 	beforeSentAt: number,
 	limit = DEFAULT_LIMIT,
@@ -53,7 +61,7 @@ export function readMessagesBefore(
 		return [];
 	}
 	return inSendOrder(
-		messages
+		visible(messages, hidden)
 			.filter((message) => message.conversationId === conversationId)
 			.filter((message) => message.sentAt < beforeSentAt),
 	)
@@ -64,16 +72,18 @@ export function readMessagesBefore(
 export function readAllMessages(
 	messages: readonly Message[],
 	reactions: ReadonlyMap<string, readonly Reaction[]>,
+	hidden: ReadonlySet<string>,
 	conversationId: ConversationId,
 ): readonly Message[] {
-	return inSendOrder(messages.filter((entry) => entry.conversationId === conversationId)).map(
-		(entry) => hydrate(entry, reactions.get(entry.id)),
-	);
+	return inSendOrder(
+		visible(messages, hidden).filter((entry) => entry.conversationId === conversationId),
+	).map((entry) => hydrate(entry, reactions.get(entry.id)));
 }
 
 export function searchMessages(
 	messages: readonly Message[],
 	reactions: ReadonlyMap<string, readonly Reaction[]>,
+	hidden: ReadonlySet<string>,
 	query: string,
 	limit = 20,
 ): readonly Message[] {
@@ -81,7 +91,7 @@ export function searchMessages(
 	if (needle.length === 0) {
 		return [];
 	}
-	return messages
+	return visible(messages, hidden)
 		.filter((message) => !message.isDeleted && message.body.toLowerCase().includes(needle))
 		.slice(0, limit)
 		.map((message) => hydrate(message, reactions.get(message.id)));

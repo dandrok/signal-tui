@@ -12,7 +12,7 @@ import type { MessageStore } from "../../ports/store";
 import { deleteAttachments } from "./attachments";
 import { addUnread, clearUnread, readExpiresInSeconds, upsertConversation } from "./conversations";
 import { hydrateMessages } from "./hydrate";
-import { applyEditRow, applyReceiptRows, purgeExpiredRows } from "./message-rules";
+import { applyEditRow, applyReceiptRows, hideMessageRow, purgeExpiredRows } from "./message-rules";
 import { restrictCachePermissions } from "./private-cache";
 import { applyReactionRow, deleteReactions } from "./reactions";
 import {
@@ -175,6 +175,10 @@ export class SqliteMessageStore implements MessageStore {
 			deleteAttachments(this.#db, messageId);
 			deleteReactions(this.#db, messageId);
 		})();
+	}
+
+	async hideMessage(conversationId: ConversationId, messageId: MessageId): Promise<boolean> {
+		return hideMessageRow(this.#db, conversationId, messageId);
 	}
 
 	close(): void {

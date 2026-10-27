@@ -1,3 +1,4 @@
+import type { MessageRef } from "../../src/domain/message-ref";
 import { strongerReceipt } from "../../src/domain/receipts";
 import type {
 	Conversation,
@@ -6,12 +7,7 @@ import type {
 	Reaction,
 	ReceiptState,
 } from "../../src/domain/types";
-import type {
-	BackendEvent,
-	ReactionTarget,
-	ReplyTarget,
-	SignalBackend,
-} from "../../src/ports/backend";
+import type { BackendEvent, ReplyTarget, SignalBackend } from "../../src/ports/backend";
 import type { MessageStore } from "../../src/ports/store";
 
 export const conversation = (id = "uuid-alice"): Conversation => ({
@@ -177,6 +173,17 @@ export class RecordingStore implements MessageStore {
 		this.#record(`deleted:${messageId}`);
 	}
 
+	readonly hidden: string[] = [];
+
+	async hideMessage(_conversationId: string, messageId: string): Promise<boolean> {
+		this.#record(`hidden:${messageId}`);
+		if (this.hidden.includes(messageId)) {
+			return false;
+		}
+		this.hidden.push(messageId);
+		return true;
+	}
+
 	readonly receipts: Array<{ timestamps: readonly number[]; state: ReceiptState }> = [];
 
 	/** Mirrors both real adapters, so a session test can assert the stored state. */
@@ -270,7 +277,7 @@ export class FakeBackend implements SignalBackend {
 
 	readonly reactions: Array<{
 		conversationId: string;
-		target: ReactionTarget;
+		target: MessageRef;
 		emoji: string;
 		isRemove: boolean;
 	}> = [];
@@ -278,7 +285,7 @@ export class FakeBackend implements SignalBackend {
 
 	async sendReaction(
 		conversationId: string,
-		target: ReactionTarget,
+		target: MessageRef,
 		emoji: string,
 		isRemove = false,
 	): Promise<void> {
@@ -286,6 +293,26 @@ export class FakeBackend implements SignalBackend {
 			throw new Error("reaction rejected");
 		}
 		this.reactions.push({ conversationId, target, emoji, isRemove });
+	}
+
+	readonly edits: Array<{ conversationId: string; target: MessageRef; body: string }> = [];
+	failEdits = false;
+
+	async sendEdit(conversationId: string, target: MessageRef, body: string): Promise<void> {
+		if (this.failEdits) {
+			throw new Error("edit rejected");
+		}
+		this.edits.push({ conversationId, target, body });
+	}
+
+	readonly deletions: Array<{ conversationId: string; target: MessageRef }> = [];
+	failDeletes = false;
+
+	async deleteForEveryone(conversationId: string, target: MessageRef): Promise<void> {
+		if (this.failDeletes) {
+			throw new Error("delete rejected");
+		}
+		this.deletions.push({ conversationId, target });
 	}
 
 	subscribe(listener: (event: BackendEvent) => void): () => void {

@@ -31,7 +31,7 @@ export function readMessages(
 			`SELECT * FROM (
 				SELECT ${selectMessageColumns}
 				FROM messages
-				WHERE conversation_id = ?1
+				WHERE conversation_id = ?1 AND is_hidden = 0
 				ORDER BY sent_at DESC, id DESC
 				LIMIT ?2
 			 ) ORDER BY sent_at ASC, id ASC`,
@@ -58,7 +58,7 @@ export function readMessagesBefore(
 			`SELECT * FROM (
 				SELECT ${selectMessageColumns}
 				FROM messages
-				WHERE conversation_id = ?1 AND sent_at < ?2
+				WHERE conversation_id = ?1 AND sent_at < ?2 AND is_hidden = 0
 				ORDER BY sent_at DESC
 				LIMIT ?3
 			 ) ORDER BY sent_at ASC`,
@@ -71,7 +71,7 @@ export function readAllMessages(db: Database, conversationId: ConversationId): M
 		.query<MessageRow, [string]>(
 			`SELECT ${selectMessageColumns}
 			 FROM messages
-			 WHERE conversation_id = ?1
+			 WHERE conversation_id = ?1 AND is_hidden = 0
 			 ORDER BY sent_at ASC, id ASC`,
 		)
 		.all(conversationId);
@@ -93,7 +93,7 @@ export function searchMessages(db: Database, query: string, limit: number): Mess
 			 FROM messages_fts
 			 JOIN messages m ON m.rowid = messages_fts.rowid
 			 WHERE messages_fts MATCH ?1
-			   AND m.is_deleted = 0
+			   AND m.is_deleted = 0 AND m.is_hidden = 0
 			 ORDER BY bm25(messages_fts), m.sent_at DESC
 			 LIMIT ?2`,
 		)

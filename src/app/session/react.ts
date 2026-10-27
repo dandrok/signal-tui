@@ -1,7 +1,7 @@
 import { SELF_LABEL } from "../../domain/format";
+import type { MessageRef } from "../../domain/message-ref";
 import type { ConversationId } from "../../domain/types";
 import { SELF_AUTHOR_ID } from "../../domain/types";
-import type { ReactionTarget } from "../../ports/backend";
 import type { SessionContext } from "./types";
 
 /**
@@ -15,17 +15,18 @@ import type { SessionContext } from "./types";
 export async function sendReaction(
 	context: SessionContext,
 	conversationId: ConversationId,
-	target: ReactionTarget,
+	target: MessageRef,
 	emoji: string,
+	isRemove = false,
 ): Promise<void> {
-	await context.backend.sendReaction(conversationId, target, emoji);
+	await context.backend.sendReaction(conversationId, target, emoji, isRemove);
 
 	const written = context.enqueue(async () => {
 		const stored = await context.store.applyReaction(
 			conversationId,
 			target.sentAt,
 			{ emoji, author: SELF_LABEL, authorId: SELF_AUTHOR_ID },
-			false,
+			isRemove,
 		);
 		// A message the cache does not have takes no reaction; nothing changed, so nothing
 		// redraws — the same rule the incoming path follows.

@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { receiptRank } from "../../domain/receipts";
-import type { ConversationId, EditAuthor, ReceiptState } from "../../domain/types";
+import type { ConversationId, EditAuthor, MessageId, ReceiptState } from "../../domain/types";
 
 /**
  * The two rules that decide when a cached message stops showing its text. Both live
@@ -131,4 +131,26 @@ export function purgeExpiredRows(db: Database, now: number, batch = PURGE_BATCH)
 			}
 		}
 	})();
+}
+
+/**
+ * Hides a message from this cache's reads, leaving the row where it is.
+ *
+ * `RETURNING id` for the same reason the other rules use it: the answer is "did a visible row
+ * change", and only the statement knows that. Hiding an already-hidden row reports no change,
+ * which is what stops `D` pressed twice from redrawing the pane.
+ */
+export function hideMessageRow(
+	db: Database,
+	conversationId: ConversationId,
+	messageId: MessageId,
+): boolean {
+	const updated = db
+		.query<{ id: string }, [string, string]>(
+			`UPDATE messages SET is_hidden = 1
+			 WHERE id = ?1 AND conversation_id = ?2 AND is_hidden = 0
+			 RETURNING id`,
+		)
+		.all(messageId, conversationId);
+	return updated.length > 0;
 }

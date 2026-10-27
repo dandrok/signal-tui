@@ -1,13 +1,13 @@
+import type { MessageRef } from "../../../domain/message-ref";
 import type { ConversationId } from "../../../domain/types";
 import type {
 	BackendEvent,
-	ReactionTarget,
 	ReceiptType,
 	ReplyTarget,
 	SendResult,
 	SignalBackend,
 } from "../../../ports/backend";
-import { reactionParams, receiptParams, sendParams } from "../commands";
+import { deleteParams, editParams, reactionParams, receiptParams, sendParams } from "../commands";
 import { mapEnvelope } from "../map-envelope";
 import { receiveEnvelopeSchema } from "../schemas";
 import { ProtocolErrorLog } from "./error-log";
@@ -119,9 +119,28 @@ export class SignalCliBackend implements SignalBackend {
 		await this.#client.request("sendReceipt", receiptParams(recipient, timestamps, type));
 	}
 
+	async deleteForEveryone(conversationId: ConversationId, target: MessageRef): Promise<void> {
+		await this.#client.request(
+			"remoteDelete",
+			deleteParams(conversationId, target, this.#groupIds.has(conversationId)),
+		);
+	}
+
+	async sendEdit(conversationId: ConversationId, target: MessageRef, body: string): Promise<void> {
+		await this.#client.request(
+			"send",
+			editParams({
+				conversationId,
+				target,
+				body,
+				isGroup: this.#groupIds.has(conversationId),
+			}),
+		);
+	}
+
 	async sendReaction(
 		conversationId: ConversationId,
-		target: ReactionTarget,
+		target: MessageRef,
 		emoji: string,
 		isRemove = false,
 	): Promise<void> {

@@ -1,4 +1,6 @@
-import type { AppState } from "../app/state";
+import { type AppState, pointedMessage, selectedConversation } from "../app/state";
+import { canDelete } from "../app/usecases/delete";
+import { canEdit } from "../app/usecases/edit";
 
 /**
  * The status line: what the keyboard does right now.
@@ -11,11 +13,46 @@ export function hintsFor(state: AppState, isReplying: boolean): string {
 	if (isSearching) {
 		return "↑/↓ pick · ⏎ open · esc close";
 	}
+	if (state.prompt !== null) {
+		switch (state.prompt.kind) {
+			case "reaction":
+				return "⇥/↕ pick · ⏎ send · esc cancel";
+			case "edit":
+				return "⏎ save · esc cancel";
+			case "delete":
+				return "⏎ delete for everyone · esc keep";
+		}
+	}
 	if (state.focus === "composer") {
 		return isReplying ? "⏎ send · esc cancel reply · tab panes" : "⏎ send · esc back · tab panes";
 	}
 	const panes = "tab panes · i compose · / search · q quit";
-	return state.focus === "messages"
-		? `j/k select · r reply · ⇞/⇟ page · ${panes}`
-		: `j/k move · ${panes}`;
+	return state.focus === "messages" ? messageHints(state) : `j/k move · ${panes}`;
+}
+
+/**
+ * The message pane's line, which depends on what the pointer is on.
+ *
+ * `e` and `d` are ours only, so they are advertised only when the pointed message is ours:
+ * naming a key that silently does nothing is the same lie as a disabled button that looks
+ * enabled. `r`, `x` and `D` work on anyone's message, so they are always there — hiding is a
+ * local decision about a row, not a claim about who wrote it.
+ */
+function messageHints(state: AppState): string {
+	const target = pointedMessage(state);
+	const conversation = selectedConversation(state);
+	const own = target !== undefined && conversation !== undefined;
+	const keys = [
+		"j/k select",
+		"r reply",
+		"x react",
+		...(own && canEdit(target, conversation.id) ? ["e edit"] : []),
+		...(own && canDelete(target, conversation.id) ? ["d delete"] : []),
+		"D hide",
+		"tab",
+		"i",
+		"/",
+		"q",
+	];
+	return keys.join(" · ");
 }

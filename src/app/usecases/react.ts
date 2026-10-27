@@ -1,7 +1,9 @@
+import { searchEmoji } from "../../domain/emoji-catalog";
 import { authorIdOf } from "../../domain/message-author";
+import type { MessageRef } from "../../domain/message-ref";
 import { reactionEmojiOf } from "../../domain/reactions";
 import type { ConversationId, Message, MessageId } from "../../domain/types";
-import type { ReactionTarget } from "../../ports/backend";
+import { SELF_AUTHOR_ID } from "../../domain/types";
 
 /**
  * Reacting to a message: whether it is allowed, what goes on the wire, and nothing else.
@@ -13,8 +15,13 @@ import type { ReactionTarget } from "../../ports/backend";
 
 /** A reaction as the transport needs it. */
 export interface ReactionRequest {
-	readonly target: ReactionTarget;
+	readonly target: MessageRef;
 	readonly emoji: string;
+	/**
+	 * True when the same emoji is already ours: typing it again is how a reaction is taken
+	 * back. Signal clients behave the same way, and the wire already takes `remove`.
+	 */
+	readonly isRemove: boolean;
 }
 
 /**
@@ -42,6 +49,7 @@ export function reactionFor(
 	message: Message | undefined,
 	conversationId: ConversationId,
 	emojiInput: string,
+	pick = 0,
 ): ReactionRequest | null {
 	if (message === undefined || !canReactTo(message, conversationId)) {
 		return null;
@@ -50,11 +58,38 @@ export function reactionFor(
 	if (authorId === null) {
 		return null;
 	}
-	const emoji = reactionEmojiOf(emojiInput);
+	const emoji = reactionEmojiOf(emojiInput) ?? suggestedEmoji(emojiInput, pick);
 	if (emoji === null) {
 		return null;
 	}
-	return { target: { sentAt: message.sentAt, authorId }, emoji };
+	const mine = message.reactions?.find((entry) => entry.authorId === SELF_AUTHOR_ID);
+	return { target: { sentAt: message.sentAt, authorId }, emoji, isRemove: mine?.emoji === emoji };
+}
+
+/**
+ * What the picker would send: the highlighted suggestion for what has been typed.
+ *
+ * A name ("heart", "redheart", ":tada:") narrows the catalogue, and an empty draft shows the
+ * head of it — so `x` then `⏎` sends the first suggestion, which is the whole point of opening
+ * a picker in a terminal that cannot insert an emoji by itself.
+ */
+function suggestedEmoji(draft: string, pick: number): string | null {
+	const suggestions = searchEmoji(draft);
+	if (suggestions.length === 0) {
+		return null;
+	}
+	const index = Math.min(Math.max(0, pick), suggestions.length - 1);
+	return suggestions[index]?.emoji ?? null;
+}
+
+/** The suggestions a prompt shows for a draft, and the one the arrow keys are on. */
+export function reactionSuggestions(
+	draft: string,
+	pick: number,
+): { readonly emoji: readonly string[]; readonly picked: number } {
+	const suggestions = searchEmoji(draft);
+	const picked = suggestions.length === 0 ? 0 : Math.min(Math.max(0, pick), suggestions.length - 1);
+	return { emoji: suggestions.map((entry) => entry.emoji), picked };
 }
 
 /** The message a prompt is pointing at, from the thread the pane holds. */
@@ -66,4 +101,23 @@ export function targetedMessage(
 		return undefined;
 	}
 	return messages.find((message) => message.id === targetId);
+}
+
+/**
+ * What was typed, spelled out — a refusal that names the input instead of the rule.
+ *
+ * "not one emoji: nothing sent" was the same sentence for an empty prompt, two emoji, and a
+ * pasted paragraph, which made a stale-draft bug look like an emoji-parsing bug. Code points
+ * rather than the raw text, because the interesting failures are the invisible ones: a
+ * zero-width space or a stray variation selector looks like nothing on screen.
+ */
+export function emojiInputSummary(input: string): string {
+	if (input.length === 0) {
+		return "nothing typed";
+	}
+	const points = [...input]
+		.slice(0, 6)
+		.map((char) => `U+${(char.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0")}`);
+	const more = [...input].length > points.length ? " …" : "";
+	return `${[...input].length} character${[...input].length === 1 ? "" : "s"} (${points.join(" ")}${more})`;
 }

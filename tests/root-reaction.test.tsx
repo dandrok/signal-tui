@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { render } from "ink-testing-library";
 import { InMemoryStore } from "../src/adapters/memory/store";
 import type { Session } from "../src/app/session";
-import type { ReactionTarget } from "../src/ports/backend";
+import type { MessageRef } from "../src/domain/message-ref";
 import { Root } from "../src/ui/Root";
 import { plain } from "./helpers/frame";
 
@@ -20,9 +20,19 @@ const CONVERSATION = "4b1c9f1e-0000-4000-8000-000000000000";
 
 const fakeSession = (): {
 	session: Session;
-	reactions: Array<{ conversationId: string; target: ReactionTarget; emoji: string }>;
+	reactions: Array<{
+		conversationId: string;
+		target: MessageRef;
+		emoji: string;
+		isRemove: boolean;
+	}>;
 } => {
-	const reactions: Array<{ conversationId: string; target: ReactionTarget; emoji: string }> = [];
+	const reactions: Array<{
+		conversationId: string;
+		target: MessageRef;
+		emoji: string;
+		isRemove: boolean;
+	}> = [];
 	return {
 		reactions,
 		session: {
@@ -30,9 +40,12 @@ const fakeSession = (): {
 			stop: async () => undefined,
 			send: async () => undefined,
 			markRead: async () => undefined,
-			react: async (conversationId, target, emoji) => {
-				reactions.push({ conversationId, target, emoji });
+			react: async (conversationId, target, emoji, isRemove = false) => {
+				reactions.push({ conversationId, target, emoji, isRemove });
 			},
+			edit: async () => undefined,
+			remove: async () => undefined,
+			hide: async () => undefined,
 			flush: async () => undefined,
 			onChange: () => () => undefined,
 			onIncoming: () => () => undefined,
@@ -95,6 +108,7 @@ describe("reacting from the keyboard", () => {
 				conversationId: CONVERSATION,
 				target: { sentAt: 1_760_000_000_000, authorId: "uuid-alice" },
 				emoji: "👍",
+				isRemove: false,
 			},
 		]);
 		// The prompt is gone again, so the composer is back.
@@ -135,6 +149,108 @@ describe("reacting from the keyboard", () => {
 
 		expect(plain(lastFrame() ?? "")).not.toContain("react ›");
 		expect(reactions).toEqual([]);
+		unmount();
+	});
+
+	test("an emoji confirmed without a pause still reaches the session", async () => {
+		// Two keystrokes in one tick. The dispatch used to read the prompt from a ref that
+		// `setState` had not refreshed yet, so the send path saw an empty draft and refused
+		// with "not one emoji" while the emoji sat visibly in the prompt.
+		const store = await seededStore();
+		const { session, reactions } = fakeSession();
+		const { stdin, unmount } = render(<Root store={store} session={session} />);
+		await tick();
+
+		stdin.write("\t");
+		await tick();
+		stdin.write("x");
+		await tick();
+		stdin.write("👍");
+		stdin.write("\r");
+		await tick(300);
+
+		expect(reactions).toEqual([
+			{
+				conversationId: CONVERSATION,
+				target: { sentAt: 1_760_000_000_000, authorId: "uuid-alice" },
+				emoji: "👍",
+				isRemove: false,
+			},
+		]);
+		unmount();
+	});
+
+	test("x then enter sends the picker's first suggestion", async () => {
+		// The whole point of the picker: a terminal cannot insert an emoji, so the prompt has
+		// to offer one. No typing, no name, no picker-less dead end.
+		const store = await seededStore();
+		const { session, reactions } = fakeSession();
+		const { stdin, lastFrame, unmount } = render(<Root store={store} session={session} />);
+		await tick();
+
+		await openPrompt(stdin);
+		expect(plain(lastFrame() ?? "")).toContain("👍");
+
+		stdin.write("\r");
+		await tick(300);
+
+		expect(reactions[0]?.emoji).toBe("👍");
+		unmount();
+	});
+
+	test("tab walks the suggestions", async () => {
+		const store = await seededStore();
+		const { session, reactions } = fakeSession();
+		const { stdin, unmount } = render(<Root store={store} session={session} />);
+		await tick();
+
+		await openPrompt(stdin);
+		stdin.write("\t");
+		await tick();
+		stdin.write("\r");
+		await tick(300);
+
+		expect(reactions[0]?.emoji).toBe("❤️");
+		unmount();
+	});
+
+	test("a name typed instead of an emoji is resolved", async () => {
+		// Reported from the real TUI: typing `redheart` answered "not one emoji: 8 characters".
+		// True, and useless — a picker that cannot be typed into is a picker nobody uses.
+		const store = await seededStore();
+		const { session, reactions } = fakeSession();
+		const { stdin, unmount } = render(<Root store={store} session={session} />);
+		await tick();
+
+		await openPrompt(stdin);
+		for (const char of "redheart") {
+			stdin.write(char);
+			await tick(20);
+		}
+		stdin.write("\r");
+		await tick(300);
+
+		expect(reactions[0]?.emoji).toBe("❤️");
+		unmount();
+	});
+
+	test("a name that matches nothing still refuses, and names what was typed", async () => {
+		const store = await seededStore();
+		const { session, reactions } = fakeSession();
+		const { stdin, lastFrame, unmount } = render(<Root store={store} session={session} />);
+		await tick();
+
+		await openPrompt(stdin);
+		for (const char of "qqq") {
+			stdin.write(char);
+			await tick(20);
+		}
+		stdin.write("\r");
+		await tick(300);
+
+		expect(reactions).toEqual([]);
+		// "zzz" is an alias of 😴, so a genuinely unmatched string is needed here.
+		expect(plain(lastFrame() ?? "")).toContain("U+0071");
 		unmount();
 	});
 });

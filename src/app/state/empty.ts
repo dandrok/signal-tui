@@ -15,5 +15,5 @@ export const emptyState: AppState = {
 	historyComplete: {},
 	notice: null,
 	search: null,
-	reaction: null,
+	prompt: null,
 };

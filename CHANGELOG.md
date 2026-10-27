@@ -3,6 +3,54 @@
 Notable changes, newest first. This file starts at 0.1.0 — earlier versions are in the
 [releases](https://github.com/dandrok/signal-tui/releases).
 
+## [Unreleased]
+
+### Added
+
+- **Edit your own message** (`e`): the prompt opens with the body it would replace, `⏎` saves,
+  `Esc` cancels. The row reads `· edited` immediately — Signal never echoes a send back to the
+  device that wrote it, so the local echo is what makes the change visible at all.
+- **Delete for everyone** (`d`): asks first (`⏎` or `y`), then removes the message here and on
+  every other device. Offered only on your own, still-standing messages.
+- **Hide locally** (`D`): the row stays in the cache so a replayed envelope cannot arrive as new,
+  but no read returns it — not the thread, not an older page, not search. Nothing goes on the
+  wire.
+- **A reaction picker**, because a terminal cannot insert an emoji: `x` opens with five
+  suggestions, `⇥`/`↑↓` walk them, and `⏎` sends the highlighted one. Typing narrows the list by
+  name — `heart`, `redheart`, `red heart`, `:tada:`, `laugh` — from a curated table of ~50
+  entries with aliases (`src/domain/emoji-catalog.ts`), not Unicode's 3600.
+- **Taking a reaction back**: typing the emoji you already added now removes it, instead of
+  adding a twin. The wire took `remove` all along; the key did not offer it.
+
+### Fixed
+
+- **Reacting could refuse the emoji you just typed** ("not one emoji: nothing sent"), with the
+  emoji plainly visible in the prompt. The prompt's draft was read from a ref that `setState`
+  only refreshed on the next render, so a keystroke handled in the same tick as Enter reached
+  the send path as an empty draft. The reducer now runs synchronously and the ref holds the
+  result, which fixes it for every prompt — and for the reply target, which had the same race.
+- A refusal now says **what** it refused — `not one emoji: 2 characters (U+1F44D U+1F44D)` —
+  because "nothing sent" was the same sentence for an empty prompt, two emoji and a paste.
+
+### Changed
+
+- The status line only offers `e` and `d` while the pointer is on **your own** message, and
+  pressing one on someone else's now says why instead of silently doing nothing. A notice also
+  leads the status row now: it is the reason nothing happened, and Ink truncates from the end.
+- The three message actions share one prompt (`state.prompt` with a kind) instead of a
+  reaction-only one, so the keymap, the status line and the composer frame each had one rule to
+  learn rather than three. The delete prompt is confirmed, never typed into: it is the one
+  keystroke that changes what other people see.
+
+### Internal
+
+- Schema **v10**: `messages.is_hidden`, filtered on every read path *and* in the FTS query.
+- Both stores answer `hideMessage` with "did a visible row change", so pressing `D` twice
+  redraws once — the same contract the receipts and reactions already had.
+- Wire shapes checked against signal-cli v0.14.9: **an edit is a `send` with `editTimestamp`**
+  (`SendCommand` → `sendEditMessage`), and **a delete is its own method, `remoteDelete`**
+  (`RemoteDeleteCommand`). Passing one for the other produces an envelope nobody reads.
+
 ## [0.1.0] — 2026-10-27
 
 The release where the tree became one concern per file, and the composer stopped being the only

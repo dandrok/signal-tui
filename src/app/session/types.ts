@@ -1,5 +1,6 @@
-import type { ConversationId, Message } from "../../domain/types";
-import type { ReactionTarget, ReplyTarget, SignalBackend } from "../../ports/backend";
+import type { MessageRef } from "../../domain/message-ref";
+import type { ConversationId, Message, MessageId } from "../../domain/types";
+import type { ReplyTarget, SignalBackend } from "../../ports/backend";
 import type { MessageStore } from "../../ports/store";
 
 /** Milliseconds source; injectable so expiry tests need no sleeps. */
@@ -28,8 +29,19 @@ export interface Session {
 	stop(): Promise<void>;
 	/** Sends `body`, optionally as a reply to an earlier message. */
 	send(conversationId: ConversationId, body: string, replyTo?: ReplyTarget): Promise<void>;
-	/** Adds our reaction to an earlier message, keeping the local echo. */
-	react(conversationId: ConversationId, target: ReactionTarget, emoji: string): Promise<void>;
+	/** Adds our reaction to an earlier message, or takes it back when `isRemove`. */
+	react(
+		conversationId: ConversationId,
+		target: MessageRef,
+		emoji: string,
+		isRemove?: boolean,
+	): Promise<void>;
+	/** Replaces the body of one of our messages, keeping the local echo. */
+	edit(conversationId: ConversationId, target: MessageRef, body: string): Promise<void>;
+	/** Deletes one of our messages for everyone, and for this device. */
+	remove(conversationId: ConversationId, target: MessageRef): Promise<void>;
+	/** Hides a message in this cache only; nothing goes on the wire. */
+	hide(conversationId: ConversationId, messageId: MessageId): Promise<void>;
 	/** Clears the unread count for a conversation the user is looking at. */
 	markRead(conversationId: ConversationId): Promise<void>;
 	/** Resolves once every queued write has been applied. */

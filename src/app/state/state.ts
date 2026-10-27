@@ -5,7 +5,7 @@ import {
 	releaseOlder,
 	requestOlder,
 } from "./reduce-history";
-import { cancelReaction, changeReaction, startReaction, submitReaction } from "./reduce-reaction";
+import { cancelPrompt, changePrompt, movePrompt, openPrompt, submitPrompt } from "./reduce-prompt";
 import { cancelReply, startReply } from "./reduce-reply";
 import { reduceSearch } from "./reduce-search";
 import { reduceSelection } from "./reduce-selection";
@@ -42,14 +42,20 @@ export function reduce(state: AppState, action: Action): AppState {
 			return startReply(state);
 		case "reply-cancelled":
 			return cancelReply(state);
-		case "reaction-started":
-			return startReaction(state);
-		case "reaction-changed":
-			return changeReaction(state, action.value);
-		case "reaction-cancelled":
-			return cancelReaction(state);
-		case "reaction-submitted":
-			return submitReaction(state);
+		case "prompt-opened":
+			return openPrompt(state, action.kind);
+		case "prompt-changed":
+			return changePrompt(state, action.value);
+		case "prompt-moved":
+			return movePrompt(state, action.delta);
+		case "prompt-cancelled":
+			return cancelPrompt(state);
+		case "prompt-submitted":
+			return submitPrompt(state);
+		case "hide-requested":
+			// A side effect, not a transition: the wiring reads the pointed message and
+			// writes the flag, so there is nothing for the reducer to change.
+			return state;
 		case "search-opened":
 		case "search-closed":
 		case "search-changed":
