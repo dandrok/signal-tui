@@ -103,8 +103,18 @@ export function App({ state, dispatch }: AppProps) {
 			)}
 
 			<Box paddingX={1}>
-				<Text dimColor>{hintsFor(state, replyTo !== undefined)}</Text>
-				{state.notice ? <Text color="green"> · {displayLine(state.notice.text)}</Text> : null}
+				{/* The notice goes first because the row is one line and Ink truncates its tail:
+				    feedback about what just happened outranks a list of keys the user can look
+				    up, and a notice that is the reason nothing happened must not be the part
+				    that gets cut. */}
+				{state.notice ? (
+					<Text color="green">
+						{displayLine(state.notice.text)} ·{" "}
+						<Text dimColor>{hintsFor(state, replyTo !== undefined)}</Text>
+					</Text>
+				) : (
+					<Text dimColor>{hintsFor(state, replyTo !== undefined)}</Text>
+				)}
 			</Box>
 		</Box>
 	);

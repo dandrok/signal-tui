@@ -123,6 +123,10 @@ you linked that device is not available — Signal does not backfill it.
 | `e` | edit your own message: the prompt opens with its body, `⏎` saves, `Esc` cancels |
 | `d` | delete your own message for everyone — it asks first, `⏎` or `y` confirms |
 | `D` | hide a message on this device only; nothing is sent and nobody else is affected |
+
+`e` and `d` act on a message you wrote, so the status line only offers them while the pointer is
+on one of yours — and pressing either on someone else's message says why instead of doing
+nothing. `r`, `x` and `D` work on anyone's message.
 | `⏎` | send the draft, or send the emoji while reacting |
 | `/` | search cached history — `↑` / `↓` to pick a hit, `⏎` to open it, `Esc` to close |
 | `Esc` | leave the composer, cancel a reply, cancel a reaction, close search |

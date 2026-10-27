@@ -20,6 +20,9 @@ Notable changes, newest first. This file starts at 0.1.0 — earlier versions ar
 
 ### Changed
 
+- The status line only offers `e` and `d` while the pointer is on **your own** message, and
+  pressing one on someone else's now says why instead of silently doing nothing. A notice also
+  leads the status row now: it is the reason nothing happened, and Ink truncates from the end.
 - The three message actions share one prompt (`state.prompt` with a kind) instead of a
   reaction-only one, so the keymap, the status line and the composer frame each had one rule to
   learn rather than three. The delete prompt is confirmed, never typed into: it is the one

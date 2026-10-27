@@ -133,17 +133,23 @@ describe("editing from the keyboard", () => {
 		unmount();
 	});
 
-	test("someone else's message opens no edit prompt", async () => {
+	test("someone else's message opens no edit prompt, says why, and is not advertised", async () => {
 		// The rule is refused before a prompt exists, so the user never types a correction the
-		// use case would drop.
+		// use case would drop. The status line also stops offering the key on that message.
 		const store = await seeded(false);
 		const { session } = fakeSession();
 		const { stdin, lastFrame, unmount } = render(<Root store={store} session={session} />);
 		await tick();
 
+		const before = plain(lastFrame() ?? "");
+		expect(before).not.toContain("e edit");
+		expect(before).not.toContain("d delete");
+
 		await openPrompt(stdin, "e");
 
-		expect(plain(lastFrame() ?? "")).not.toContain("edit ›");
+		const after = plain(lastFrame() ?? "");
+		expect(after).not.toContain("edit ›");
+		expect(after).toContain("only your own message can be edited");
 		unmount();
 	});
 });
@@ -189,7 +195,9 @@ describe("deleting from the keyboard", () => {
 
 		await openPrompt(stdin, "d");
 
-		expect(plain(lastFrame() ?? "")).not.toContain("delete ›");
+		const frame = plain(lastFrame() ?? "");
+		expect(frame).not.toContain("delete ›");
+		expect(frame).toContain("only your own message can be deleted for everyone");
 		expect(calls.removals).toEqual([]);
 		unmount();
 	});

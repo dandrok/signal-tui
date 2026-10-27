@@ -33,6 +33,13 @@ function allows(
 	}
 }
 
+/** Why a prompt did not open, one line each. */
+const refusals = {
+	reaction: "that message is gone: nothing to react to",
+	edit: "only your own message can be edited",
+	delete: "only your own message can be deleted for everyone",
+} as const;
+
 /**
  * Opens a prompt on the message the pane points at.
  *
@@ -46,7 +53,12 @@ export function openPrompt(state: AppState, kind: PromptKind): AppState {
 		return state;
 	}
 	if (!allows(kind, target, conversation.id)) {
-		return state;
+		// A prompt that does not open has to say so: the key was pressed on a message the
+		// status line had just stopped advertising, and silence reads as a broken key.
+		return {
+			...state,
+			notice: { kind: "info", text: refusals[kind] },
+		};
 	}
 	return {
 		...state,
