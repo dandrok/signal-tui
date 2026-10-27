@@ -22,17 +22,21 @@ export interface MappedEdit {
 }
 
 /**
- * Only real text may replace a body.
+ * The conversation a correction lands in, and the words that replace it.
  *
- * `bodyOf` answers "[attachment]" for a data message that carries files and nothing else,
- * so composing an edit from it would paste a placeholder over what the peer wrote. A
- * caption counts — that is where a photo's words live — and an edit with no text at all is
- * ignored rather than blanking the message, because an edit to nothing is not a thing
- * Signal produces.
+ * `target` is nullable because a synced edit to a group message arrives with no
+ * destination at all — the group comes from the edit's own data message — so the rule
+ * has to be able to say "the inner group is the answer" before anyone decides the
+ * payload named no conversation.
+ *
+ * Only real text may replace a body: `bodyOf` answers "[attachment]" for a data message
+ * that carries files and nothing else, so building an edit from it would paste a
+ * placeholder over what the peer wrote. A caption counts — that is where a photo's words
+ * live — and an edit with no text is ignored rather than blanking the message.
  */
 export function mapEditPayload(
 	edit: EditMessage,
-	target: Target,
+	target: Target | null,
 	editor: EditAuthor,
 ): MappedEdit | null {
 	const parsed =
@@ -44,7 +48,7 @@ export function mapEditPayload(
 		data?.groupInfo === undefined ? target : (groupTarget(data.groupInfo) ?? target);
 	const body = data === undefined ? "" : textOf(data);
 
-	if (body.length === 0) {
+	if (conversation === null || body.length === 0) {
 		return null;
 	}
 

@@ -67,6 +67,43 @@ describe("mapEnvelope edits echoed from another device", () => {
 		expect(mapped.conversationKind).toBe("group");
 	});
 
+	test("a group edit with no destination still lands", () => {
+		// A group send names no recipient, and an edit's flattened data message is absent,
+		// so the inner group id is the only thing in the payload saying where the
+		// correction belongs. Resolving the destination first would drop this edit.
+		const mapped = mapEnvelope(
+			transcript({
+				editMessage: {
+					targetSentTimestamp: 1_759_999_999_000,
+					dataMessage: {
+						timestamp: 1_759_999_999_000,
+						message: "typo fixed",
+						groupInfo: { groupId: "group-1", groupName: "Signal devs" },
+					},
+				},
+			}),
+		);
+
+		expect(mapped.edited?.conversationId).toBe("group-1");
+		expect(mapped.edited?.body).toBe("typo fixed");
+		expect(mapped.conversationKind).toBe("group");
+		expect(mapped.message).toBeNull();
+	});
+
+	test("an edit that names neither a group nor a destination is dropped", () => {
+		const mapped = mapEnvelope(
+			transcript({
+				editMessage: {
+					targetSentTimestamp: 1_759_999_999_000,
+					dataMessage: { timestamp: 1_759_999_999_000, message: "typo fixed" },
+				},
+			}),
+		);
+
+		expect(mapped.edited).toBeNull();
+		expect(mapped.message).toBeNull();
+	});
+
 	test("ignores a correction that carries no text", () => {
 		// `bodyOf` would answer "[attachment]" for a file-only data message; an edit must
 		// never paste that placeholder over what was written.

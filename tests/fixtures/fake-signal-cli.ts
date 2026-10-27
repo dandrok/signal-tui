@@ -106,6 +106,20 @@ for await (const line of console) {
 			timestamp: 1_760_000_000_005,
 			dataMessage: { timestamp: 1_760_000_000_005, sticker: { packId: "pack", stickerId: 3 } },
 		});
+		// The peer switched the disappearing-messages timer on: a data message with no
+		// content, which must move the conversation's timer and never become a row.
+		notify({
+			sourceNumber: ACCOUNT,
+			sourceUuid: "uuid-alice",
+			sourceName: "Alice",
+			sourceDevice: 1,
+			timestamp: 1_760_000_000_007,
+			dataMessage: {
+				timestamp: 1_760_000_000_007,
+				isExpirationUpdate: true,
+				expiresInSeconds: 86_400,
+			},
+		});
 		// A correction made on another device: the transcript carries `editMessage` and no
 		// flattened data message, and it must reach the store as an edit, never as a row.
 		notify({

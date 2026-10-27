@@ -92,6 +92,11 @@ export const dataMessageSchema = z.looseObject({
 	timestamp: z.number().int(),
 	message: z.string().nullish(),
 	expiresInSeconds: z.number().int().nullish(),
+	/**
+	 * A timer change travels as a data message with no content of its own: the number is
+	 * the whole payload, and it is how the conversation learns the timer it now has.
+	 */
+	isExpirationUpdate: z.boolean().optional(),
 	attachments: z.array(attachmentSchema).optional(),
 	quote: quoteSchema.optional(),
 	mentions: z.array(mentionSchema).optional(),

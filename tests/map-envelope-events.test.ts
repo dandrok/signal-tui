@@ -12,7 +12,9 @@ import type { Envelope } from "../src/adapters/signal/schemas";
  * group call emits a group-call update every few seconds, so the noise compounds.
  *
  * Kinds are the ones `JsonDataMessage` declares at signal-cli v0.14.9, minus the ones
- * that carry content of their own (`reaction`, `remoteDelete`, `quote`, `attachments`).
+ * that carry content of their own (`reaction`, `remoteDelete`, `quote`, `attachments`)
+ * and the timer change, which says something about the conversation rather than nothing —
+ * it has its own tests below.
  */
 const envelope = (dataMessage: Record<string, unknown>): Envelope => ({
 	source: "+100****0000",
@@ -35,7 +37,6 @@ const CONTENT_FREE: Readonly<Record<string, Record<string, unknown>>> = {
 	payment: { payment: { receipt: "abc" } },
 	"shared contact": { contacts: [{ name: { displayName: "Bob" } }] },
 	"admin delete": { adminDelete: { targetSentTimestamp: 1 } },
-	"expiration update": { isExpirationUpdate: true, expiresInSeconds: 86_400 },
 	"end session": { isEndSession: true },
 	"profile key update": { isProfileKeyUpdate: true, hasProfileKey: true },
 };
@@ -109,5 +110,49 @@ describe("mapEnvelope events that are not messages", () => {
 
 		expect(mapped.message).toBeNull();
 		expect(mapped.conversation).toBeNull();
+	});
+});
+
+/**
+ * A timer change is the one content-free payload that is not nothing.
+ *
+ * The peer switched the disappearing-messages timer on or off, and Signal announces it as
+ * a data message whose entire payload is the number. The client keeps the timer on the
+ * conversation because Signal never echoes our own sends back, so the number is what
+ * stamps our own outgoing messages: dropping it means text sent after a timer was switched
+ * on keeps no deadline, and text sent after one was switched off inherits one.
+ */
+describe("mapEnvelope timer changes", () => {
+	test("carries the number onto the conversation without a message", () => {
+		const mapped = mapEnvelope(envelope({ isExpirationUpdate: true, expiresInSeconds: 86_400 }));
+
+		expect(mapped.message).toBeNull();
+		expect(mapped.conversation?.expiresInSeconds).toBe(86_400);
+		expect(mapped.conversation?.id).toBe("b5b0c3d2-0000-4000-8000-000000000000");
+	});
+
+	test("carries a switched-off timer as an explicit zero", () => {
+		// `0` is how Signal says "timer off", and the store treats it as a value rather
+		// than as "nothing known" — so it must reach the conversation, not be dropped.
+		const mapped = mapEnvelope(envelope({ isExpirationUpdate: true, expiresInSeconds: 0 }));
+
+		expect(mapped.message).toBeNull();
+		expect(mapped.conversation?.expiresInSeconds).toBe(0);
+	});
+
+	test("an expiration update with no number changes nothing", () => {
+		const mapped = mapEnvelope(envelope({ isExpirationUpdate: true }));
+
+		expect(mapped.message).toBeNull();
+		expect(mapped.conversation).toBeNull();
+	});
+
+	test("the number alone is not an update: a plain message keeps its own timer", () => {
+		// `expiresInSeconds` rides on every message sent inside a timer, and those are
+		// messages, not timer changes. The flag is what separates the two.
+		const mapped = mapEnvelope(envelope({ message: "hi", expiresInSeconds: 3_600 }));
+
+		expect(mapped.message?.body).toBe("hi");
+		expect(mapped.conversation?.expiresInSeconds).toBe(3_600);
 	});
 });

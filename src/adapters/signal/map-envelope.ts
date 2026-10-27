@@ -94,10 +94,14 @@ const carriesContent = (content: Content): boolean =>
  * An edit, wrapped as an event rather than a message. The rule that decides which
  * conversation it lands in and whether it carries real text lives in `map-edit.ts`.
  */
-function editEnvelope(edit: EditMessage, target: Target, editor: EditAuthor): MappedEnvelope {
+function editEnvelope(
+	edit: EditMessage,
+	target: Target | null,
+	editor: EditAuthor,
+): MappedEnvelope {
 	const mapped = mapEditPayload(edit, target, editor);
 	if (mapped === null) {
-		return { ...EMPTY, conversationKind: target.kind };
+		return target === null ? EMPTY : { ...EMPTY, conversationKind: target.kind };
 	}
 	return {
 		...EMPTY,
@@ -107,6 +111,33 @@ function editEnvelope(edit: EditMessage, target: Target, editor: EditAuthor): Ma
 			targetSentAt: mapped.targetSentAt,
 			editor: mapped.editor,
 			body: mapped.body,
+		},
+	};
+}
+
+/**
+ * A timer change is a conversation fact with no message of its own.
+ *
+ * Signal announces "the timer is now N seconds" as a data message whose whole payload is
+ * `isExpirationUpdate` plus `expiresInSeconds`. The number matters: it is what stamps our
+ * own outgoing messages, so a client that drops it keeps sending text under a timer that
+ * was switched on (or expires messages under one that was switched off). Nothing is
+ * inserted, so no row and no unread count: only the conversation learns the new value.
+ */
+function timerChange(target: Target, data: DataMessage): MappedEnvelope | null {
+	const seconds = data.isExpirationUpdate === true ? data.expiresInSeconds : undefined;
+	if (typeof seconds !== "number") {
+		return null;
+	}
+	return {
+		...EMPTY,
+		conversationKind: target.kind,
+		conversation: {
+			id: target.id,
+			name: target.name,
+			unreadCount: 0,
+			lastActivityAt: data.timestamp,
+			expiresInSeconds: seconds,
 		},
 	};
 }
@@ -153,7 +184,9 @@ function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
 
 	const content = contentOf(data);
 	if (!carriesContent(content)) {
-		return EMPTY;
+		// A timer change is the one content-free payload that still says something: it
+		// moves the conversation's timer, and dropping it leaves that number stale.
+		return timerChange(target, data) ?? EMPTY;
 	}
 	const expiresAt = expiresAtOf(data);
 
@@ -194,6 +227,13 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 		groupTarget(sent.groupInfo) ??
 		(destination === null ? null : { id: destination, name: "", kind: "direct" as const });
 
+	// Our own edit, made on another device: an edit to a group message arrives with no
+	// destination at all, so the group comes from the edit's own data message. Resolving
+	// it before the missing-destination check is what keeps those edits from vanishing.
+	if (sent.editMessage !== undefined) {
+		return editEnvelope(sent.editMessage, target, SELF_ACTOR);
+	}
+
 	if (target === null) {
 		return EMPTY;
 	}
@@ -213,12 +253,6 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 				messageId: `${target.id}:${sent.remoteDelete.timestamp}`,
 			},
 		};
-	}
-
-	// Our own edit, made on another device: the transcript holds `editMessage` and no
-	// data message of its own, so it corrects a stored row and is never a new one.
-	if (sent.editMessage !== undefined) {
-		return editEnvelope(sent.editMessage, target, SELF_ACTOR);
 	}
 
 	// A transcript with no timestamp cannot name a message: that timestamp is the row's
