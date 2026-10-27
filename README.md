@@ -4,8 +4,9 @@ A terminal Signal client. Ink + Bun, local-first: messages live in SQLite on you
 machine, and the TUI never touches the network itself — it drives
 [`signal-cli`](https://github.com/AsamK/signal-cli) over JSON-RPC on stdio.
 
-**Status: `0.0.x` — usable for text conversations.** Read, send, groups, edits,
-deletes, unread counts and read receipts work against a real account.
+**Status: `0.1.0` — usable for text conversations.** Read, send, groups, edits, deletes,
+reactions, unread counts and read receipts work against a real account. What changed, and
+when, is in [CHANGELOG.md](./CHANGELOG.md).
 
 > **Unofficial.** Not affiliated with Signal Messenger LLC. It is a terminal front
 > end for [`signal-cli`](https://github.com/AsamK/signal-cli), which does the
@@ -13,6 +14,7 @@ deletes, unread counts and read receipts work against a real account.
 
 ## Contents
 
+- [Changelog](./CHANGELOG.md)
 - [Before you start](#before-you-start)
 - [Install](#install)
 - [Link your account](#link-your-account)
@@ -114,14 +116,14 @@ you linked that device is not available — Signal does not backfill it.
 |---|---|
 | `Tab` / `Shift-Tab` | move between conversations → messages → composer |
 | `j` / `k` | move the selection, or scroll the message pane when it has focus |
-| `PgUp` / `PgDn` | scroll by ten messages |
+| `PgUp` / `PgDn` | scroll the message pane by ten messages |
 | `i` or `⏎` | focus the composer |
 | `r` | reply to the selected message (message pane) |
-| `x` | react to the selected message: type one emoji, `⏎` sends, `Esc` cancels |
-| `⏎` | send (while composing) |
-| `/` | search your cached history |
-| `Esc` | leave the composer, cancel a reply, close search |
-| `q` | quit |
+| `x` | react to the selected message (message pane): type one emoji, `⏎` sends |
+| `⏎` | send the draft, or send the emoji while reacting |
+| `/` | search cached history — `↑` / `↓` to pick a hit, `⏎` to open it, `Esc` to close |
+| `Esc` | leave the composer, cancel a reply, cancel a reaction, close search |
+| `q` | quit, from any pane; `Ctrl-C` quits from anywhere, modes included |
 
 The pane border shows which box has the keyboard.
 
@@ -176,7 +178,6 @@ the last second of typing.
   loaded asks for the page behind it (keyset, so messages arriving mid-scroll cannot shift a
   page into a duplicate or a hole). Pages already walked back to survive an incoming message
   instead of being thrown away.
-
 - files shown by name and size, with the caption when the sender wrote one
 - **reactions**: an emoji a peer adds is shown on the message's author row (`👍 2`), a
   second emoji from the same person replaces the first, and a removal takes it away. `x` in
@@ -213,6 +214,10 @@ the last second of typing.
   target is outside the loaded window reads `not loaded`, because the quoted text is not
   stored
 - opening an attachment from the TUI (`xdg-open`), typing indicators
+- an emoji picker: a terminal has none, so `x` takes whatever you type and validates it as one
+  emoji rather than offering a list
+- a config file: notification sound off, an editor for long messages, engine arguments. Today
+  that is a flag or nothing — `flag > env > file > default` is the next slice
 - history from before you linked this device
 - **view-once messages are not shown at all**, only announced: this client keeps no copy,
   and files are not rendered yet, so there is nothing to open. Note that `signal-cli`

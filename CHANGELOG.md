@@ -36,8 +36,8 @@ thing a key could write with.
   through both to keep them honest. The signal adapter is four modules — envelope mapping,
   schemas, the JSON-RPC client and its framing, the backend — and the UI's thread pane is a
   window rule, a row and a pane.
-- Errors a session reports are now collected per group instead of one file; `doctor` says which
-  check failed and what to do about it.
+- `doctor` is a folder of checks rather than one file, so each check states its own advice; the
+  report is unchanged.
 
 ### Internal
 
