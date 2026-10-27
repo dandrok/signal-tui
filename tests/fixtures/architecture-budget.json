@@ -1,0 +1,16 @@
+{
+	"$comment": "Line budgets for src/** — files that are over 200 lines today. A budget may only go down: lower or delete an entry when a split lands (see BUILD/Signal TUI - architecture audit and refactor plan).",
+	"src/adapters/signal/map-envelope.ts": 324,
+	"src/cli/doctor.ts": 300,
+	"src/adapters/signal/json-rpc-client.ts": 295,
+	"src/adapters/memory/store.ts": 285,
+	"src/adapters/signal/signal-cli-backend.ts": 285,
+	"src/domain/layout.ts": 284,
+	"src/app/session.ts": 271,
+	"src/ui/Root.tsx": 263,
+	"src/adapters/sqlite/store.ts": 253,
+	"src/app/state.ts": 238,
+	"src/ui/MessagePane.tsx": 229,
+	"src/ui/App.tsx": 214,
+	"src/adapters/signal/schemas.ts": 202
+}
