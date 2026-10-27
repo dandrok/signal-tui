@@ -109,5 +109,5 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 	};
 }
 
-export { isDirectConversationId } from "./receipts";
+export { isDirectConversationId } from "../../domain/ids";
 export type { IncomingNotice, Session, SessionDeps } from "./types";

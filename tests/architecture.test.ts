@@ -33,15 +33,6 @@ const BUDGET_PATH = join(import.meta.dir, "fixtures", "architecture-budget.json"
 const budget = JSON.parse(readFileSync(BUDGET_PATH, "utf8")) as Record<string, number>;
 const modules = loadModules(ROOT);
 
-/**
- * The one cycle that predates this rule: `conversations → state → history → conversations`,
- * created by splitting files out of the reducer for line count. Removing it is step 3 of the
- * refactor plan; adding another is what this test exists to prevent.
- */
-const KNOWN_CYCLES: readonly (readonly string[])[] = [
-	["src/app/conversations.ts", "src/app/history.ts", "src/app/state.ts"],
-];
-
 /** A module graph from `path → imports`, for the violating shapes below. */
 const graph = (sources: Record<string, readonly string[]>): SourceModule[] =>
 	Object.entries(sources).map(([path, imports]) => ({ path, lines: 10, imports }));
@@ -164,22 +155,12 @@ describe("the rules fire on a violating graph", () => {
 });
 
 describe("this tree", () => {
-	test("has no cycle outside the one the rule was seeded with", () => {
-		const canonical = (component: readonly string[]): string => [...component].sort().join(" | ");
-		const allowed = new Set(KNOWN_CYCLES.map(canonical));
-
-		expect(
-			findCycles(modules)
-				.filter((c) => !allowed.has(canonical(c)))
-				.map(canonical),
-		).toEqual([]);
-	});
-
-	test("still has the seeded cycle, so the allowlist cannot go stale", () => {
-		const canonical = (component: readonly string[]): string => [...component].sort().join(" | ");
-		const present = new Set(findCycles(modules).map(canonical));
-
-		expect(KNOWN_CYCLES.filter((c) => !present.has(canonical(c))).map(canonical)).toEqual([]);
+	test("has no import cycle at all", () => {
+		// The three-file cycle this rule was seeded with (conversations → state → history) is
+		// gone: the reducer split moved the shared vocabulary into `state/types.ts`, so the
+		// conversation selectors no longer reach back through the reducer. The allowlist is
+		// empty on purpose — a cycle has no reason to exist here.
+		expect(findCycles(modules)).toEqual([]);
 	});
 
 	test("has no file over its budget", () => {

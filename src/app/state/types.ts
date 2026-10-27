@@ -1,4 +1,4 @@
-import type { Conversation, ConversationId, Message, MessageId } from "../domain/types";
+import type { Conversation, ConversationId, Message, MessageId } from "../../domain/types";
 
 /**
  * The shape of app state, and the vocabulary its transitions speak.

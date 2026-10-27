@@ -1,14 +1,11 @@
+import { isDirectConversationId } from "../../domain/ids";
 import type { ConversationId } from "../../domain/types";
 import type { SessionContext } from "./types";
 
 /**
- * `sendReceipt` resolves its recipient as a phone number or a UUID, so a group
- * conversation cannot be passed through unchanged. Groups are skipped until the
- * receipt path for them is verified.
+ * Groups are skipped: `sendReceipt` resolves its recipient as a phone number or a UUID, so a
+ * group conversation cannot be passed through unchanged until that path is verified.
  */
-export function isDirectConversationId(conversationId: ConversationId): boolean {
-	return /^\+?\d{5,}$/.test(conversationId) || /^[0-9a-fA-F-]{32,36}$/.test(conversationId);
-}
 
 /**
  * Tells the other side their messages were read, once a human opened the thread.

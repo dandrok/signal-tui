@@ -1,6 +1,6 @@
+import { isDirectConversationId } from "../domain/ids";
 import type { ConversationId, Message, MessageId } from "../domain/types";
 import { SELF_AUTHOR_ID } from "../domain/types";
-import { isDirectConversationId } from "./session";
 
 /**
  * Which message a reply would answer, and whether it can be answered at all.

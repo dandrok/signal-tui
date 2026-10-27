@@ -1,7 +1,7 @@
-import type { ConversationId, Message } from "../domain/types";
-import { selectedConversation } from "./conversations";
-import { canAnswerIn } from "./reply";
-import type { Action, AppState } from "./state";
+import type { ConversationId, Message } from "../../domain/types";
+import { canAnswerIn } from "../reply";
+import { selectedConversation } from "./selectors";
+import type { Action, AppState } from "./types";
 
 /**
  * Walking back through a conversation's history, as state transitions.
