@@ -16,7 +16,7 @@ export function hintsFor(state: AppState, isReplying: boolean): string {
 	if (state.prompt !== null) {
 		switch (state.prompt.kind) {
 			case "reaction":
-				return "⏎ send · esc cancel";
+				return "⇥/↕ pick · ⏎ send · esc cancel";
 			case "edit":
 				return "⏎ save · esc cancel";
 			case "delete":

@@ -1,6 +1,6 @@
 import { canDelete } from "../usecases/delete";
 import { canEdit } from "../usecases/edit";
-import { canReactTo } from "../usecases/react";
+import { canReactTo, reactionSuggestions } from "../usecases/react";
 import { pointedMessage, selectedConversation } from "./selectors";
 import type { AppState, PromptKind } from "./types";
 
@@ -62,7 +62,14 @@ export function openPrompt(state: AppState, kind: PromptKind): AppState {
 	}
 	return {
 		...state,
-		prompt: { kind, targetId: target.id, draft: kind === "edit" ? target.body : "" },
+		// An edit starts from the body it replaces; a reaction starts with the picker on its
+		// best suggestion, so `x` then `⏎` is a complete action.
+		prompt: {
+			kind,
+			targetId: target.id,
+			draft: kind === "edit" ? target.body : "",
+			pick: 0,
+		},
 	};
 }
 
@@ -71,7 +78,24 @@ export function changePrompt(state: AppState, value: string): AppState {
 	if (prompt === null || prompt.draft === value) {
 		return state;
 	}
-	return { ...state, prompt: { ...prompt, draft: value } };
+	// Typing re-ranks the suggestions, so the highlight goes back to the best match: leaving it
+	// where it was would keep a position that now means a different emoji.
+	return { ...state, prompt: { ...prompt, draft: value, pick: 0 } };
+}
+
+/** Arrow keys and tab walk the suggestions; nothing else in a reaction prompt is a position. */
+export function movePrompt(state: AppState, delta: number): AppState {
+	const prompt = state.prompt;
+	if (prompt === null || prompt.kind !== "reaction") {
+		return state;
+	}
+	const { emoji } = reactionSuggestions(prompt.draft, prompt.pick);
+	if (emoji.length === 0) {
+		return state;
+	}
+	// Wrapping, because a five-item list is shorter than anyone's patience for clamping.
+	const pick = (prompt.pick + delta + emoji.length) % emoji.length;
+	return { ...state, prompt: { ...prompt, pick } };
 }
 
 export function cancelPrompt(state: AppState): AppState {

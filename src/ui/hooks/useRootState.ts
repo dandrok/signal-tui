@@ -92,7 +92,7 @@ export function useRootState(session: Session | undefined): RootState {
 					);
 
 					if (prompt.kind === "reaction") {
-						const request = reactionFor(message, conversation.id, prompt.draft);
+						const request = reactionFor(message, conversation.id, prompt.draft, prompt.pick);
 						// The prompt closed either way; saying why is the difference between a
 						// refusal and a reaction that vanished.
 						if (request === null) {

@@ -78,7 +78,7 @@ describe("the message pane's hint", () => {
 			hintsFor(
 				{
 					...stateWith(message({ isOutgoing: true, authorId: SELF_AUTHOR_ID })),
-					prompt: { kind, targetId: `${CONVERSATION}:1000`, draft: "" },
+					prompt: { kind, targetId: `${CONVERSATION}:1000`, draft: "", pick: 0 },
 				},
 				false,
 			);

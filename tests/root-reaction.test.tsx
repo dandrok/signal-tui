@@ -179,4 +179,78 @@ describe("reacting from the keyboard", () => {
 		]);
 		unmount();
 	});
+
+	test("x then enter sends the picker's first suggestion", async () => {
+		// The whole point of the picker: a terminal cannot insert an emoji, so the prompt has
+		// to offer one. No typing, no name, no picker-less dead end.
+		const store = await seededStore();
+		const { session, reactions } = fakeSession();
+		const { stdin, lastFrame, unmount } = render(<Root store={store} session={session} />);
+		await tick();
+
+		await openPrompt(stdin);
+		expect(plain(lastFrame() ?? "")).toContain("👍");
+
+		stdin.write("\r");
+		await tick(300);
+
+		expect(reactions[0]?.emoji).toBe("👍");
+		unmount();
+	});
+
+	test("tab walks the suggestions", async () => {
+		const store = await seededStore();
+		const { session, reactions } = fakeSession();
+		const { stdin, unmount } = render(<Root store={store} session={session} />);
+		await tick();
+
+		await openPrompt(stdin);
+		stdin.write("\t");
+		await tick();
+		stdin.write("\r");
+		await tick(300);
+
+		expect(reactions[0]?.emoji).toBe("❤️");
+		unmount();
+	});
+
+	test("a name typed instead of an emoji is resolved", async () => {
+		// Reported from the real TUI: typing `redheart` answered "not one emoji: 8 characters".
+		// True, and useless — a picker that cannot be typed into is a picker nobody uses.
+		const store = await seededStore();
+		const { session, reactions } = fakeSession();
+		const { stdin, unmount } = render(<Root store={store} session={session} />);
+		await tick();
+
+		await openPrompt(stdin);
+		for (const char of "redheart") {
+			stdin.write(char);
+			await tick(20);
+		}
+		stdin.write("\r");
+		await tick(300);
+
+		expect(reactions[0]?.emoji).toBe("❤️");
+		unmount();
+	});
+
+	test("a name that matches nothing still refuses, and names what was typed", async () => {
+		const store = await seededStore();
+		const { session, reactions } = fakeSession();
+		const { stdin, lastFrame, unmount } = render(<Root store={store} session={session} />);
+		await tick();
+
+		await openPrompt(stdin);
+		for (const char of "qqq") {
+			stdin.write(char);
+			await tick(20);
+		}
+		stdin.write("\r");
+		await tick(300);
+
+		expect(reactions).toEqual([]);
+		// "zzz" is an alias of 😴, so a genuinely unmatched string is needed here.
+		expect(plain(lastFrame() ?? "")).toContain("U+0071");
+		unmount();
+	});
 });

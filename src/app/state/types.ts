@@ -44,6 +44,11 @@ export interface PromptState {
 	readonly targetId: MessageId;
 	/** The emoji, the replacement body, or (for a delete) nothing at all. */
 	readonly draft: string;
+	/**
+	 * Which suggestion the arrow keys are on. Only the reaction prompt has suggestions; a
+	 * draft that is already one emoji ignores this, and typing resets it to the best match.
+	 */
+	readonly pick: number;
 }
 
 export interface AppState {
@@ -118,6 +123,8 @@ export type Action =
 	| { readonly type: "prompt-opened"; readonly kind: PromptKind }
 	| { readonly type: "prompt-cancelled" }
 	| { readonly type: "prompt-changed"; readonly value: string }
+	/** Moves the highlight through what is suggested for the current draft. */
+	| { readonly type: "prompt-moved"; readonly delta: number }
 	/** The prompt was confirmed: whatever can be sent, is sent by the wiring. */
 	| { readonly type: "prompt-submitted" }
 	/** Hides the message the pane points at, in this cache only. Resolved by the wiring. */

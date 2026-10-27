@@ -78,6 +78,19 @@ const promptKey = (state: AppState, input: string, key: KeyLike): KeyResult => {
 	if (key.escape === true) {
 		return action({ type: "prompt-cancelled" });
 	}
+	if (prompt.kind === "reaction") {
+		// The picker: tab and the arrows walk the suggestions, and every other key is text the
+		// draft is being narrowed with.
+		if (key.tab === true) {
+			return action({ type: "prompt-moved", delta: key.shift === true ? -1 : 1 });
+		}
+		if (key.upArrow === true) {
+			return action({ type: "prompt-moved", delta: -1 });
+		}
+		if (key.downArrow === true) {
+			return action({ type: "prompt-moved", delta: 1 });
+		}
+	}
 	if (prompt.kind === "delete") {
 		if (key.return === true || input === "y") {
 			return action({ type: "prompt-submitted" });

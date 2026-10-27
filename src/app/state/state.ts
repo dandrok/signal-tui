@@ -5,7 +5,7 @@ import {
 	releaseOlder,
 	requestOlder,
 } from "./reduce-history";
-import { cancelPrompt, changePrompt, openPrompt, submitPrompt } from "./reduce-prompt";
+import { cancelPrompt, changePrompt, movePrompt, openPrompt, submitPrompt } from "./reduce-prompt";
 import { cancelReply, startReply } from "./reduce-reply";
 import { reduceSearch } from "./reduce-search";
 import { reduceSelection } from "./reduce-selection";
@@ -46,6 +46,8 @@ export function reduce(state: AppState, action: Action): AppState {
 			return openPrompt(state, action.kind);
 		case "prompt-changed":
 			return changePrompt(state, action.value);
+		case "prompt-moved":
+			return movePrompt(state, action.delta);
 		case "prompt-cancelled":
 			return cancelPrompt(state);
 		case "prompt-submitted":

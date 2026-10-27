@@ -1,5 +1,7 @@
 import { Box, Text } from "ink";
 import type { PromptState } from "../app/state";
+import { reactionSuggestions } from "../app/usecases/react";
+import { reactionEmojiOf } from "../domain/reactions";
 import { draftTail } from "../domain/rows";
 
 export interface PromptBarProps {
@@ -38,10 +40,19 @@ export function PromptBar({ prompt, width = 80 }: PromptBarProps) {
 	const cursorCells = confirming ? 0 : 1;
 	const body = confirming ? CONFIRM_TEXT : prompt.draft;
 
+	// A one-emoji draft needs no picker; anything else (a name, or nothing) shows what it
+	// matches, so the row is doing the work the terminal cannot do itself.
+	const picker =
+		prompt.kind === "reaction" && reactionEmojiOf(prompt.draft) === null
+			? reactionSuggestions(prompt.draft, prompt.pick)
+			: { emoji: [] as readonly string[], picked: 0 };
+	// Each suggestion is two cells plus a space, and the picked one is bracketed.
+	const pickerCells = picker.emoji.reduce((sum, emoji) => sum + emoji.length + 1, 0);
+
 	// A hint that does not fit is worse than no hint: it would wrap the row it describes.
 	const wanted = HINTS[prompt.kind];
-	const hint = inner - label.length - body.length >= wanted.length + 1 ? wanted : "";
-	const room = Math.max(1, inner - label.length - cursorCells - hint.length);
+	const hint = inner - label.length - body.length - pickerCells >= wanted.length + 1 ? wanted : "";
+	const room = Math.max(1, inner - label.length - cursorCells - hint.length - pickerCells);
 	const tail = confirming
 		? { text: body.slice(0, room), truncated: body.length > room }
 		: draftTail(body, room);
@@ -54,7 +65,12 @@ export function PromptBar({ prompt, width = 80 }: PromptBarProps) {
 				{tail.truncated ? <Text dimColor>…</Text> : null}
 				<Text>{tail.text}</Text>
 				{confirming ? null : <Text color="cyan">▌</Text>}
-				{empty ? <Text dimColor> {prompt.kind === "edit" ? "a new body" : "an emoji"}</Text> : null}
+				{empty && prompt.kind === "edit" ? <Text dimColor> a new body</Text> : null}
+				{picker.emoji.map((emoji, index) => (
+					<Text key={emoji} {...(index === picker.picked ? { inverse: true } : {})}>
+						{` ${emoji}`}
+					</Text>
+				))}
 				{hint === "" ? null : <Text dimColor>{hint}</Text>}
 			</Box>
 		</Box>

@@ -146,7 +146,7 @@ describe("keymap", () => {
 		// and escape has to leave the prompt before it does anything else.
 		const prompting: AppState = {
 			...thread,
-			prompt: { kind: "reaction", targetId: "uuid-alice:2", draft: "👍" },
+			prompt: { kind: "reaction", targetId: "uuid-alice:2", draft: "👍", pick: 0 },
 		};
 
 		expect(keyAction(prompting, "j", key())).toEqual({
@@ -169,7 +169,7 @@ describe("keymap", () => {
 		// accumulating characters nobody asked for.
 		const confirming: AppState = {
 			...thread,
-			prompt: { kind: "delete", targetId: "uuid-alice:2", draft: "" },
+			prompt: { kind: "delete", targetId: "uuid-alice:2", draft: "", pick: 0 },
 		};
 
 		expect(keyAction(confirming, "y", key())).toEqual({
@@ -190,7 +190,7 @@ describe("keymap", () => {
 	test("an edit prompt starts from the body it replaces, and types over it", () => {
 		const editing: AppState = {
 			...thread,
-			prompt: { kind: "edit", targetId: "uuid-alice:2", draft: "hell" },
+			prompt: { kind: "edit", targetId: "uuid-alice:2", draft: "hell", pick: 0 },
 		};
 
 		expect(keyAction(editing, "o", key())).toEqual({

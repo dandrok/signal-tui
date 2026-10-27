@@ -15,6 +15,10 @@ Notable changes, newest first. This file starts at 0.1.0 — earlier versions ar
 - **Hide locally** (`D`): the row stays in the cache so a replayed envelope cannot arrive as new,
   but no read returns it — not the thread, not an older page, not search. Nothing goes on the
   wire.
+- **A reaction picker**, because a terminal cannot insert an emoji: `x` opens with five
+  suggestions, `⇥`/`↑↓` walk them, and `⏎` sends the highlighted one. Typing narrows the list by
+  name — `heart`, `redheart`, `red heart`, `:tada:`, `laugh` — from a curated table of ~50
+  entries with aliases (`src/domain/emoji-catalog.ts`), not Unicode's 3600.
 - **Taking a reaction back**: typing the emoji you already added now removes it, instead of
   adding a twin. The wire took `remove` all along; the key did not offer it.
 

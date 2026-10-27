@@ -73,10 +73,28 @@ describe("reactionFor", () => {
 		expect(reactionFor(mine, DIRECT_ID, "👍")?.target.authorId).toBe(SELF_AUTHOR_ID);
 	});
 
-	test("refuses a row that is gone, an unknown target, and an empty prompt", () => {
+	test("refuses a row that is gone and an unknown target", () => {
 		expect(reactionFor(incoming({ isDeleted: true }), DIRECT_ID, "👍")).toBeNull();
 		expect(reactionFor(undefined, DIRECT_ID, "👍")).toBeNull();
-		expect(reactionFor(incoming(), DIRECT_ID, "   ")).toBeNull();
+	});
+
+	test("an empty prompt sends the picker's best suggestion", () => {
+		// The point of the picker: `x` then `⏎` is a complete action in a terminal that cannot
+		// insert an emoji by itself.
+		expect(reactionFor(incoming(), DIRECT_ID, "")?.emoji).toBe("👍");
+		expect(reactionFor(incoming(), DIRECT_ID, "", 1)?.emoji).toBe("❤️");
+	});
+
+	test("a name is resolved, so nobody has to know an emoji", () => {
+		expect(reactionFor(incoming(), DIRECT_ID, "heart")?.emoji).toBe("❤️");
+		expect(reactionFor(incoming(), DIRECT_ID, "redheart")?.emoji).toBe("❤️");
+		expect(reactionFor(incoming(), DIRECT_ID, "red heart")?.emoji).toBe("❤️");
+		expect(reactionFor(incoming(), DIRECT_ID, ":tada:")?.emoji).toBe("🎉");
+		expect(reactionFor(incoming(), DIRECT_ID, "laugh")?.emoji).toBe("😂");
+	});
+
+	test("a name that matches nothing is refused, with the input named", () => {
+		expect(reactionFor(incoming(), DIRECT_ID, "zzzz")).toBeNull();
 	});
 
 	test("refuses two emoji, and says so by sending nothing", () => {

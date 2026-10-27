@@ -119,7 +119,7 @@ you linked that device is not available — Signal does not backfill it.
 | `PgUp` / `PgDn` | scroll the message pane by ten messages |
 | `i` or `⏎` | focus the composer |
 | `r` | reply to the selected message (message pane) |
-| `x` | react to the selected message: type one emoji, `⏎` sends. Typing the emoji you already added takes it back |
+| `x` | react to the selected message: a picker opens — `⇥`/`↑↓` to choose, type a name (`heart`, `redheart`, `tada`) to filter, `⏎` sends. Typing the emoji you already added takes it back |
 | `e` | edit your own message: the prompt opens with its body, `⏎` saves, `Esc` cancels |
 | `d` | delete your own message for everyone — it asks first, `⏎` or `y` confirms |
 | `D` | hide a message on this device only; nothing is sent and nobody else is affected |
@@ -189,8 +189,11 @@ the last second of typing.
 - files shown by name and size, with the caption when the sender wrote one
 - **reactions**: an emoji a peer adds is shown on the message's author row (`👍 2`), a
   second emoji from the same person replaces the first, and a removal takes it away. `x` in
-  the message pane adds your own: type any emoji, `⏎` sends it, and it appears immediately
-  without waiting for a transcript Signal never sends back
+  the message pane adds your own, and it appears immediately without waiting for a transcript
+  Signal never sends back. The prompt is a **picker**, because a terminal cannot insert an
+  emoji: five suggestions are on screen the moment it opens, `⇥`/`↑↓` walk them, typing a name
+  narrows the list (`heart`, `redheart`, `:tada:`, `laugh`), and the emoji you already added is
+  one keystroke away from being taken back
 - **editing your own message** (`e`): the prompt starts from the body, `⏎` saves, and the row
   reads `· edited` at once — the local echo goes through the same rule the other side's
   correction does, because Signal never echoes a send back to the device that wrote it
@@ -231,8 +234,9 @@ the last second of typing.
   target is outside the loaded window reads `not loaded`, because the quoted text is not
   stored
 - opening an attachment from the TUI (`xdg-open`), typing indicators
-- an emoji picker: a terminal has none, so `x` takes whatever you type and validates it as one
-  emoji rather than offering a list
+- the **full** emoji set: the picker carries a curated table of ~50 names rather than Unicode's
+  3600, so a rare emoji has to be pasted rather than named. Adding one is a line in
+  `src/domain/emoji-catalog.ts`
 - a config file: notification sound off, an editor for long messages, engine arguments. Today
   that is a flag or nothing — `flag > env > file > default` is the next slice
 - history from before you linked this device
