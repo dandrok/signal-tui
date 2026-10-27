@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { defaultCommand, unwrapNotification } from "../src/adapters/signal/signal-cli-backend";
+import { unwrapNotification } from "../src/adapters/signal/signal-cli-backend";
+import { defaultCommand } from "../src/adapters/signal/spawn";
 import { ACCOUNT, directParams, envelope, setup, subscriptionParams } from "./helpers/fake-rpc";
 
 describe("defaultCommand", () => {

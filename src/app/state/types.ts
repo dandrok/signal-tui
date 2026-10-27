@@ -26,6 +26,18 @@ export interface SearchState {
 	readonly ran: boolean;
 }
 
+/**
+ * A reaction prompt: the message it names, and the emoji typed so far.
+ *
+ * A mode like search — while it is open the keyboard belongs to it — but it holds an id
+ * rather than a message: the row can be edited, deleted or swept while the emoji is being
+ * typed, and the send path resolves it again before anything goes on the wire.
+ */
+export interface ReactionPrompt {
+	readonly targetId: MessageId;
+	readonly draft: string;
+}
+
 export interface AppState {
 	readonly conversations: readonly Conversation[];
 	readonly messagesByConversation: Readonly<Record<ConversationId, readonly Message[]>>;
@@ -61,6 +73,7 @@ export interface AppState {
 	readonly historyComplete: Readonly<Record<ConversationId, true>>;
 	readonly notice: Notice | null;
 	readonly search: SearchState | null;
+	readonly reaction: ReactionPrompt | null;
 }
 
 export type Action =
@@ -93,6 +106,12 @@ export type Action =
 	/** Answers the message the pane is pointing at; the reducer resolves which one. */
 	| { readonly type: "reply-started" }
 	| { readonly type: "reply-cancelled" }
+	/** Opens the emoji prompt on the message the pane points at. */
+	| { readonly type: "reaction-started" }
+	| { readonly type: "reaction-cancelled" }
+	| { readonly type: "reaction-changed"; readonly value: string }
+	/** The prompt was confirmed: whatever can be sent, is sent by the wiring. */
+	| { readonly type: "reaction-submitted" }
 	| { readonly type: "notice"; readonly notice: Notice | null }
 	| { readonly type: "search-opened" }
 	| { readonly type: "search-closed" }

@@ -11,8 +11,9 @@ import type { Action, AppState } from "../app/state";
  * Order matters and is part of the contract:
  *   1. `ctrl-c` always quits.
  *   2. Search owns the keyboard while it is open, so nothing below can steal a keystroke.
- *   3. `tab` moves panes before the composer, which would otherwise type it into the draft.
- *   4. The composer takes everything else while it is focused.
+ *   3. A reaction prompt owns it next: it is modal, so `tab` must not walk away from it.
+ *   4. `tab` moves panes before the composer, which would otherwise type it into the draft.
+ *   5. The composer takes everything else while it is focused.
  */
 
 /** The slice of ink's `Key` this map reads. Structural, so tests need no terminal. */
@@ -61,6 +62,20 @@ const searchKey = (state: AppState, input: string, key: KeyLike): KeyResult => {
 	return input.length > 0 ? action({ type: "search-changed", query: query + input }) : null;
 };
 
+const reactionKey = (state: AppState, input: string, key: KeyLike): KeyResult => {
+	const draft = state.reaction?.draft ?? "";
+	if (key.escape === true) {
+		return action({ type: "reaction-cancelled" });
+	}
+	if (key.return === true) {
+		return action({ type: "reaction-submitted" });
+	}
+	if (key.backspace === true || key.delete === true) {
+		return action({ type: "reaction-changed", value: draft.slice(0, -1) });
+	}
+	return input.length > 0 ? action({ type: "reaction-changed", value: draft + input }) : null;
+};
+
 const composerKey = (state: AppState, input: string, key: KeyLike): KeyResult => {
 	if (key.return === true) {
 		return action({ type: "draft-submitted" });
@@ -92,6 +107,9 @@ const paneKey = (state: AppState, input: string, key: KeyLike): KeyResult => {
 	const inMessages = state.focus === "messages";
 	if (inMessages && input === "r") {
 		return action({ type: "reply-started" });
+	}
+	if (inMessages && input === "x") {
+		return action({ type: "reaction-started" });
 	}
 	if (inMessages && key.pageUp === true) {
 		return action({ type: "scroll-moved", delta: SCROLL_STEP });
@@ -125,6 +143,9 @@ export function keyAction(state: AppState, input: string, key: KeyLike): KeyResu
 	}
 	if (state.search !== null) {
 		return searchKey(state, input, key);
+	}
+	if (state.reaction !== null) {
+		return reactionKey(state, input, key);
 	}
 	if (key.tab === true) {
 		return action({ type: key.shift === true ? "focus-prev" : "focus-next" });

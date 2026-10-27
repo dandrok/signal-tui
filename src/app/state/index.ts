@@ -19,4 +19,12 @@ export {
 	selectedSearchResult,
 } from "./selectors";
 export { reduce } from "./state";
-export type { Action, AppState, Focus, Notice, NoticeKind, SearchState } from "./types";
+export type {
+	Action,
+	AppState,
+	Focus,
+	Notice,
+	NoticeKind,
+	ReactionPrompt,
+	SearchState,
+} from "./types";

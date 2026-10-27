@@ -117,6 +117,7 @@ you linked that device is not available — Signal does not backfill it.
 | `PgUp` / `PgDn` | scroll by ten messages |
 | `i` or `⏎` | focus the composer |
 | `r` | reply to the selected message (message pane) |
+| `x` | react to the selected message: type one emoji, `⏎` sends, `Esc` cancels |
 | `⏎` | send (while composing) |
 | `/` | search your cached history |
 | `Esc` | leave the composer, cancel a reply, close search |
@@ -178,7 +179,9 @@ the last second of typing.
 
 - files shown by name and size, with the caption when the sender wrote one
 - **reactions**: an emoji a peer adds is shown on the message's author row (`👍 2`), a
-  second emoji from the same person replaces the first, and a removal takes it away
+  second emoji from the same person replaces the first, and a removal takes it away. `x` in
+  the message pane adds your own: type any emoji, `⏎` sends it, and it appears immediately
+  without waiting for a transcript Signal never sends back
 - **replies**: a message that answers another one shows what it answers, above its own
   text (`┃ 12:34 Marta: the original`). The quoted message is looked up in the thread, so a
   quote of something deleted or expired reads `message deleted` / `message expired` rather
@@ -202,8 +205,7 @@ the last second of typing.
 
 ## Not there yet
 
-- **sending a reaction** from the TUI: received ones are shown, but there is no key or
-  mode for adding your own yet
+- **removing** a reaction you added: the wire supports it (`remove`), the key does not yet
 - **stickers, polls, polls' votes, pins, payments and group-call updates are ignored.**
   They arrive as data messages with no text and no files, so the client does not draw a
   row for them at all — no blank line, no unread count, no notification

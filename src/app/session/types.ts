@@ -1,5 +1,5 @@
 import type { ConversationId, Message } from "../../domain/types";
-import type { ReplyTarget, SignalBackend } from "../../ports/backend";
+import type { ReactionTarget, ReplyTarget, SignalBackend } from "../../ports/backend";
 import type { MessageStore } from "../../ports/store";
 
 /** Milliseconds source; injectable so expiry tests need no sleeps. */
@@ -28,6 +28,8 @@ export interface Session {
 	stop(): Promise<void>;
 	/** Sends `body`, optionally as a reply to an earlier message. */
 	send(conversationId: ConversationId, body: string, replyTo?: ReplyTarget): Promise<void>;
+	/** Adds our reaction to an earlier message, keeping the local echo. */
+	react(conversationId: ConversationId, target: ReactionTarget, emoji: string): Promise<void>;
 	/** Clears the unread count for a conversation the user is looking at. */
 	markRead(conversationId: ConversationId): Promise<void>;
 	/** Resolves once every queued write has been applied. */
