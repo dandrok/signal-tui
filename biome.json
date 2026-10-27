@@ -57,6 +57,55 @@
 			}
 		},
 		{
+			"includes": ["src/app/**"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedImports": {
+							"level": "error",
+							"options": {
+								"patterns": [
+									{
+										"group": ["**/adapters/**", "**/ui/**", "**/cli/**"],
+										"message": "app holds use cases: it talks to ports, never to an adapter or a component"
+									}
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"includes": ["src/ports/**"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedImports": {
+							"level": "error",
+							"options": {
+								"patterns": [
+									{
+										"group": [
+											"**/adapters/**",
+											"**/app/**",
+											"**/ui/**",
+											"**/cli/**",
+											"ink",
+											"react",
+											"zod",
+											"bun:sqlite"
+										],
+										"message": "a port is a contract: types only, no runtime and no implementation"
+									}
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		{
 			"includes": ["src/ui/**"],
 			"linter": {
 				"rules": {
