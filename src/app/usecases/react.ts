@@ -74,3 +74,22 @@ export function targetedMessage(
 	}
 	return messages.find((message) => message.id === targetId);
 }
+
+/**
+ * What was typed, spelled out — a refusal that names the input instead of the rule.
+ *
+ * "not one emoji: nothing sent" was the same sentence for an empty prompt, two emoji, and a
+ * pasted paragraph, which made a stale-draft bug look like an emoji-parsing bug. Code points
+ * rather than the raw text, because the interesting failures are the invisible ones: a
+ * zero-width space or a stray variation selector looks like nothing on screen.
+ */
+export function emojiInputSummary(input: string): string {
+	if (input.length === 0) {
+		return "nothing typed";
+	}
+	const points = [...input]
+		.slice(0, 6)
+		.map((char) => `U+${(char.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0")}`);
+	const more = [...input].length > points.length ? " …" : "";
+	return `${[...input].length} character${[...input].length === 1 ? "" : "s"} (${points.join(" ")}${more})`;
+}

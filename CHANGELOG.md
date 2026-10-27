@@ -18,6 +18,16 @@ Notable changes, newest first. This file starts at 0.1.0 — earlier versions ar
 - **Taking a reaction back**: typing the emoji you already added now removes it, instead of
   adding a twin. The wire took `remove` all along; the key did not offer it.
 
+### Fixed
+
+- **Reacting could refuse the emoji you just typed** ("not one emoji: nothing sent"), with the
+  emoji plainly visible in the prompt. The prompt's draft was read from a ref that `setState`
+  only refreshed on the next render, so a keystroke handled in the same tick as Enter reached
+  the send path as an empty draft. The reducer now runs synchronously and the ref holds the
+  result, which fixes it for every prompt — and for the reply target, which had the same race.
+- A refusal now says **what** it refused — `not one emoji: 2 characters (U+1F44D U+1F44D)` —
+  because "nothing sent" was the same sentence for an empty prompt, two emoji and a paste.
+
 ### Changed
 
 - The status line only offers `e` and `d` while the pointer is on **your own** message, and

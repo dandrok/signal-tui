@@ -10,7 +10,7 @@ import {
 } from "../../app/state";
 import { deleteFor } from "../../app/usecases/delete";
 import { editFor } from "../../app/usecases/edit";
-import { reactionFor, targetedMessage } from "../../app/usecases/react";
+import { emojiInputSummary, reactionFor, targetedMessage } from "../../app/usecases/react";
 
 /**
  * The reducer plus the side effects it cannot perform itself: a submitted draft is sent
@@ -37,16 +37,27 @@ export function useRootState(session: Session | undefined): RootState {
 	const [version, setVersion] = useState(0);
 	const stateRef = useRef(state);
 
-	useEffect(() => {
-		stateRef.current = state;
-	}, [state]);
+	/**
+	 * Reduce now, and keep the ref exact.
+	 *
+	 * `setState` does not update `stateRef` until the next render, so two keystrokes in one
+	 * tick both read the *previous* state — which is how an emoji typed and confirmed quickly
+	 * reached the send path as an empty draft ("not one emoji: nothing sent", with the emoji
+	 * plainly visible in the prompt). Reducing here and storing the result makes the ref
+	 * exact at the moment of the dispatch, for whatever the next keystroke reads.
+	 */
+	const apply = useCallback((action: Action): void => {
+		const next = reduce(stateRef.current, action);
+		stateRef.current = next;
+		setState(next);
+	}, []);
 
 	const dispatch = useCallback(
 		(action: Action): void => {
 			const current = stateRef.current;
 			const conversation = selectedConversation(current);
 			const refused = (text: string): void => {
-				setState((inner) => reduce(inner, { type: "notice", notice: { kind: "info", text } }));
+				apply({ type: "notice", notice: { kind: "info", text } });
 			};
 			const failed =
 				(what: string) =>
@@ -85,7 +96,7 @@ export function useRootState(session: Session | undefined): RootState {
 						// The prompt closed either way; saying why is the difference between a
 						// refusal and a reaction that vanished.
 						if (request === null) {
-							refused("not one emoji: nothing sent");
+							refused(`not one emoji: ${emojiInputSummary(prompt.draft)}`);
 						} else {
 							void session
 								.react(conversation.id, request.target, request.emoji, request.isRemove)
@@ -124,9 +135,9 @@ export function useRootState(session: Session | undefined): RootState {
 				}
 			}
 
-			setState((inner) => reduce(inner, action));
+			apply(action);
 		},
-		[session],
+		[apply, session],
 	);
 
 	useEffect(() => {

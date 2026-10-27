@@ -220,3 +220,28 @@ describe("hiding from the keyboard", () => {
 		unmount();
 	});
 });
+
+describe("keystrokes that arrive together", () => {
+	test("an edit typed and saved without a pause still sends the new body", async () => {
+		// The same stale-ref race the reaction prompt had: `prompt-submitted` has to see the
+		// characters that arrived in the same tick, or it saves the body it started with.
+		const store = await seeded(true);
+		const { session, calls } = fakeSession();
+		const { stdin, unmount } = render(<Root store={store} session={session} />);
+		await tick();
+
+		await openPrompt(stdin, "e");
+		stdin.write("!!");
+		stdin.write("\r");
+		await tick();
+
+		expect(calls.edits).toEqual([
+			{
+				conversationId: CONVERSATION,
+				target: { sentAt: SENT_AT, authorId: SELF_AUTHOR_ID },
+				body: "dinner at 7?!!",
+			},
+		]);
+		unmount();
+	});
+});

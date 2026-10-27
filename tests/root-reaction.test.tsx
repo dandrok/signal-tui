@@ -151,4 +151,32 @@ describe("reacting from the keyboard", () => {
 		expect(reactions).toEqual([]);
 		unmount();
 	});
+
+	test("an emoji confirmed without a pause still reaches the session", async () => {
+		// Two keystrokes in one tick. The dispatch used to read the prompt from a ref that
+		// `setState` had not refreshed yet, so the send path saw an empty draft and refused
+		// with "not one emoji" while the emoji sat visibly in the prompt.
+		const store = await seededStore();
+		const { session, reactions } = fakeSession();
+		const { stdin, unmount } = render(<Root store={store} session={session} />);
+		await tick();
+
+		stdin.write("\t");
+		await tick();
+		stdin.write("x");
+		await tick();
+		stdin.write("👍");
+		stdin.write("\r");
+		await tick(300);
+
+		expect(reactions).toEqual([
+			{
+				conversationId: CONVERSATION,
+				target: { sentAt: 1_760_000_000_000, authorId: "uuid-alice" },
+				emoji: "👍",
+				isRemove: false,
+			},
+		]);
+		unmount();
+	});
 });
