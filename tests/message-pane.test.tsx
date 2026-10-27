@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Attachment, Conversation, Message } from "../src/domain/types";
 import { clockFor } from "../src/ui/clock";
-import { MessagePane } from "../src/ui/MessagePane";
+import { MessagePane } from "../src/ui/message-pane";
 import { frameOf as renderFrame } from "./helpers/frame";
 
 const conversation: Conversation = {

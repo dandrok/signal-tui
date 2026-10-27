@@ -217,27 +217,3 @@ export function findOverBudget(
 		}))
 		.filter((entry) => entry.lines > entry.limit);
 }
-
-/**
- * Budget entries that no longer describe the tree: a file that shrank (its entry is now
- * slack a future change could grow back into), or one that was deleted or renamed.
- *
- * This is what makes the ratchet bite in both directions. Without it a file at 220 lines
- * keeps a 324-line allowance and may grow back to where it started.
- */
-export function findStaleBudgets(
-	modules: readonly SourceModule[],
-	budget: Readonly<Record<string, number>>,
-): string[] {
-	const byPath = new Map(modules.map((module) => [module.path, module.lines]));
-	return Object.entries(budget).flatMap(([path, limit]) => {
-		if (path.startsWith("$")) {
-			return [];
-		}
-		const lines = byPath.get(path);
-		if (lines === undefined) {
-			return [`${path}: entry for a file that does not exist`];
-		}
-		return lines === limit ? [] : [`${path}: budget ${limit}, file is ${lines}`];
-	});
-}

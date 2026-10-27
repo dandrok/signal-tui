@@ -5,7 +5,7 @@ import { displayName } from "../../domain/format";
 import type { QuoteLookup } from "../../domain/rows";
 import type { Conversation, Message, MessageId, QuotedMessage } from "../../domain/types";
 import { MessageRow } from "./MessageRow";
-import { CURSOR_MARKER, visibleWindow } from "./window";
+import { visibleWindow } from "./window";
 
 /**
  * The thread pane: a window of history, newest at the bottom, with the quoted-author index

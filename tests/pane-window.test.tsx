@@ -3,7 +3,7 @@ import type { Clock } from "../src/domain/format";
 import { attachmentsForDisplay, bodyForDisplay, messageRowCount } from "../src/domain/rows";
 import type { Conversation, Message } from "../src/domain/types";
 import { ConversationList, listWindowStart } from "../src/ui/ConversationList";
-import { visibleWindow } from "../src/ui/MessagePane";
+import { visibleWindow } from "../src/ui/message-pane";
 import { frameOf } from "./helpers/frame";
 
 /** A fixed clock keeps row arithmetic independent of the host timezone. */

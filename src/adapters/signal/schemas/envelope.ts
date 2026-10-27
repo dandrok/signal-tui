@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { dataMessageSchema, editMessageSchema, groupInfoSchema } from "./payload";
+import { dataMessageSchema, editMessageSchema } from "./payload";
 
 /**
  * A message you sent, as it comes back on your other devices: `JsonSyncDataMessage`

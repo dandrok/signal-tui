@@ -1,12 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import {
 	findBarrelBypasses,
 	findCycles,
 	findOverBudget,
 	findSiblingUsecaseImports,
-	findStaleBudgets,
 	lineCount,
 	loadModules,
 	type SourceModule,
@@ -29,8 +27,6 @@ import {
  */
 
 const ROOT = resolve(import.meta.dir, "..");
-const BUDGET_PATH = join(import.meta.dir, "fixtures", "architecture-budget.json");
-const budget = JSON.parse(readFileSync(BUDGET_PATH, "utf8")) as Record<string, number>;
 const modules = loadModules(ROOT);
 
 /** A module graph from `path → imports`, for the violating shapes below. */
@@ -138,19 +134,12 @@ describe("the rules fire on a violating graph", () => {
 		expect(findOverBudget(big, {}).map((entry) => entry.path)).toEqual(["src/big.ts"]);
 	});
 
-	test("an entry that no longer matches its file is stale in both directions", () => {
-		const shrunk = [{ path: "src/big.ts", lines: 220, imports: [] as string[] }];
+	test("a file exactly at the limit is not over it", () => {
+		// The boundary is where an off-by-one hides, and it is the number every file here
+		// sits near after a split.
+		const edge = [{ path: "src/edge.ts", lines: 200, imports: [] as string[] }];
 
-		expect(findStaleBudgets(shrunk, { "src/big.ts": 324 })).toEqual([
-			"src/big.ts: budget 324, file is 220",
-		]);
-		expect(findStaleBudgets(shrunk, { "src/big.ts": 220 })).toEqual([]);
-	});
-
-	test("an entry for a deleted file is stale", () => {
-		expect(findStaleBudgets([], { "src/gone.ts": 300 })).toEqual([
-			"src/gone.ts: entry for a file that does not exist",
-		]);
+		expect(findOverBudget(edge, {})).toEqual([]);
 	});
 });
 
@@ -163,16 +152,13 @@ describe("this tree", () => {
 		expect(findCycles(modules)).toEqual([]);
 	});
 
-	test("has no file over its budget", () => {
+	test("has no file over 200 lines", () => {
+		// A hard cap, not a ratchet: the tree reached zero exceptions in step 4, so there is
+		// no budget file left to hold one. A file that grows past 200 has to be split, and
+		// the failure below names it with both numbers.
 		expect(
-			findOverBudget(modules, budget).map((e) => `${e.path}: ${e.lines} > ${e.limit}`),
+			findOverBudget(modules, {}).map((entry) => `${entry.path}: ${entry.lines} lines`),
 		).toEqual([]);
-	});
-
-	test("has a budget entry that matches every listed file exactly", () => {
-		// Exact, not "at most": an entry above the file's size is slack it could grow back
-		// into, which is the one thing a ratchet must not allow.
-		expect(findStaleBudgets(modules, budget)).toEqual([]);
 	});
 
 	test("enters a folder that publishes a barrel through the barrel", () => {

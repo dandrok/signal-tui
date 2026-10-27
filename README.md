@@ -278,17 +278,33 @@ with ink — but neither reaches for an adapter.
 
 ```
 src/
-  domain/     pure types and formatting helpers
-  ports/      MessageStore, SignalBackend interfaces
-  adapters/   memory/ (demo) · sqlite/ (cache) · signal/ (JSON-RPC)
-  app/        reducer + session (events → cache)
-  ui/         ink components
-  cli.tsx     composition root · link.ts / doctor.ts entry points
+  domain/        pure types, rows, formatting helpers
+  ports/         MessageStore, SignalBackend interfaces
+  adapters/
+    memory/      demo store       store · read · conversations · message-rules · seed
+    sqlite/      durable cache    store · read · conversations · message-rules · schema
+    signal/      JSON-RPC engine  map-envelope/ · schemas/ · json-rpc-client/ · commands
+  app/           state/ (one reducer per subject) · session/ · usecases/ (one folder per feature)
+  ui/            ink components · message-pane/ · hooks/
+  cli.tsx        composition root · link.ts / doctor.ts entry points
 ```
 
-Boundaries are enforced by `noRestrictedImports` in `biome.json`; CI fails if
-`domain` reaches for `ink` or `ui` imports an adapter. Schema changes are
-append-only migrations — `sqlite/migrations.ts` is the history.
+Both stores answer in the same five files, which is what makes them comparable — and
+`tests/store-parity.test.ts` runs one script through both, comparing state *and* return
+values after every step.
+
+Four rules, all of them tests rather than intentions:
+
+- **layering** — `noRestrictedImports` in `biome.json`: `domain` cannot reach for ink or an
+  adapter, `ui` cannot reach for an adapter, `app` cannot reach for either.
+- **no file over 200 lines** — `tests/architecture.test.ts` fails on any file that is longer,
+  and biome reports the same limit as an error while you type. There are no exceptions.
+- **no import cycles**, and no allowlist for one: the test asserts the set is empty.
+- **a folder is entered through its `index.ts`** — internals stay private, and one use-case
+  folder cannot import its sibling.
+
+Schema changes are append-only migrations: `sqlite/migrations.ts` is the history, and
+`sqlite/schema.ts` is the only code that runs it.
 
 ## License
 

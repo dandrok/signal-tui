@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Conversation, Message } from "../src/domain/types";
-import { MessagePane } from "../src/ui/MessagePane";
+import { MessagePane } from "../src/ui/message-pane";
 import { frameOf as renderFrame } from "./helpers/frame";
 
 const conversation: Conversation = {
