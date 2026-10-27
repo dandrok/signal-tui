@@ -34,10 +34,23 @@ describe("signal-cli adapter over a real child process", () => {
 		const kinds: BackendEvent["kind"][] = [];
 		const receipts: Array<{ timestamps: readonly number[]; state: string }> = [];
 		const reactions: Array<{ targetSentAt: number; emoji: string; isRemove: boolean }> = [];
+		const edits: Array<{
+			conversationId: string;
+			targetSentAt: number;
+			editor: string;
+			body: string;
+		}> = [];
+		const timers: Array<{ id: string; seconds: number }> = [];
 		backend.subscribe((event) => {
 			kinds.push(event.kind);
 			if (event.kind === "message") {
 				messages.push(event.message);
+			}
+			if (
+				event.kind === "conversation-updated" &&
+				event.conversation.expiresInSeconds !== undefined
+			) {
+				timers.push({ id: event.conversation.id, seconds: event.conversation.expiresInSeconds });
 			}
 			if (event.kind === "receipt") {
 				receipts.push({ timestamps: event.timestamps, state: event.state });
@@ -49,6 +62,14 @@ describe("signal-cli adapter over a real child process", () => {
 					isRemove: event.isRemove,
 				});
 			}
+			if (event.kind === "message-edited") {
+				edits.push({
+					conversationId: event.conversationId,
+					targetSentAt: event.targetSentAt,
+					editor: event.editor.id ?? "",
+					body: event.body,
+				});
+			}
 		});
 
 		try {
@@ -56,6 +77,9 @@ describe("signal-cli adapter over a real child process", () => {
 			await waitFor(() => messages.length > 0);
 
 			await waitFor(() => messages.length > 2);
+			// The correction and the receipt arrive after the third message, so waiting on
+			// the messages alone asserts the tail of the stream before it has been read.
+			await waitFor(() => edits.length > 0 && receipts.length > 0);
 
 			expect(messages[0]).toEqual({
 				id: "uuid-alice:1760000000000",
@@ -105,13 +129,28 @@ describe("signal-cli adapter over a real child process", () => {
 				"conversation-updated",
 				"message",
 				"reaction",
+				// the timer change reaches the conversation and nothing else
+				"conversation-updated",
+				// the sync edit, and nothing at all for the sticker before it
+				"message-edited",
 				"receipt",
 			]);
+			expect(timers).toEqual([{ id: "uuid-alice", seconds: 86_400 }]);
 			expect(receipts).toEqual([{ timestamps: [1_760_000_000_001], state: "read" }]);
 			// A reaction names an existing message and carries none of its own: the three
-			// messages above are still all that arrived.
+			// messages above are still all that arrived. A sticker is content-free and is
+			// dropped for the same reason; a correction synced from another device is an
+			// edit, so it never adds a fourth.
 			expect(reactions).toEqual([
 				{ targetSentAt: 1_760_000_000_000, emoji: "👍", isRemove: false },
+			]);
+			expect(edits).toEqual([
+				{
+					conversationId: "uuid-bob",
+					targetSentAt: 1_760_000_000_001,
+					editor: "self",
+					body: "sent from my phone, fixed",
+				},
 			]);
 			expect(messages).toHaveLength(3);
 

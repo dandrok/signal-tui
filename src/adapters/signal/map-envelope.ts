@@ -7,6 +7,7 @@ import type {
 	MessageId,
 } from "../../domain/types";
 import { SELF_AUTHOR_ID } from "../../domain/types";
+import { mapEditPayload } from "./map-edit";
 import type { MappedReaction } from "./map-reaction";
 import { mapReaction } from "./map-reaction";
 import { type MappedReceipt, mapReceipt } from "./map-receipt";
@@ -16,13 +17,17 @@ import {
 	groupTarget,
 	peerId,
 	peerName,
+	type Target,
 } from "./map-target";
 import type { DataMessage, EditMessage, Envelope, SentMessage } from "./schemas";
-import { dataMessageSchema } from "./schemas";
-import { contentOf, expiresAtOf, textOf } from "./text";
+import { type Content, contentOf, expiresAtOf } from "./text";
 
-/** Reactor identity for our own reactions, echoed to this device as a transcript. */
-const SELF_REACTOR: EditAuthor = { id: SELF_AUTHOR_ID, label: SELF_LABEL };
+/**
+ * Identity our own actions carry when the engine echoes them back as a transcript: a
+ * reaction we added, or an edit we made, on another device. `SELF_AUTHOR_ID` is the
+ * marker our own rows store, so an edit resolves to the message it corrects.
+ */
+const SELF_ACTOR: EditAuthor = { id: SELF_AUTHOR_ID, label: SELF_LABEL };
 
 /** Identity of a message that a `remoteDelete` refers to. */
 export interface DeletedMessage {
@@ -69,42 +74,81 @@ const EMPTY: MappedEnvelope = {
 	reaction: null,
 };
 
-/** Incoming message: the sender identifies the conversation. */
 /**
- * An edit carries a *copy* of the data message with the replacement text inside
- * it, so the conversation comes from that inner message's group info and falls
- * back to the envelope's sender. Anything without a body is ignored rather than
- * blanking the message: an edit to nothing is not a thing Signal produces.
+ * Whether a payload carries anything a thread should show.
+ *
+ * A sticker, a poll, a pin, a group-call update, a payment and a shared contact all
+ * arrive as `dataMessage` objects. Mapping them as messages writes a row with an empty
+ * body and no files: a blank line in the thread, a bumped conversation, an unread count
+ * and a notification with no words in it — and a ringing group call emits one every few
+ * seconds. They are events about something else, so no message is built for them.
+ *
+ * A view-once message is the one payload whose content is empty *on purpose*: the sender
+ * asked for it not to be kept, and the row with its notice is what records that it
+ * arrived.
  */
-function mapEdit(envelope: Envelope, edit: EditMessage): MappedEnvelope {
-	const parsed =
-		edit.dataMessage === null || edit.dataMessage === undefined
-			? null
-			: dataMessageSchema.safeParse(edit.dataMessage);
-	const data = parsed?.success === true ? parsed.data : undefined;
-	const target =
-		data?.groupInfo === undefined ? conversationTarget(envelope) : groupTarget(data.groupInfo);
-	// Only real text may replace a body. `bodyOf` would answer "[attachment]" for a
-	// data message that carries files and nothing else, which would replace the
-	// message's text with a placeholder.
-	const body = data === undefined ? "" : textOf(data);
+const carriesContent = (content: Content): boolean =>
+	content.body.length > 0 || content.attachments.length > 0 || content.isViewOnce === true;
 
-	if (target === null || body.length === 0) {
+/**
+ * An edit, wrapped as an event rather than a message. The rule that decides which
+ * conversation it lands in and whether it carries real text lives in `map-edit.ts`.
+ */
+function editEnvelope(
+	edit: EditMessage,
+	target: Target | null,
+	editor: EditAuthor,
+): MappedEnvelope {
+	const mapped = mapEditPayload(edit, target, editor);
+	if (mapped === null) {
 		return target === null ? EMPTY : { ...EMPTY, conversationKind: target.kind };
 	}
+	return {
+		...EMPTY,
+		conversationKind: mapped.conversationKind,
+		edited: {
+			conversationId: mapped.conversationId,
+			targetSentAt: mapped.targetSentAt,
+			editor: mapped.editor,
+			body: mapped.body,
+		},
+	};
+}
 
+/**
+ * A timer change is a conversation fact with no message of its own.
+ *
+ * Signal announces "the timer is now N seconds" as a data message whose whole payload is
+ * `isExpirationUpdate` plus `expiresInSeconds`. The number matters: it is what stamps our
+ * own outgoing messages, so a client that drops it keeps sending text under a timer that
+ * was switched on (or expires messages under one that was switched off). Nothing is
+ * inserted, so no row and no unread count: only the conversation learns the new value.
+ */
+function timerChange(target: Target, data: DataMessage): MappedEnvelope | null {
+	const seconds = data.isExpirationUpdate === true ? data.expiresInSeconds : undefined;
+	if (typeof seconds !== "number") {
+		return null;
+	}
 	return {
 		...EMPTY,
 		conversationKind: target.kind,
-		edited: {
-			conversationId: target.id,
-			targetSentAt: edit.targetSentTimestamp,
-			// The envelope sender is the editor: Signal refuses an edit from anyone
-			// else, so a mismatch means the cache should not apply it.
-			editor: { id: peerId(envelope), label: peerName(envelope) },
-			body,
+		conversation: {
+			id: target.id,
+			name: target.name,
+			unreadCount: 0,
+			lastActivityAt: data.timestamp,
+			expiresInSeconds: seconds,
 		},
 	};
+}
+
+/** An edit from someone else: the envelope's sender is the editor. */
+function mapEdit(envelope: Envelope, edit: EditMessage): MappedEnvelope {
+	const target = conversationTarget(envelope);
+	if (target === null) {
+		return EMPTY;
+	}
+	return editEnvelope(edit, target, { id: peerId(envelope), label: peerName(envelope) });
 }
 
 function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
@@ -138,6 +182,14 @@ function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
 		};
 	}
 
+	const content = contentOf(data);
+	if (!carriesContent(content)) {
+		// A timer change is the one content-free payload that still says something: it
+		// moves the conversation's timer, and dropping it leaves that number stale.
+		return timerChange(target, data) ?? EMPTY;
+	}
+	const expiresAt = expiresAtOf(data);
+
 	return {
 		...EMPTY,
 		message: {
@@ -148,8 +200,8 @@ function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
 			sentAt: data.timestamp,
 			isOutgoing: false,
 			isDeleted: false,
-			...(expiresAtOf(data) === undefined ? {} : { expiresAt: expiresAtOf(data) as number }),
-			...contentOf(data),
+			...(expiresAt === undefined ? {} : { expiresAt }),
+			...content,
 		},
 		conversation: {
 			id: target.id,
@@ -175,13 +227,20 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 		groupTarget(sent.groupInfo) ??
 		(destination === null ? null : { id: destination, name: "", kind: "direct" as const });
 
+	// Our own edit, made on another device: an edit to a group message arrives with no
+	// destination at all, so the group comes from the edit's own data message. Resolving
+	// it before the missing-destination check is what keeps those edits from vanishing.
+	if (sent.editMessage !== undefined) {
+		return editEnvelope(sent.editMessage, target, SELF_ACTOR);
+	}
+
 	if (target === null) {
 		return EMPTY;
 	}
 
 	// Our own reaction, made on another device.
 	if (sent.reaction !== undefined) {
-		const reaction = mapReaction(target, sent.reaction, SELF_REACTOR);
+		const reaction = mapReaction(target, sent.reaction, SELF_ACTOR);
 		return reaction === null ? EMPTY : { ...EMPTY, conversationKind: target.kind, reaction };
 	}
 
@@ -196,24 +255,38 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 		};
 	}
 
+	// A transcript with no timestamp cannot name a message: that timestamp is the row's
+	// identity, so building one writes an id ending in "undefined" and a NULL `sent_at`
+	// the cache refuses — an error notice for a payload that simply carried no message.
+	const sentAt = sent.timestamp;
+	if (typeof sentAt !== "number") {
+		return EMPTY;
+	}
+
+	const content = contentOf(sent);
+	if (!carriesContent(content)) {
+		return EMPTY;
+	}
+	const expiresAt = expiresAtOf({ timestamp: sentAt, expiresInSeconds: sent.expiresInSeconds });
+
 	return {
 		...EMPTY,
 		message: {
-			id: `${target.id}:${sent.timestamp}`,
+			id: `${target.id}:${sentAt}`,
 			conversationId: target.id,
 			author: SELF_LABEL,
 			authorId: SELF_AUTHOR_ID,
-			sentAt: sent.timestamp,
+			sentAt,
 			isOutgoing: true,
 			isDeleted: false,
-			...(expiresAtOf(sent) === undefined ? {} : { expiresAt: expiresAtOf(sent) as number }),
-			...contentOf(sent),
+			...(expiresAt === undefined ? {} : { expiresAt }),
+			...content,
 		},
 		conversation: {
 			id: target.id,
 			name: target.name,
 			unreadCount: 0,
-			lastActivityAt: sent.timestamp,
+			lastActivityAt: sentAt,
 			...(sent.expiresInSeconds === undefined || sent.expiresInSeconds === null
 				? {}
 				: { expiresInSeconds: sent.expiresInSeconds }),

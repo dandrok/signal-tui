@@ -92,6 +92,11 @@ export const dataMessageSchema = z.looseObject({
 	timestamp: z.number().int(),
 	message: z.string().nullish(),
 	expiresInSeconds: z.number().int().nullish(),
+	/**
+	 * A timer change travels as a data message with no content of its own: the number is
+	 * the whole payload, and it is how the conversation learns the timer it now has.
+	 */
+	isExpirationUpdate: z.boolean().optional(),
 	attachments: z.array(attachmentSchema).optional(),
 	quote: quoteSchema.optional(),
 	mentions: z.array(mentionSchema).optional(),
@@ -106,12 +111,18 @@ export const dataMessageSchema = z.looseObject({
 /**
  * A message you sent, as it comes back on your other devices: `JsonSyncDataMessage`
  * unwraps the data message, so its fields sit at the same level as `destination*`.
+ *
+ * The timestamp is optional here and nowhere else: when you correct a message on
+ * another device the transcript carries `editMessage` and no flattened data message,
+ * so the timestamp that identifies an ordinary sent message is absent.
  */
-export const sentMessageSchema = dataMessageSchema.extend({
+export const sentMessageSchema = dataMessageSchema.omit({ timestamp: true }).extend({
+	timestamp: z.number().int().optional(),
 	destination: z.string().nullish(),
 	destinationNumber: z.string().nullish(),
 	destinationUuid: z.string().nullish(),
-	editMessage: z.unknown().nullish(),
+	/** An edit made on another device: the replacement content, never a message of its own. */
+	editMessage: editMessageSchema.optional(),
 });
 
 export const syncMessageSchema = z.looseObject({

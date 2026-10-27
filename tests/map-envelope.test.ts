@@ -120,8 +120,14 @@ describe("mapEnvelope", () => {
 		expect(mapped.message?.body).toBe("[attachment]");
 	});
 
-	test("keeps an empty body for a message with neither text nor attachments", () => {
-		expect(mapEnvelope(withData({ timestamp: 1 })).message?.body).toBe("");
+	test("an envelope with neither text nor files is not a message", () => {
+		// Stickers, polls, pins and group-call updates arrive as data messages with no
+		// content of their own. Writing one leaves a blank row, a bumped conversation and
+		// a notification with no words in it, so the mapper builds no message at all.
+		const mapped = mapEnvelope(withData({ timestamp: 1, sticker: { packId: "x", stickerId: 1 } }));
+
+		expect(mapped.message).toBeNull();
+		expect(mapped.conversation).toBeNull();
 	});
 
 	test("stamps a disappearing message with the moment it is due", () => {
