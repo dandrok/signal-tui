@@ -6,7 +6,9 @@ import { displayLine } from "../domain/display";
 import { COMPOSER_HEIGHT, Composer, REPLYING_COMPOSER_HEIGHT } from "./Composer";
 import { ConversationList } from "./ConversationList";
 import { clockFor, localTimeZone } from "./clock";
+import { hintsFor } from "./hints";
 import { useTerminalSize } from "./hooks/useTerminalSize";
+import { keyAction } from "./keymap";
 import { MessagePane } from "./MessagePane";
 import { SearchPane } from "./SearchPane";
 
@@ -15,19 +17,10 @@ export interface AppProps {
 	readonly dispatch: (action: Action) => void;
 }
 
-/** Rows a page of `j`/`k` covers while the message pane owns the keyboard. */
-const SCROLL_STEP = 10;
-
-const hintsFor = (isComposing: boolean, focus: AppState["focus"], isReplying: boolean): string => {
-	if (isComposing) {
-		return isReplying ? "⏎ send · esc cancel reply · tab panes" : "⏎ send · esc back · tab panes";
-	}
-	const panes = "tab panes · i compose · / search · q quit";
-	return focus === "messages"
-		? `j/k select · r reply · ⇞/⇟ page · ${panes}`
-		: `j/k move · ${panes}`;
-};
-
+/**
+ * The layout, and nothing else: sizes, panes, the composer and the status line. What a key
+ * does lives in `keymap.ts`, what the line says in `hints.ts`.
+ */
 export function App({ state, dispatch }: AppProps) {
 	const { exit } = useApp();
 	const { columns, rows } = useTerminalSize();
@@ -49,115 +42,15 @@ export function App({ state, dispatch }: AppProps) {
 	const replyTo = state.replyToId === null ? undefined : messagesById.get(state.replyToId);
 
 	useInput((input, key) => {
-		if (key.ctrl && input === "c") {
+		const result = keyAction(state, input, key);
+		if (result === null) {
+			return;
+		}
+		if (result.kind === "exit") {
 			exit();
 			return;
 		}
-
-		if (isSearching) {
-			if (key.escape) {
-				dispatch({ type: "search-closed" });
-				return;
-			}
-			if (key.return) {
-				dispatch({ type: "search-selected" });
-				return;
-			}
-			if (key.upArrow) {
-				dispatch({ type: "search-moved", delta: -1 });
-				return;
-			}
-			if (key.downArrow) {
-				dispatch({ type: "search-moved", delta: 1 });
-				return;
-			}
-			if (key.backspace || key.delete) {
-				dispatch({ type: "search-changed", query: (state.search?.query ?? "").slice(0, -1) });
-				return;
-			}
-			if (input.length > 0) {
-				dispatch({ type: "search-changed", query: (state.search?.query ?? "") + input });
-			}
-			return;
-		}
-
-		// Tab walks the panes whether or not one of them is "active": the border
-		// colour is the only thing that says where the keyboard is pointing. It is
-		// handled before the composer so Tab moves on instead of being typed into
-		// the draft.
-		if (key.tab) {
-			dispatch({ type: key.shift ? "focus-prev" : "focus-next" });
-			return;
-		}
-
-		if (isComposing) {
-			if (key.return) {
-				dispatch({ type: "draft-submitted" });
-				return;
-			}
-			if (key.escape) {
-				// A reply is a mode: leaving it drops the target rather than leaving the
-				// composer claiming to answer something the next draft is not.
-				dispatch(
-					state.replyToId === null
-						? { type: "focus", focus: "messages" }
-						: { type: "reply-cancelled" },
-				);
-				return;
-			}
-			if (key.backspace || key.delete) {
-				dispatch({ type: "draft-changed", value: state.draft.slice(0, -1) });
-				return;
-			}
-			dispatch({ type: "draft-changed", value: state.draft + input });
-			return;
-		}
-
-		if (input === "q") {
-			exit();
-			return;
-		}
-		if (input === "/") {
-			dispatch({ type: "search-opened" });
-			return;
-		}
-		if (input === "i" || key.return) {
-			dispatch({ type: "focus", focus: "composer" });
-			return;
-		}
-
-		const inMessages = state.focus === "messages";
-		if (inMessages && input === "r") {
-			dispatch({ type: "reply-started" });
-			return;
-		}
-		if (inMessages && key.pageUp) {
-			dispatch({ type: "scroll-moved", delta: SCROLL_STEP });
-			return;
-		}
-		if (inMessages && key.pageDown) {
-			dispatch({ type: "scroll-moved", delta: -SCROLL_STEP });
-			return;
-		}
-		if (input === "j") {
-			dispatch(
-				inMessages ? { type: "scroll-moved", delta: -1 } : { type: "move-selection", delta: 1 },
-			);
-			return;
-		}
-		if (input === "k") {
-			if (!inMessages) {
-				dispatch({ type: "move-selection", delta: -1 });
-				return;
-			}
-			// At the top of what is loaded there is nothing left to scroll to: ask for the
-			// page above it instead, so history past the first page is reachable at all.
-			if (state.scroll >= messages.length - 1) {
-				dispatch({ type: "older-requested" });
-				return;
-			}
-			dispatch({ type: "scroll-moved", delta: 1 });
-		}
+		dispatch(result.action);
 	});
 
 	// The domain never reads the host timezone nor holds a formatter cache: the UI
@@ -205,7 +98,7 @@ export function App({ state, dispatch }: AppProps) {
 			)}
 
 			<Box paddingX={1}>
-				<Text dimColor>{hintsFor(isComposing, state.focus, replyTo !== undefined)}</Text>
+				<Text dimColor>{hintsFor(state, replyTo !== undefined)}</Text>
 				{state.notice ? <Text color="green"> · {displayLine(state.notice.text)}</Text> : null}
 			</Box>
 		</Box>
