@@ -1,4 +1,4 @@
-import type { ConversationId } from "../../domain/types";
+import type { ConversationId } from "../../../domain/types";
 import type {
 	BackendEvent,
 	ReactionTarget,
@@ -6,47 +6,22 @@ import type {
 	ReplyTarget,
 	SendResult,
 	SignalBackend,
-} from "../../ports/backend";
-import { reactionParams, receiptParams, sendParams } from "./commands";
-import { mapEnvelope } from "./map-envelope";
-import { receiveEnvelopeSchema } from "./schemas";
+} from "../../../ports/backend";
+import { reactionParams, receiptParams, sendParams } from "../commands";
+import { mapEnvelope } from "../map-envelope";
+import { receiveEnvelopeSchema } from "../schemas";
+import { ProtocolErrorLog } from "./error-log";
+import { eventsFrom, groupConversationOf, unwrapNotification } from "./events";
+import { DEFAULT_NOTIFICATION_METHOD, type RpcCaller, type SignalCliBackendOptions } from "./types";
 
 /**
- * The slice of {@link JsonRpcClient} this adapter needs. Narrow on purpose: tests
- * pass a fake, and the real client satisfies it structurally.
+ * `signal-cli` over JSON-RPC: the app's `SignalBackend`, and nothing else.
+ *
+ * This class owns the lifecycle (subscribe, unsubscribe, close), the wire calls, and the
+ * group bookkeeping that decides how a send is addressed. What an envelope *means* is
+ * `map-envelope`'s job, what the app *hears* is `events.ts`'s, and the payload shapes are
+ * `commands.ts`'s — so this file reads as a list of operations rather than a protocol.
  */
-export interface RpcCaller {
-	request<T = unknown>(method: string, params?: unknown, timeoutMs?: number): Promise<T>;
-	onNotification(handler: (method: string, params: unknown) => void): () => void;
-	close(reason?: string): void;
-}
-
-export interface SignalCliBackendOptions {
-	/** Account to act as, e.g. "+48123456789". */
-	readonly account: string;
-	/** JSON-RPC notification method carrying envelopes. signal-cli uses "receive". */
-	readonly notificationMethod?: string;
-}
-
-const DEFAULT_NOTIFICATION_METHOD = "receive";
-const MAX_PROTOCOL_ERRORS = 20;
-
-/**
- * signal-cli wraps notifications differently per receive mode: automatic mode
- * sends `params.envelope`, manual mode (the default here) sends
- * `params.result.envelope` inside a subscription envelope. Both must parse.
- */
-export function unwrapNotification(params: unknown): unknown {
-	if (typeof params !== "object" || params === null) {
-		return params;
-	}
-	const result = (params as { result?: unknown }).result;
-	if (typeof result === "object" && result !== null && "envelope" in result) {
-		return result;
-	}
-	return params;
-}
-
 export class SignalCliBackend implements SignalBackend {
 	readonly #client: RpcCaller;
 	readonly #account: string;
@@ -57,7 +32,7 @@ export class SignalCliBackend implements SignalBackend {
 	#subscription: number | null = null;
 	/** Group conversations seen so far, so replies use `groupId` instead of `recipient`. */
 	#groupIds = new Set<ConversationId>();
-	#protocolErrors: string[] = [];
+	#errors = new ProtocolErrorLog();
 
 	constructor(client: RpcCaller, options: SignalCliBackendOptions) {
 		this.#client = client;
@@ -67,7 +42,7 @@ export class SignalCliBackend implements SignalBackend {
 
 	/** Messages that failed validation or could not be mapped. Bounded to the last 20. */
 	get protocolErrors(): readonly string[] {
-		return this.#protocolErrors;
+		return this.#errors.entries;
 	}
 
 	async start(): Promise<void> {
@@ -82,8 +57,8 @@ export class SignalCliBackend implements SignalBackend {
 		try {
 			const subscription = await this.#client.request<unknown>("subscribeReceive");
 			if (typeof subscription !== "number") {
-				// A peer that answers without an id would leave start() "successful"
-				// but unable to retry or unsubscribe; fail inside the cleanup path.
+				// A peer that answers without an id would leave start() "successful" but unable
+				// to retry or unsubscribe; fail inside the cleanup path.
 				throw new Error(
 					`subscribeReceive returned ${typeof subscription}, expected a subscription id`,
 				);
@@ -175,70 +150,18 @@ export class SignalCliBackend implements SignalBackend {
 
 		const parsed = receiveEnvelopeSchema.safeParse(unwrapNotification(params));
 		if (!parsed.success) {
-			this.#recordProtocolError(
-				`invalid envelope: ${parsed.error.issues[0]?.message ?? "unknown"}`,
-			);
+			this.#errors.record(`invalid envelope: ${parsed.error.issues[0]?.message ?? "unknown"}`);
 			return;
 		}
 
 		const mapped = mapEnvelope(parsed.data.envelope);
-		// Every event that names a conversation counts, reactions included: a reaction can
-		// be the first thing this session sees from a group, and `#groupIds` is what decides
-		// whether a later send addresses the group by id or by a recipient that is not one.
-		const conversationId =
-			mapped.conversation?.id ??
-			mapped.deleted?.conversationId ??
-			mapped.edited?.conversationId ??
-			mapped.reaction?.conversationId;
-		if (mapped.conversationKind === "group" && conversationId !== undefined) {
-			this.#groupIds.add(conversationId);
+		const groupId = groupConversationOf(mapped);
+		if (groupId !== null) {
+			this.#groupIds.add(groupId);
 		}
 
-		if (mapped.conversation !== null) {
-			this.#emit({ kind: "conversation-updated", conversation: mapped.conversation });
-		}
-		if (mapped.message !== null) {
-			this.#emit({ kind: "message", message: mapped.message });
-		}
-		if (mapped.edited !== null) {
-			this.#emit({
-				kind: "message-edited",
-				conversationId: mapped.edited.conversationId,
-				targetSentAt: mapped.edited.targetSentAt,
-				editor: mapped.edited.editor,
-				body: mapped.edited.body,
-			});
-		}
-		if (mapped.deleted !== null) {
-			this.#emit({
-				kind: "message-deleted",
-				conversationId: mapped.deleted.conversationId,
-				messageId: mapped.deleted.messageId,
-			});
-		}
-		if (mapped.reaction !== null) {
-			this.#emit({
-				kind: "reaction",
-				conversationId: mapped.reaction.conversationId,
-				targetSentAt: mapped.reaction.targetSentAt,
-				reactor: mapped.reaction.reactor,
-				emoji: mapped.reaction.emoji,
-				isRemove: mapped.reaction.isRemove,
-			});
-		}
-		if (mapped.receipt !== null) {
-			this.#emit({
-				kind: "receipt",
-				timestamps: mapped.receipt.timestamps,
-				state: mapped.receipt.state,
-			});
-		}
-	}
-
-	#recordProtocolError(message: string): void {
-		this.#protocolErrors.push(message);
-		if (this.#protocolErrors.length > MAX_PROTOCOL_ERRORS) {
-			this.#protocolErrors.shift();
+		for (const event of eventsFrom(mapped)) {
+			this.#emit(event);
 		}
 	}
 
@@ -248,3 +171,11 @@ export class SignalCliBackend implements SignalBackend {
 		}
 	}
 }
+
+export { ProtocolErrorLog } from "./error-log";
+export { eventsFrom, groupConversationOf, unwrapNotification } from "./events";
+export {
+	DEFAULT_NOTIFICATION_METHOD,
+	type RpcCaller,
+	type SignalCliBackendOptions,
+} from "./types";
