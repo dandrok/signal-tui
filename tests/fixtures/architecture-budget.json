@@ -3,9 +3,7 @@
 	"src/adapters/signal/map-envelope.ts": 323,
 	"src/cli/doctor.ts": 299,
 	"src/adapters/signal/json-rpc-client.ts": 294,
-	"src/adapters/memory/store.ts": 282,
 	"src/adapters/signal/signal-cli-backend.ts": 250,
-	"src/adapters/sqlite/store.ts": 252,
 	"src/ui/MessagePane.tsx": 228,
 	"src/adapters/signal/schemas.ts": 201
 }

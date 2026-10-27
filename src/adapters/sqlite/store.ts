@@ -9,11 +9,12 @@ import type {
 	ReceiptState,
 } from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
-import { deleteAttachments, loadAttachments } from "./attachments";
+import { deleteAttachments } from "./attachments";
+import { addUnread, clearUnread, readExpiresInSeconds, upsertConversation } from "./conversations";
+import { hydrateMessages } from "./hydrate";
 import { applyEditRow, applyReceiptRows, purgeExpiredRows } from "./message-rules";
-import { migrations } from "./migrations";
 import { restrictCachePermissions } from "./private-cache";
-import { applyReactionRow, deleteReactions, loadReactions } from "./reactions";
+import { applyReactionRow, deleteReactions } from "./reactions";
 import {
 	readAllMessages,
 	readConversations,
@@ -23,6 +24,7 @@ import {
 } from "./read-messages";
 import { toConversation, toMessage } from "./rows";
 import { saveMessageRow } from "./save-message";
+import { migrate, readSchemaVersion } from "./schema";
 
 const DEFAULT_MESSAGE_LIMIT = 50;
 const DEFAULT_SEARCH_LIMIT = 20;
@@ -58,7 +60,7 @@ export class SqliteMessageStore implements MessageStore {
 				this.#db.exec("PRAGMA journal_mode = WAL;");
 				restrictCachePermissions(options.path);
 			}
-			this.#migrate();
+			migrate(this.#db);
 		} catch (error) {
 			// Construction failed, so the caller never gets an instance to close.
 			this.#db.close();
@@ -68,9 +70,7 @@ export class SqliteMessageStore implements MessageStore {
 
 	/** Applied schema version, useful for `doctor` output and tests. */
 	get schemaVersion(): number {
-		return (
-			this.#db.query<{ user_version: number }, []>("PRAGMA user_version").get()?.user_version ?? 0
-		);
+		return readSchemaVersion(this.#db);
 	}
 
 	async listConversations(): Promise<readonly Conversation[]> {
@@ -84,7 +84,7 @@ export class SqliteMessageStore implements MessageStore {
 		if (limit <= 0) {
 			return [];
 		}
-		return this.#hydrate(readMessages(this.#db, conversationId, limit).map(toMessage));
+		return hydrateMessages(this.#db, readMessages(this.#db, conversationId, limit).map(toMessage));
 	}
 
 	async listMessagesBefore(
@@ -95,69 +95,34 @@ export class SqliteMessageStore implements MessageStore {
 		if (limit <= 0) {
 			return [];
 		}
-		return this.#hydrate(
+		return hydrateMessages(
+			this.#db,
 			readMessagesBefore(this.#db, conversationId, beforeSentAt, limit).map(toMessage),
 		);
 	}
 
 	async listAllMessages(conversationId: ConversationId): Promise<readonly Message[]> {
-		return this.#hydrate(readAllMessages(this.#db, conversationId).map(toMessage));
+		return hydrateMessages(this.#db, readAllMessages(this.#db, conversationId).map(toMessage));
 	}
 
 	async search(query: string, limit = this.#searchLimit): Promise<readonly Message[]> {
-		return this.#hydrate(searchMessages(this.#db, query, limit).map(toMessage));
+		return hydrateMessages(this.#db, searchMessages(this.#db, query, limit).map(toMessage));
 	}
 
 	async upsertConversation(conversation: Conversation): Promise<void> {
-		this.#db
-			.query<null, [string, string, number, number, number | null]>(
-				// A payload that carries no timer says nothing about the timer, so the stored
-				// one survives: COALESCE, not a default of zero.
-				`INSERT INTO conversations (id, name, unread_count, last_activity_at, expires_in_seconds)
-				 VALUES (?1, ?2, ?3, ?4, ?5)
-				 ON CONFLICT(id) DO UPDATE SET
-					name = CASE WHEN TRIM(excluded.name) = '' THEN conversations.name ELSE excluded.name END,
-					last_activity_at = MAX(conversations.last_activity_at, excluded.last_activity_at),
-					expires_in_seconds = COALESCE(excluded.expires_in_seconds, conversations.expires_in_seconds)`,
-			)
-			.run(
-				conversation.id,
-				conversation.name,
-				conversation.unreadCount,
-				conversation.lastActivityAt,
-				conversation.expiresInSeconds ?? null,
-			);
+		upsertConversation(this.#db, conversation);
 	}
 
 	async expiresInSeconds(conversationId: ConversationId): Promise<number | undefined> {
-		const row = this.#db
-			.query<{ expires_in_seconds: number | null }, [string]>(
-				"SELECT expires_in_seconds FROM conversations WHERE id = ?1",
-			)
-			.get(conversationId);
-		return row?.expires_in_seconds ?? undefined;
+		return readExpiresInSeconds(this.#db, conversationId);
 	}
 
 	async incrementUnread(conversationId: ConversationId, by: number): Promise<void> {
-		this.#db
-			.query<null, [number, string]>(
-				"UPDATE conversations SET unread_count = unread_count + ?1 WHERE id = ?2",
-			)
-			.run(by, conversationId);
+		addUnread(this.#db, conversationId, by);
 	}
 
 	async markConversationRead(conversationId: ConversationId): Promise<boolean> {
-		// The guard makes the result meaningful: an already-read conversation reports no
-		// change, which is what stops the UI feedback loop. RETURNING states that
-		// exactly, without leaning on the driver's change counter.
-		const updated = this.#db
-			.query<{ id: string }, [string]>(
-				`UPDATE conversations SET unread_count = 0
-				 WHERE id = ?1 AND unread_count > 0
-				 RETURNING id`,
-			)
-			.all(conversationId);
-		return updated.length > 0;
+		return clearUnread(this.#db, conversationId);
 	}
 
 	async saveMessage(message: Message): Promise<{ readonly inserted: boolean }> {
@@ -214,39 +179,5 @@ export class SqliteMessageStore implements MessageStore {
 
 	close(): void {
 		this.#db.close();
-	}
-
-	#hydrate(messages: readonly Message[]): readonly Message[] {
-		if (messages.length === 0) {
-			return messages;
-		}
-		const ids = messages.map((message) => message.id);
-		const files = loadAttachments(this.#db, ids);
-		const reactions = loadReactions(this.#db, ids);
-		return messages.map((message) => {
-			const own = reactions.get(message.id);
-			return {
-				...message,
-				// Files are always an array on the way out, even when empty: a caller reading
-				// a message should not have to distinguish "no files" from "field absent".
-				attachments: files.get(message.id) ?? [],
-				// Reactions are absent when nobody reacted: unlike a file list, they accumulate
-				// after the message arrives, and an empty array on every row would be noise.
-				...(own === undefined ? {} : { reactions: own }),
-			};
-		});
-	}
-
-	#migrate(): void {
-		const current = this.schemaVersion;
-		for (const migration of migrations) {
-			if (migration.version <= current) {
-				continue;
-			}
-			this.#db.transaction(() => {
-				this.#db.exec(migration.sql);
-				this.#db.exec(`PRAGMA user_version = ${migration.version}`);
-			})();
-		}
 	}
 }
