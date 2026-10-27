@@ -1,6 +1,6 @@
 import { Box, Text } from "ink";
 import type { Clock } from "../domain/format";
-import { draftTail, quoteBlockFor } from "../domain/layout";
+import { draftTail, quoteBlockFor } from "../domain/rows";
 import type { Message } from "../domain/types";
 
 export interface ComposerProps {
