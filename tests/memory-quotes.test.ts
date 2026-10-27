@@ -68,8 +68,9 @@ describe("InMemoryStore quotes", () => {
 			message({ id: "c-quotes:400", sentAt: 400, body: "the original", author: "Marta" }),
 		);
 
-		const [first] = await store.listMessages("c-quotes");
-		expect(first?.quote).toEqual({ sentAt: 400, authorId: null });
+		// Looked up by id rather than by position: this read is in send order, so the oldest
+		// row is the target, not the reply. The marker is a fact about one message.
+		expect((await byId(store, "c-quotes:1000"))?.quote).toEqual({ sentAt: 400, authorId: null });
 	});
 
 	test("a deleted message keeps no quote of its own body but keeps the marker", async () => {

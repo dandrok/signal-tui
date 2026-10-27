@@ -1,83 +1,31 @@
-import type { RpcStream } from "./rpc-stream";
-
-export class RpcError extends Error {
-	readonly code: number;
-	readonly data: unknown;
-
-	constructor(code: number, message: string, data: unknown = null) {
-		super(message);
-		this.name = "RpcError";
-		this.code = code;
-		this.data = data;
-	}
-}
-
-export class RpcTimeoutError extends Error {
-	constructor(method: string, timeoutMs: number) {
-		super(`JSON-RPC request "${method}" timed out after ${timeoutMs}ms`);
-		this.name = "RpcTimeoutError";
-	}
-}
-
-export class RpcClosedError extends Error {
-	constructor(reason = "stream closed") {
-		super(`JSON-RPC channel closed: ${reason}`);
-		this.name = "RpcClosedError";
-	}
-}
-
-export type NotificationHandler = (method: string, params: unknown) => void;
-
-export interface JsonRpcClientOptions {
-	readonly defaultTimeoutMs?: number;
-	/** Called for unparseable, oversized or unrecognised inbound lines instead of throwing. */
-	readonly onProtocolError?: (error: Error, line: string) => void;
-	/** Inbound line limit; a peer that never sends a newline cannot grow the buffer forever. */
-	readonly maxLineBytes?: number;
-}
-
-interface PendingRequest {
-	readonly resolve: (value: unknown) => void;
-	readonly reject: (error: Error) => void;
-	timer: ReturnType<typeof setTimeout> | null;
-}
-
-interface WireError {
-	readonly code: number;
-	readonly message: string;
-	readonly data?: unknown;
-}
-
-interface WireMessage {
-	readonly jsonrpc?: string;
-	readonly id?: number | string | null;
-	readonly result?: unknown;
-	readonly error?: WireError;
-	readonly method?: string;
-	readonly params?: unknown;
-}
-
-const DEFAULT_TIMEOUT_MS = 30_000;
-const DEFAULT_MAX_LINE_BYTES = 8 * 1024 * 1024;
+import type { RpcStream } from "../rpc-stream";
+import { RpcClosedError, RpcError, RpcTimeoutError } from "./errors";
+import { LineFramer } from "./framing";
+import {
+	DEFAULT_MAX_LINE_BYTES,
+	DEFAULT_TIMEOUT_MS,
+	type JsonRpcClientOptions,
+	type NotificationHandler,
+	type PendingRequest,
+	type WireMessage,
+} from "./wire";
 
 /**
- * Minimal JSON-RPC 2.0 client over a line-delimited stream: request/response
- * correlation by id, per-request timeouts, notification dispatch, and no
- * dependency on a child process.
+ * Minimal JSON-RPC 2.0 client over a line-delimited stream: request/response correlation by id,
+ * per-request timeouts, notification dispatch, and no dependency on a child process.
  *
- * One malformed or hostile line must never stop the read loop, so every inbound
- * line is handled inside a try/catch and reported through `onProtocolError`.
+ * One malformed or hostile line must never stop the read loop, so every inbound line is handled
+ * inside a try/catch and reported through `onProtocolError`. The line splitting itself — the
+ * buffer and its byte cap — is `LineFramer`'s job, so this class only speaks protocol.
  */
 export class JsonRpcClient {
 	readonly #stream: RpcStream;
 	readonly #defaultTimeoutMs: number;
 	readonly #onProtocolError: (error: Error, line: string) => void;
-	readonly #maxLineBytes: number;
+	readonly #framer: LineFramer;
 
 	#pending = new Map<number, PendingRequest>();
 	#nextId = 1;
-	#buffer = "";
-	#discarding = false;
 	#closed = false;
 	#notificationHandler: NotificationHandler | null = null;
 
@@ -85,9 +33,13 @@ export class JsonRpcClient {
 		this.#stream = stream;
 		this.#defaultTimeoutMs = options.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
 		this.#onProtocolError = options.onProtocolError ?? (() => {});
-		this.#maxLineBytes = options.maxLineBytes ?? DEFAULT_MAX_LINE_BYTES;
+		this.#framer = new LineFramer({
+			maxLineBytes: options.maxLineBytes ?? DEFAULT_MAX_LINE_BYTES,
+			onLine: (line) => this.#dispatchLine(line),
+			onError: (error, context) => this.#reportProtocolError(error, context),
+		});
 
-		stream.onData((chunk) => this.#ingest(chunk));
+		stream.onData((chunk) => this.#framer.push(chunk));
 		stream.onClose((reason) => this.#failAll(new RpcClosedError(reason)));
 	}
 
@@ -146,64 +98,9 @@ export class JsonRpcClient {
 		this.#stream.close(reason);
 	}
 
-	#ingest(chunk: string): void {
-		this.#buffer += chunk;
-
-		// After dropping an oversized line we must ignore everything up to the next
-		// newline; otherwise the tail of that line would be parsed as a fresh line.
-		if (this.#discarding) {
-			const delimiter = this.#buffer.indexOf("\n");
-			if (delimiter < 0) {
-				this.#buffer = "";
-				return;
-			}
-			this.#buffer = this.#buffer.slice(delimiter + 1);
-			this.#discarding = false;
-		}
-
-		let newlineIndex = this.#buffer.indexOf("\n");
-		while (newlineIndex >= 0) {
-			// Measure the raw line: the cap applies to what the peer sent, not to
-			// whatever survives trimming.
-			const rawLine = this.#buffer.slice(0, newlineIndex);
-			this.#buffer = this.#buffer.slice(newlineIndex + 1);
-
-			const rawBytes = Buffer.byteLength(rawLine, "utf8");
-			if (rawBytes > this.#maxLineBytes) {
-				this.#reportProtocolError(
-					new Error(
-						`inbound line exceeded ${this.#maxLineBytes} bytes (${rawBytes}); line ignored`,
-					),
-					rawLine.slice(0, 200),
-				);
-			} else {
-				const line = rawLine.trim();
-				if (line.length > 0) {
-					this.#dispatchLine(line);
-				}
-			}
-
-			newlineIndex = this.#buffer.indexOf("\n");
-		}
-
-		// The limit is in UTF-8 bytes: CJK text is 3 bytes per UTF-16 code unit, so
-		// counting `length` would admit roughly 3x the configured budget.
-		const bufferedBytes = Buffer.byteLength(this.#buffer, "utf8");
-		if (bufferedBytes > this.#maxLineBytes) {
-			this.#buffer = "";
-			this.#discarding = true;
-			this.#reportProtocolError(
-				new Error(
-					`inbound line exceeded ${this.#maxLineBytes} bytes (${bufferedBytes} buffered); discarding until newline`,
-				),
-				"",
-			);
-		}
-	}
-
 	/**
-	 * A reporting hook is caller-supplied code. If it throws, that must not abort
-	 * `#ingest` and strand the remaining lines in the same chunk.
+	 * A reporting hook is caller-supplied code. If it throws, that must not abort line processing
+	 * and strand the remaining lines in the same chunk.
 	 */
 	#reportProtocolError(error: Error, line: string): void {
 		try {
@@ -214,7 +111,7 @@ export class JsonRpcClient {
 	}
 
 	#dispatchLine(line: string): void {
-		// The caller has already enforced the byte cap on this line.
+		// The framer has already enforced the byte cap on this line.
 		try {
 			this.#handleLine(line);
 		} catch (error) {

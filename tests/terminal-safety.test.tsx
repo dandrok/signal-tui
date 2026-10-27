@@ -3,7 +3,7 @@ import { render, Text } from "ink";
 import type { ReactElement } from "react";
 import { attachmentLine, describeAuthor, describeBody, displayName } from "../src/domain/format";
 import type { Conversation, Message } from "../src/domain/types";
-import { MessagePane } from "../src/ui/MessagePane";
+import { MessagePane } from "../src/ui/message-pane";
 
 /**
  * Everything ink writes to the terminal, as one string. `ink-testing-library`

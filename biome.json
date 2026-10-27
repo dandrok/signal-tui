@@ -19,9 +19,9 @@
 			"preset": "recommended",
 			"style": {
 				"noExcessiveLinesPerFile": {
-					"level": "warn",
+					"level": "error",
 					"options": {
-						"maxLines": 300
+						"maxLines": 200
 					}
 				}
 			}

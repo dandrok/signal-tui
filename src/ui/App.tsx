@@ -9,7 +9,7 @@ import { clockFor, localTimeZone } from "./clock";
 import { hintsFor } from "./hints";
 import { useTerminalSize } from "./hooks/useTerminalSize";
 import { keyAction } from "./keymap";
-import { MessagePane } from "./MessagePane";
+import { MessagePane } from "./message-pane";
 import { ReactionPrompt } from "./ReactionPrompt";
 import { SearchPane } from "./SearchPane";
 
