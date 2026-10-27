@@ -4,9 +4,9 @@ A terminal Signal client. Ink + Bun, local-first: messages live in SQLite on you
 machine, and the TUI never touches the network itself — it drives
 [`signal-cli`](https://github.com/AsamK/signal-cli) over JSON-RPC on stdio.
 
-**Status: `0.1.0` — usable for text conversations.** Read, send, groups, edits, deletes,
-reactions, unread counts and read receipts work against a real account. What changed, and
-when, is in [CHANGELOG.md](./CHANGELOG.md).
+**Status: `0.2.0` — usable for text conversations.** Read, send, groups, replies, reactions,
+edits, delete-for-everyone, local hiding, unread counts and read receipts work against a real
+account. What changed, and when, is in [CHANGELOG.md](./CHANGELOG.md).
 
 > **Unofficial.** Not affiliated with Signal Messenger LLC. It is a terminal front
 > end for [`signal-cli`](https://github.com/AsamK/signal-cli), which does the
@@ -233,6 +233,8 @@ the last second of typing.
 - quoting **attachments** in a reply, and replying to a view-once message — a reply whose
   target is outside the loaded window reads `not loaded`, because the quoted text is not
   stored
+- **forwarding a message to another chat**: Signal has no `forward` command and no "forwarded"
+  field, so it would be a re-send with a conversation picker — designed, not built
 - opening an attachment from the TUI (`xdg-open`), typing indicators
 - the **full** emoji set: the picker carries a curated table of ~50 names rather than Unicode's
   3600, so a rare emoji has to be pasted rather than named. Adding one is a line in

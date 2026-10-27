@@ -3,7 +3,10 @@
 Notable changes, newest first. This file starts at 0.1.0 — earlier versions are in the
 [releases](https://github.com/dandrok/signal-tui/releases).
 
-## [Unreleased]
+`0.2.0` is the release where the chat stops being read-only: a message can be corrected, removed
+for everyone, hidden on this device, and reacted to from a picker rather than from memory.
+
+## [0.2.0] — 2026-10-27
 
 ### Added
 
