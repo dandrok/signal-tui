@@ -11,11 +11,21 @@ export function hintsFor(state: AppState, isReplying: boolean): string {
 	if (isSearching) {
 		return "↑/↓ pick · ⏎ open · esc close";
 	}
+	if (state.prompt !== null) {
+		switch (state.prompt.kind) {
+			case "reaction":
+				return "⏎ send · esc cancel";
+			case "edit":
+				return "⏎ save · esc cancel";
+			case "delete":
+				return "⏎ delete for everyone · esc keep";
+		}
+	}
 	if (state.focus === "composer") {
 		return isReplying ? "⏎ send · esc cancel reply · tab panes" : "⏎ send · esc back · tab panes";
 	}
 	const panes = "tab panes · i compose · / search · q quit";
 	return state.focus === "messages"
-		? `j/k select · r reply · ⇞/⇟ page · ${panes}`
+		? "j/k select · r reply · x react · e edit · d delete · D hide · tab · i · / · q"
 		: `j/k move · ${panes}`;
 }

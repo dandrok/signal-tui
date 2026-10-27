@@ -119,13 +119,17 @@ you linked that device is not available — Signal does not backfill it.
 | `PgUp` / `PgDn` | scroll the message pane by ten messages |
 | `i` or `⏎` | focus the composer |
 | `r` | reply to the selected message (message pane) |
-| `x` | react to the selected message (message pane): type one emoji, `⏎` sends |
+| `x` | react to the selected message: type one emoji, `⏎` sends. Typing the emoji you already added takes it back |
+| `e` | edit your own message: the prompt opens with its body, `⏎` saves, `Esc` cancels |
+| `d` | delete your own message for everyone — it asks first, `⏎` or `y` confirms |
+| `D` | hide a message on this device only; nothing is sent and nobody else is affected |
 | `⏎` | send the draft, or send the emoji while reacting |
 | `/` | search cached history — `↑` / `↓` to pick a hit, `⏎` to open it, `Esc` to close |
 | `Esc` | leave the composer, cancel a reply, cancel a reaction, close search |
 | `q` | quit, from any pane; `Ctrl-C` quits from anywhere, modes included |
 
-The pane border shows which box has the keyboard.
+The pane border shows which box has the keyboard; while a prompt is open it replaces the
+composer, and its border turns red for the one that changes things for other people.
 
 ## How it works
 
@@ -183,6 +187,14 @@ the last second of typing.
   second emoji from the same person replaces the first, and a removal takes it away. `x` in
   the message pane adds your own: type any emoji, `⏎` sends it, and it appears immediately
   without waiting for a transcript Signal never sends back
+- **editing your own message** (`e`): the prompt starts from the body, `⏎` saves, and the row
+  reads `· edited` at once — the local echo goes through the same rule the other side's
+  correction does, because Signal never echoes a send back to the device that wrote it
+- **deleting for everyone** (`d`, then `⏎` or `y`): the message is blanked here at once and
+  removed on every other device. It asks first, and only offers itself on your own message
+- **hiding locally** (`D`): the row stays in the cache but no read returns it — not the thread,
+  not an older page, not search — so a replayed envelope cannot bring it back as new. Nothing
+  goes on the wire, which is why there is nothing to confirm
 - **replies**: a message that answers another one shows what it answers, above its own
   text (`┃ 12:34 Marta: the original`). The quoted message is looked up in the thread, so a
   quote of something deleted or expired reads `message deleted` / `message expired` rather
@@ -206,7 +218,8 @@ the last second of typing.
 
 ## Not there yet
 
-- **removing** a reaction you added: the wire supports it (`remove`), the key does not yet
+- **hiding a message for good**: `D` is a one-way write in this cache — there is no way back
+  short of deleting the database, and hidden rows are not listed anywhere
 - **stickers, polls, polls' votes, pins, payments and group-call updates are ignored.**
   They arrive as data messages with no text and no files, so the client does not draw a
   row for them at all — no blank line, no unread count, no notification

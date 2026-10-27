@@ -63,6 +63,7 @@ describe("reactionFor", () => {
 		expect(reactionFor(incoming(), DIRECT_ID, "👍")).toEqual({
 			target: { sentAt: 1_000, authorId: "uuid-alice" },
 			emoji: "👍",
+			isRemove: false,
 		});
 	});
 
@@ -107,5 +108,24 @@ describe("targetedMessage", () => {
 		expect(targetedMessage(thread, "m2")?.sentAt).toBe(2_000);
 		expect(targetedMessage(thread, "m9")).toBeUndefined();
 		expect(targetedMessage(thread, null)).toBeUndefined();
+	});
+
+	test("the same emoji again is a removal, not a second reaction", () => {
+		// Signal clients behave this way, and the wire already takes `remove`: typing the emoji
+		// you already added is how a reaction is taken back.
+		const reacted = incoming({
+			reactions: [{ emoji: "👍", author: "You", authorId: SELF_AUTHOR_ID }],
+		});
+
+		expect(reactionFor(reacted, DIRECT_ID, "👍")?.isRemove).toBe(true);
+		expect(reactionFor(reacted, DIRECT_ID, "🎉")?.isRemove).toBe(false);
+	});
+
+	test("someone else's reaction is not ours to replace", () => {
+		const reacted = incoming({
+			reactions: [{ emoji: "👍", author: "Alice", authorId: "uuid-alice" }],
+		});
+
+		expect(reactionFor(reacted, DIRECT_ID, "👍")?.isRemove).toBe(false);
 	});
 });

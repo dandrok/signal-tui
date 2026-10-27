@@ -174,4 +174,16 @@ export const migrations: readonly Migration[] = [
 			ALTER TABLE messages ADD COLUMN quote_author_id TEXT;
 		`,
 	},
+	{
+		version: 10,
+		// "Delete for me": a row hidden on this device only.
+		//
+		// The row stays, because the message still exists for everyone else and a replayed
+		// envelope of it must not arrive as new — hiding is a read filter, not a delete. It
+		// is deliberately not exposed as `Message.isHidden`: a hidden row never leaves the
+		// store, so no caller has to remember to skip it.
+		sql: `
+			ALTER TABLE messages ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0;
+		`,
+	},
 ];

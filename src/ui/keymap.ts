@@ -11,7 +11,8 @@ import type { Action, AppState } from "../app/state";
  * Order matters and is part of the contract:
  *   1. `ctrl-c` always quits.
  *   2. Search owns the keyboard while it is open, so nothing below can steal a keystroke.
- *   3. A reaction prompt owns it next: it is modal, so `tab` must not walk away from it.
+ *   3. A prompt owns it next — reacting, editing, confirming a delete: all three are modal,
+ *      so `tab` must not walk away from one.
  *   4. `tab` moves panes before the composer, which would otherwise type it into the draft.
  *   5. The composer takes everything else while it is focused.
  */
@@ -62,18 +63,34 @@ const searchKey = (state: AppState, input: string, key: KeyLike): KeyResult => {
 	return input.length > 0 ? action({ type: "search-changed", query: query + input }) : null;
 };
 
-const reactionKey = (state: AppState, input: string, key: KeyLike): KeyResult => {
-	const draft = state.reaction?.draft ?? "";
+/**
+ * The open prompt, whatever it is asking.
+ *
+ * A delete is confirmed rather than typed: `⏎` or `y` sends it, anything else leaves it alone,
+ * so a keystroke meant for the pane cannot remove a message from everyone else's phone. The
+ * other two are text fields, and they share one rule — type, backspace, `⏎` to send.
+ */
+const promptKey = (state: AppState, input: string, key: KeyLike): KeyResult => {
+	const prompt = state.prompt;
+	if (prompt === null) {
+		return null;
+	}
 	if (key.escape === true) {
-		return action({ type: "reaction-cancelled" });
+		return action({ type: "prompt-cancelled" });
+	}
+	if (prompt.kind === "delete") {
+		if (key.return === true || input === "y") {
+			return action({ type: "prompt-submitted" });
+		}
+		return input === "n" ? action({ type: "prompt-cancelled" }) : null;
 	}
 	if (key.return === true) {
-		return action({ type: "reaction-submitted" });
+		return action({ type: "prompt-submitted" });
 	}
 	if (key.backspace === true || key.delete === true) {
-		return action({ type: "reaction-changed", value: draft.slice(0, -1) });
+		return action({ type: "prompt-changed", value: prompt.draft.slice(0, -1) });
 	}
-	return input.length > 0 ? action({ type: "reaction-changed", value: draft + input }) : null;
+	return input.length > 0 ? action({ type: "prompt-changed", value: prompt.draft + input }) : null;
 };
 
 const composerKey = (state: AppState, input: string, key: KeyLike): KeyResult => {
@@ -108,8 +125,19 @@ const paneKey = (state: AppState, input: string, key: KeyLike): KeyResult => {
 	if (inMessages && input === "r") {
 		return action({ type: "reply-started" });
 	}
+	// The message actions. Each opens a prompt or asks for one write; none of them sends
+	// anything directly, because the wiring knows the session and the reducer does not.
 	if (inMessages && input === "x") {
-		return action({ type: "reaction-started" });
+		return action({ type: "prompt-opened", kind: "reaction" });
+	}
+	if (inMessages && input === "e") {
+		return action({ type: "prompt-opened", kind: "edit" });
+	}
+	if (inMessages && input === "d") {
+		return action({ type: "prompt-opened", kind: "delete" });
+	}
+	if (inMessages && input === "D") {
+		return action({ type: "hide-requested" });
 	}
 	if (inMessages && key.pageUp === true) {
 		return action({ type: "scroll-moved", delta: SCROLL_STEP });
@@ -144,8 +172,8 @@ export function keyAction(state: AppState, input: string, key: KeyLike): KeyResu
 	if (state.search !== null) {
 		return searchKey(state, input, key);
 	}
-	if (state.reaction !== null) {
-		return reactionKey(state, input, key);
+	if (state.prompt !== null) {
+		return promptKey(state, input, key);
 	}
 	if (key.tab === true) {
 		return action({ type: key.shift === true ? "focus-prev" : "focus-next" });

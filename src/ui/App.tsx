@@ -10,7 +10,7 @@ import { hintsFor } from "./hints";
 import { useTerminalSize } from "./hooks/useTerminalSize";
 import { keyAction } from "./keymap";
 import { MessagePane } from "./message-pane";
-import { ReactionPrompt } from "./ReactionPrompt";
+import { PromptBar } from "./PromptBar";
 import { SearchPane } from "./SearchPane";
 
 export interface AppProps {
@@ -87,7 +87,7 @@ export function App({ state, dispatch }: AppProps) {
 							isFocused={state.focus === "messages"}
 							clock={clock}
 						/>
-						{state.reaction === null ? (
+						{state.prompt === null ? (
 							<Composer
 								draft={state.draft}
 								isFocused={isComposing}
@@ -96,7 +96,7 @@ export function App({ state, dispatch }: AppProps) {
 								clock={clock}
 							/>
 						) : (
-							<ReactionPrompt draft={state.reaction.draft} width={messageWidth} />
+							<PromptBar prompt={state.prompt} width={messageWidth} />
 						)}
 					</Box>
 				</Box>

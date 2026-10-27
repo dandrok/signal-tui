@@ -3,6 +3,37 @@
 Notable changes, newest first. This file starts at 0.1.0 — earlier versions are in the
 [releases](https://github.com/dandrok/signal-tui/releases).
 
+## [Unreleased]
+
+### Added
+
+- **Edit your own message** (`e`): the prompt opens with the body it would replace, `⏎` saves,
+  `Esc` cancels. The row reads `· edited` immediately — Signal never echoes a send back to the
+  device that wrote it, so the local echo is what makes the change visible at all.
+- **Delete for everyone** (`d`): asks first (`⏎` or `y`), then removes the message here and on
+  every other device. Offered only on your own, still-standing messages.
+- **Hide locally** (`D`): the row stays in the cache so a replayed envelope cannot arrive as new,
+  but no read returns it — not the thread, not an older page, not search. Nothing goes on the
+  wire.
+- **Taking a reaction back**: typing the emoji you already added now removes it, instead of
+  adding a twin. The wire took `remove` all along; the key did not offer it.
+
+### Changed
+
+- The three message actions share one prompt (`state.prompt` with a kind) instead of a
+  reaction-only one, so the keymap, the status line and the composer frame each had one rule to
+  learn rather than three. The delete prompt is confirmed, never typed into: it is the one
+  keystroke that changes what other people see.
+
+### Internal
+
+- Schema **v10**: `messages.is_hidden`, filtered on every read path *and* in the FTS query.
+- Both stores answer `hideMessage` with "did a visible row change", so pressing `D` twice
+  redraws once — the same contract the receipts and reactions already had.
+- Wire shapes checked against signal-cli v0.14.9: **an edit is a `send` with `editTimestamp`**
+  (`SendCommand` → `sendEditMessage`), and **a delete is its own method, `remoteDelete`**
+  (`RemoteDeleteCommand`). Passing one for the other produces an envelope nobody reads.
+
 ## [0.1.0] — 2026-10-27
 
 The release where the tree became one concern per file, and the composer stopped being the only

@@ -1,6 +1,7 @@
+import type { MessageRef } from "../../domain/message-ref";
 import type { ConversationId } from "../../domain/types";
 import { SELF_AUTHOR_ID } from "../../domain/types";
-import type { ReactionTarget, ReceiptType, ReplyTarget } from "../../ports/backend";
+import type { ReceiptType, ReplyTarget } from "../../ports/backend";
 
 /**
  * What goes on the wire, as pure functions.
@@ -61,7 +62,7 @@ export function receiptParams(
 
 export interface ReactionParamsInput {
 	readonly conversationId: ConversationId;
-	readonly target: ReactionTarget;
+	readonly target: MessageRef;
 	readonly emoji: string;
 	readonly isRemove: boolean;
 	readonly isGroup: boolean;
@@ -83,4 +84,43 @@ export function reactionParams(input: ReactionParamsInput): Record<string, unkno
 		targetTimestamp: input.target.sentAt,
 		...(input.isRemove ? { remove: true } : {}),
 	};
+}
+
+export interface EditParamsInput {
+	readonly conversationId: ConversationId;
+	readonly target: MessageRef;
+	readonly body: string;
+	readonly isGroup: boolean;
+}
+
+/**
+ * `send` params for an edit: the replacement text travels as `message`, and `editTimestamp`
+ * names the message being corrected.
+ *
+ * Verified against `SendCommand.java` at signal-cli v0.14.9 — `--edit-timestamp` routes to
+ * `sendEditMessage(message, recipients, editTimestamp)`, so an edit is an ordinary send with
+ * one extra field rather than a command of its own. No quote: an edit replaces the body and
+ * keeps whatever the original quoted.
+ */
+export function editParams(input: EditParamsInput): Record<string, unknown> {
+	return {
+		...addressFor(input.conversationId, input.isGroup),
+		message: input.body,
+		editTimestamp: input.target.sentAt,
+	};
+}
+
+/**
+ * `remoteDelete` params: the message to remove, addressed like any other send.
+ *
+ * Verified against `RemoteDeleteCommand.java` at signal-cli v0.14.9 — the method name is
+ * `remoteDelete`, not `send`, and its only required argument is `--target-timestamp`. Unlike
+ * an edit it carries no body: the removal *is* the message.
+ */
+export function deleteParams(
+	conversationId: ConversationId,
+	target: MessageRef,
+	isGroup: boolean,
+): Record<string, unknown> {
+	return { ...addressFor(conversationId, isGroup), targetTimestamp: target.sentAt };
 }

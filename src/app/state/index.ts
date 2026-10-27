@@ -25,6 +25,7 @@ export type {
 	Focus,
 	Notice,
 	NoticeKind,
-	ReactionPrompt,
+	PromptKind,
+	PromptState,
 	SearchState,
 } from "./types";

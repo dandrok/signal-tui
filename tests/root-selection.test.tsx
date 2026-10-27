@@ -17,6 +17,9 @@ const fakeSession = (): { session: Session; notify: () => void } => {
 			send: async () => undefined,
 			markRead: async () => undefined,
 			react: async () => undefined,
+			edit: async () => undefined,
+			remove: async () => undefined,
+			hide: async () => undefined,
 			flush: async () => undefined,
 			onChange: (next) => {
 				listener = next;

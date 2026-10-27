@@ -1,3 +1,4 @@
+import type { MessageRef } from "../domain/message-ref";
 import type {
 	Conversation,
 	ConversationId,
@@ -63,19 +64,6 @@ export interface SendResult {
 export type ReceiptType = "read" | "viewed";
 
 /**
- * The message a reaction names.
- *
- * Signal identifies it by when it was sent plus who wrote it, and both are required: a
- * timestamp alone would be ambiguous across threads on the wire, and the engine refuses a
- * reaction without a `targetAuthor`.
- */
-export interface ReactionTarget {
-	readonly sentAt: number;
-	/** The author's uuid or number; `SELF_AUTHOR_ID` is turned into the account number. */
-	readonly authorId: string;
-}
-
-/**
  * The message a reply answers, as the transport needs it.
  *
  * `send` takes the target by timestamp plus its author, and both are mandatory once a
@@ -115,10 +103,24 @@ export interface SignalBackend {
 	 */
 	sendReaction(
 		conversationId: ConversationId,
-		target: ReactionTarget,
+		target: MessageRef,
 		emoji: string,
 		isRemove?: boolean,
 	): Promise<void>;
+	/**
+	 * Removes a message we sent from everyone's device.
+	 *
+	 * `remoteDelete` is its own JSON-RPC method, not a `send` variant, and it names the
+	 * message by timestamp and author exactly as a reaction does.
+	 */
+	deleteForEveryone(conversationId: ConversationId, target: MessageRef): Promise<void>;
+	/**
+	 * Replaces the body of a message we sent.
+	 *
+	 * The engine takes the replacement text as an ordinary `send` carrying `editTimestamp` —
+	 * the instant of the message being corrected — so the same address rules apply.
+	 */
+	sendEdit(conversationId: ConversationId, target: MessageRef, body: string): Promise<void>;
 	/** Sends `body`, optionally as a reply to an earlier message. */
 	sendMessage(
 		conversationId: ConversationId,

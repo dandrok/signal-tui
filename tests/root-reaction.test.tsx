@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { render } from "ink-testing-library";
 import { InMemoryStore } from "../src/adapters/memory/store";
 import type { Session } from "../src/app/session";
-import type { ReactionTarget } from "../src/ports/backend";
+import type { MessageRef } from "../src/domain/message-ref";
 import { Root } from "../src/ui/Root";
 import { plain } from "./helpers/frame";
 
@@ -20,9 +20,19 @@ const CONVERSATION = "4b1c9f1e-0000-4000-8000-000000000000";
 
 const fakeSession = (): {
 	session: Session;
-	reactions: Array<{ conversationId: string; target: ReactionTarget; emoji: string }>;
+	reactions: Array<{
+		conversationId: string;
+		target: MessageRef;
+		emoji: string;
+		isRemove: boolean;
+	}>;
 } => {
-	const reactions: Array<{ conversationId: string; target: ReactionTarget; emoji: string }> = [];
+	const reactions: Array<{
+		conversationId: string;
+		target: MessageRef;
+		emoji: string;
+		isRemove: boolean;
+	}> = [];
 	return {
 		reactions,
 		session: {
@@ -30,9 +40,12 @@ const fakeSession = (): {
 			stop: async () => undefined,
 			send: async () => undefined,
 			markRead: async () => undefined,
-			react: async (conversationId, target, emoji) => {
-				reactions.push({ conversationId, target, emoji });
+			react: async (conversationId, target, emoji, isRemove = false) => {
+				reactions.push({ conversationId, target, emoji, isRemove });
 			},
+			edit: async () => undefined,
+			remove: async () => undefined,
+			hide: async () => undefined,
 			flush: async () => undefined,
 			onChange: () => () => undefined,
 			onIncoming: () => () => undefined,
@@ -95,6 +108,7 @@ describe("reacting from the keyboard", () => {
 				conversationId: CONVERSATION,
 				target: { sentAt: 1_760_000_000_000, authorId: "uuid-alice" },
 				emoji: "👍",
+				isRemove: false,
 			},
 		]);
 		// The prompt is gone again, so the composer is back.

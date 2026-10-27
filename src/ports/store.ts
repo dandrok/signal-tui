@@ -79,6 +79,14 @@ export interface MessageWriter {
 	/** Marks a message as deleted; a no-op when the message is not cached. */
 	markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void>;
 	/**
+	 * Hides a message from this cache's reads, leaving the row in place.
+	 *
+	 * Local only, and irreversible from here: the point is that a replayed envelope cannot
+	 * bring the message back as new. Returns whether a visible row actually changed, so a
+	 * second `D` on the same message redraws nothing.
+	 */
+	hideMessage(conversationId: ConversationId, messageId: MessageId): Promise<boolean>;
+	/**
 	 * Records a receipt for messages we sent, named by the timestamps it acknowledges.
 	 * Resolves the conversations whose rows actually changed, so a caller can tell a
 	 * receipt that moved something from one that repeated what was already known.

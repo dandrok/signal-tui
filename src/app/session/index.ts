@@ -1,8 +1,12 @@
-import type { ConversationId, Message } from "../../domain/types";
-import type { ReactionTarget, ReplyTarget } from "../../ports/backend";
+import type { MessageRef } from "../../domain/message-ref";
+import type { ConversationId, Message, MessageId } from "../../domain/types";
+import type { ReplyTarget } from "../../ports/backend";
 import { applyEvent } from "./apply";
+import { sendEdit } from "./edit";
+import { hideMessage } from "./hide";
 import { markReadConversation } from "./mark-read";
 import { sendReaction } from "./react";
+import { removeMessage } from "./remove";
 import { sendText } from "./send";
 import type { IncomingNotice, Session, SessionContext, SessionDeps } from "./types";
 
@@ -89,8 +93,18 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 			markReadConversation(context, conversationId),
 		send: (conversationId: ConversationId, body: string, replyTo?: ReplyTarget): Promise<void> =>
 			sendText(context, conversationId, body, replyTo),
-		react: (conversationId: ConversationId, target: ReactionTarget, emoji: string): Promise<void> =>
-			sendReaction(context, conversationId, target, emoji),
+		react: (
+			conversationId: ConversationId,
+			target: MessageRef,
+			emoji: string,
+			isRemove = false,
+		): Promise<void> => sendReaction(context, conversationId, target, emoji, isRemove),
+		edit: (conversationId: ConversationId, target: MessageRef, body: string): Promise<void> =>
+			sendEdit(context, conversationId, target, body),
+		remove: (conversationId: ConversationId, target: MessageRef): Promise<void> =>
+			removeMessage(context, conversationId, target),
+		hide: (conversationId: ConversationId, messageId: MessageId): Promise<void> =>
+			hideMessage(context, conversationId, messageId),
 		async flush(): Promise<void> {
 			await queue.catch(() => undefined);
 		},

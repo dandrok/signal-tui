@@ -27,14 +27,22 @@ export interface SearchState {
 }
 
 /**
- * A reaction prompt: the message it names, and the emoji typed so far.
+ * What a prompt is for. One mode, three questions, because they share everything that
+ * matters: a target row, a draft, enter to confirm, escape to leave.
+ */
+export type PromptKind = "reaction" | "edit" | "delete";
+
+/**
+ * An open prompt: which message it names, and what has been typed into it.
  *
  * A mode like search — while it is open the keyboard belongs to it — but it holds an id
- * rather than a message: the row can be edited, deleted or swept while the emoji is being
- * typed, and the send path resolves it again before anything goes on the wire.
+ * rather than a message: the row can be edited, deleted or swept while the prompt is open,
+ * and the send path resolves it again before anything goes on the wire.
  */
-export interface ReactionPrompt {
+export interface PromptState {
+	readonly kind: PromptKind;
 	readonly targetId: MessageId;
+	/** The emoji, the replacement body, or (for a delete) nothing at all. */
 	readonly draft: string;
 }
 
@@ -73,7 +81,7 @@ export interface AppState {
 	readonly historyComplete: Readonly<Record<ConversationId, true>>;
 	readonly notice: Notice | null;
 	readonly search: SearchState | null;
-	readonly reaction: ReactionPrompt | null;
+	readonly prompt: PromptState | null;
 }
 
 export type Action =
@@ -106,12 +114,14 @@ export type Action =
 	/** Answers the message the pane is pointing at; the reducer resolves which one. */
 	| { readonly type: "reply-started" }
 	| { readonly type: "reply-cancelled" }
-	/** Opens the emoji prompt on the message the pane points at. */
-	| { readonly type: "reaction-started" }
-	| { readonly type: "reaction-cancelled" }
-	| { readonly type: "reaction-changed"; readonly value: string }
+	/** Opens a prompt on the message the pane points at, if that message can take one. */
+	| { readonly type: "prompt-opened"; readonly kind: PromptKind }
+	| { readonly type: "prompt-cancelled" }
+	| { readonly type: "prompt-changed"; readonly value: string }
 	/** The prompt was confirmed: whatever can be sent, is sent by the wiring. */
-	| { readonly type: "reaction-submitted" }
+	| { readonly type: "prompt-submitted" }
+	/** Hides the message the pane points at, in this cache only. Resolved by the wiring. */
+	| { readonly type: "hide-requested" }
 	| { readonly type: "notice"; readonly notice: Notice | null }
 	| { readonly type: "search-opened" }
 	| { readonly type: "search-closed" }

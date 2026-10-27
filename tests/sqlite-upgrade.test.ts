@@ -51,7 +51,7 @@ describe("upgrading a cache written by an older release", () => {
 		writeOldCache(path);
 
 		const store = new SqliteMessageStore({ path });
-		expect(store.schemaVersion).toBe(9);
+		expect(store.schemaVersion).toBe(10);
 
 		const [migrated] = await store.listMessages("uuid-alice");
 		expect(migrated?.body).toBe("written by 0.0.4");
