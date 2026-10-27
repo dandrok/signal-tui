@@ -5,6 +5,7 @@ import {
 	releaseOlder,
 	requestOlder,
 } from "./reduce-history";
+import { cancelReaction, changeReaction, startReaction, submitReaction } from "./reduce-reaction";
 import { cancelReply, startReply } from "./reduce-reply";
 import { reduceSearch } from "./reduce-search";
 import { reduceSelection } from "./reduce-selection";
@@ -41,6 +42,14 @@ export function reduce(state: AppState, action: Action): AppState {
 			return startReply(state);
 		case "reply-cancelled":
 			return cancelReply(state);
+		case "reaction-started":
+			return startReaction(state);
+		case "reaction-changed":
+			return changeReaction(state, action.value);
+		case "reaction-cancelled":
+			return cancelReaction(state);
+		case "reaction-submitted":
+			return submitReaction(state);
 		case "search-opened":
 		case "search-closed":
 		case "search-changed":

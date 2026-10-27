@@ -1,15 +1,14 @@
 import type { ConversationId } from "../../domain/types";
-import { SELF_AUTHOR_ID } from "../../domain/types";
 import type {
 	BackendEvent,
+	ReactionTarget,
 	ReceiptType,
 	ReplyTarget,
 	SendResult,
 	SignalBackend,
 } from "../../ports/backend";
-import { JsonRpcClient } from "./json-rpc-client";
+import { reactionParams, receiptParams, sendParams } from "./commands";
 import { mapEnvelope } from "./map-envelope";
-import { createProcessStream } from "./process-stream";
 import { receiveEnvelopeSchema } from "./schemas";
 
 /**
@@ -122,24 +121,13 @@ export class SignalCliBackend implements SignalBackend {
 		body: string,
 		replyTo?: ReplyTarget,
 	): Promise<SendResult> {
-		// Single-account mode: params carry no `account`, exactly as documented.
-		const address = this.#groupIds.has(conversationId)
-			? { groupId: conversationId }
-			: { recipient: [conversationId] };
-		// A quote names its target by timestamp *and* author, and the engine rejects the
-		// first without the second (`SendCommand` throws "Quote author parameter is
-		// missing"). Our own messages have `SELF_AUTHOR_ID`, which is not a number or a
-		// uuid — the account number is what the engine resolves back to us.
-		const params =
-			replyTo === undefined
-				? { ...address, message: body }
-				: {
-						...address,
-						message: body,
-						quoteTimestamp: replyTo.sentAt,
-						quoteAuthor: replyTo.authorId === SELF_AUTHOR_ID ? this.#account : replyTo.authorId,
-						quoteMessage: replyTo.text,
-					};
+		const params = sendParams({
+			conversationId,
+			body,
+			isGroup: this.#groupIds.has(conversationId),
+			account: this.#account,
+			replyTo,
+		});
 		const result = await this.#client.request<{ timestamp?: unknown } | undefined>("send", params);
 		const timestamp = result?.timestamp;
 		return { timestamp: typeof timestamp === "number" ? timestamp : undefined };
@@ -153,12 +141,24 @@ export class SignalCliBackend implements SignalBackend {
 		if (timestamps.length === 0) {
 			return;
 		}
-		// `--target-timestamp` maps to targetTimestamp; the CLI takes one or more.
-		await this.#client.request("sendReceipt", {
-			recipient,
-			targetTimestamp: [...timestamps],
-			type,
+		await this.#client.request("sendReceipt", receiptParams(recipient, timestamps, type));
+	}
+
+	async sendReaction(
+		conversationId: ConversationId,
+		target: ReactionTarget,
+		emoji: string,
+		isRemove = false,
+	): Promise<void> {
+		const params = reactionParams({
+			conversationId,
+			target,
+			emoji,
+			isRemove,
+			isGroup: this.#groupIds.has(conversationId),
+			account: this.#account,
 		});
+		await this.#client.request("sendReaction", params);
 	}
 
 	subscribe(listener: (event: BackendEvent) => void): () => void {
@@ -247,38 +247,4 @@ export class SignalCliBackend implements SignalBackend {
 			listener(event);
 		}
 	}
-}
-
-export interface SpawnBackendOptions extends SignalCliBackendOptions {
-	/** Defaults to {@link defaultCommand}: manual receive mode, so nothing is
-	 * delivered before `start()` installs its handler. */
-	readonly command?: readonly string[];
-	readonly defaultTimeoutMs?: number;
-}
-
-/**
- * `--receive-mode` belongs to the `jsonRpc` subcommand's own parser, not to the
- * global options, so it must come after the command name.
- */
-export function defaultCommand(account: string): readonly string[] {
-	return ["signal-cli", "-a", account, "jsonRpc", "--receive-mode=manual"];
-}
-
-/**
- * Composition helper: spawns `signal-cli` in JSON-RPC manual-receive mode and
- * wraps it. Kept separate from the adapter so the adapter needs no process.
- */
-export function spawnSignalCliBackend(options: SpawnBackendOptions): {
-	readonly backend: SignalCliBackend;
-	readonly client: JsonRpcClient;
-} {
-	const command = options.command ?? defaultCommand(options.account);
-	const stream = createProcessStream({ command });
-	const client = new JsonRpcClient(stream, {
-		defaultTimeoutMs: options.defaultTimeoutMs ?? 30_000,
-	});
-	const backendOptions: SignalCliBackendOptions = options.notificationMethod
-		? { account: options.account, notificationMethod: options.notificationMethod }
-		: { account: options.account };
-	return { backend: new SignalCliBackend(client, backendOptions), client };
 }

@@ -63,6 +63,19 @@ export interface SendResult {
 export type ReceiptType = "read" | "viewed";
 
 /**
+ * The message a reaction names.
+ *
+ * Signal identifies it by when it was sent plus who wrote it, and both are required: a
+ * timestamp alone would be ambiguous across threads on the wire, and the engine refuses a
+ * reaction without a `targetAuthor`.
+ */
+export interface ReactionTarget {
+	readonly sentAt: number;
+	/** The author's uuid or number; `SELF_AUTHOR_ID` is turned into the account number. */
+	readonly authorId: string;
+}
+
+/**
  * The message a reply answers, as the transport needs it.
  *
  * `send` takes the target by timestamp plus its author, and both are mandatory once a
@@ -93,6 +106,18 @@ export interface SignalBackend {
 		recipient: ConversationId,
 		timestamps: readonly number[],
 		type?: ReceiptType,
+	): Promise<void>;
+	/**
+	 * Adds an emoji reaction to an earlier message, or removes our own.
+	 *
+	 * `target` names the message the way Signal does — when it was sent and who wrote it —
+	 * because a reaction carries no conversation of its own.
+	 */
+	sendReaction(
+		conversationId: ConversationId,
+		target: ReactionTarget,
+		emoji: string,
+		isRemove?: boolean,
 	): Promise<void>;
 	/** Sends `body`, optionally as a reply to an earlier message. */
 	sendMessage(

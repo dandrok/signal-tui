@@ -42,6 +42,8 @@ export function reduceSelection(state: AppState, action: SelectionAction): AppSt
 				scroll: selectedId === state.selectedId ? state.scroll : 0,
 				// A reply belongs to the thread it was started in.
 				replyToId: selectedId === state.selectedId ? state.replyToId : null,
+				// A reaction prompt names a row in one thread, so it goes with the reply.
+				reaction: selectedId === state.selectedId ? state.reaction : null,
 				// So does a page request: leaving it pending would load history for whoever is
 				// selected when the read lands, and shift a pane nobody asked to move.
 				olderRequested: selectedId === state.selectedId ? state.olderRequested : false,
@@ -59,7 +61,14 @@ export function reduceSelection(state: AppState, action: SelectionAction): AppSt
 				? state
 				: // A different conversation always starts at its newest message. The other way
 					// round, the pane would open mid-history and look stale.
-					{ ...state, selectedId: next.id, scroll: 0, replyToId: null, olderRequested: false };
+					{
+						...state,
+						selectedId: next.id,
+						scroll: 0,
+						replyToId: null,
+						reaction: null,
+						olderRequested: false,
+					};
 		}
 		case "focus":
 			return state.focus === action.focus ? state : { ...state, focus: action.focus };

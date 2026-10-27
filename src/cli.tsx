@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { render } from "ink";
 import { InMemoryStore } from "./adapters/memory/store";
-import { spawnSignalCliBackend } from "./adapters/signal/signal-cli-backend";
+import { spawnSignalCliBackend } from "./adapters/signal/spawn";
 import { SqliteMessageStore } from "./adapters/sqlite/store";
 import type { CliConfig } from "./app/config";
 import { defaultDbPath, parseArgs, USAGE, UsageError } from "./app/config";

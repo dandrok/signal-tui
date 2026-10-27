@@ -9,25 +9,23 @@ import type {
 	ReceiptState,
 } from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
-import { demoConversations, demoMessages } from "./demo-data";
 import { mergeMessage } from "./merge-message";
+import { hydrate, type InMemoryStoreOptions, initialContent } from "./seed";
 
 const DEFAULT_LIMIT = 200;
 
-/** Same shape the SQLite adapter returns: always a file array, reactions only when present. */
-const hydrate = (message: Message, reactions: readonly Reaction[] | undefined): Message => ({
-	...message,
-	isEdited: message.isEdited === true,
-	attachments: message.attachments ?? [],
-	...(reactions === undefined || reactions.length === 0 ? {} : { reactions }),
-});
-
 /** Test/demo store. Shape-compatible with the SQLite adapter. */
 export class InMemoryStore implements MessageStore {
-	#conversations: Conversation[] = [...demoConversations];
-	#messages: Message[] = [...demoMessages];
+	#conversations: Conversation[];
+	#messages: Message[];
 	/** Keyed by message id: reactions arrive after the message, one list per message. */
 	#reactions = new Map<string, Reaction[]>();
+
+	constructor(options: InMemoryStoreOptions = {}) {
+		const { conversations, messages } = initialContent(options);
+		this.#conversations = conversations;
+		this.#messages = messages;
+	}
 
 	async listConversations(): Promise<readonly Conversation[]> {
 		return [...this.#conversations].sort((a, b) => b.lastActivityAt - a.lastActivityAt);

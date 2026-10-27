@@ -6,7 +6,12 @@ import type {
 	Reaction,
 	ReceiptState,
 } from "../../src/domain/types";
-import type { BackendEvent, ReplyTarget, SignalBackend } from "../../src/ports/backend";
+import type {
+	BackendEvent,
+	ReactionTarget,
+	ReplyTarget,
+	SignalBackend,
+} from "../../src/ports/backend";
 import type { MessageStore } from "../../src/ports/store";
 
 export const conversation = (id = "uuid-alice"): Conversation => ({
@@ -261,6 +266,26 @@ export class FakeBackend implements SignalBackend {
 	): Promise<{ timestamp: number | undefined }> {
 		this.sent.push({ conversationId, body, ...(replyTo === undefined ? {} : { replyTo }) });
 		return { timestamp: 1_760_000_000_500 };
+	}
+
+	readonly reactions: Array<{
+		conversationId: string;
+		target: ReactionTarget;
+		emoji: string;
+		isRemove: boolean;
+	}> = [];
+	failReactions = false;
+
+	async sendReaction(
+		conversationId: string,
+		target: ReactionTarget,
+		emoji: string,
+		isRemove = false,
+	): Promise<void> {
+		if (this.failReactions) {
+			throw new Error("reaction rejected");
+		}
+		this.reactions.push({ conversationId, target, emoji, isRemove });
 	}
 
 	subscribe(listener: (event: BackendEvent) => void): () => void {

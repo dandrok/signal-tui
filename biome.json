@@ -57,6 +57,16 @@
 			}
 		},
 		{
+			"includes": ["tests/**"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noExcessiveLinesPerFile": "off"
+					}
+				}
+			}
+		},
+		{
 			"includes": ["src/app/**"],
 			"linter": {
 				"rules": {

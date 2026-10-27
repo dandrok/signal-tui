@@ -119,6 +119,33 @@ describe("keymap", () => {
 		expect(keyAction({ ...thread, focus: "conversations" }, "r", key())).toBeNull();
 	});
 
+	test("x opens the emoji prompt, and only where a message is pointed at", () => {
+		expect(keyAction(thread, "x", key())).toEqual({
+			kind: "action",
+			action: { type: "reaction-started" },
+		});
+		expect(keyAction({ ...thread, focus: "conversations" }, "x", key())).toBeNull();
+	});
+
+	test("an open reaction prompt owns the keyboard", () => {
+		// Modal, like search: `j` must type into the prompt rather than move the selection,
+		// and escape has to leave the prompt before it does anything else.
+		const prompting: AppState = { ...thread, reaction: { targetId: "uuid-alice:2", draft: "👍" } };
+
+		expect(keyAction(prompting, "j", key())).toEqual({
+			kind: "action",
+			action: { type: "reaction-changed", value: "👍j" },
+		});
+		expect(keyAction(prompting, "", key({ return: true }))).toEqual({
+			kind: "action",
+			action: { type: "reaction-submitted" },
+		});
+		expect(keyAction(prompting, "", key({ escape: true }))).toEqual({
+			kind: "action",
+			action: { type: "reaction-cancelled" },
+		});
+	});
+
 	test("an unbound key does nothing", () => {
 		expect(keyAction(thread, "z", key())).toBeNull();
 	});

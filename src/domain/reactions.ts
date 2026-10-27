@@ -33,6 +33,22 @@ export function reactionsOf(message: Message): readonly Reaction[] {
 }
 
 /**
+ * The emoji a prompt would actually send, or null when it is not one emoji.
+ *
+ * Signal wants "a single unicode grapheme cluster", so the input goes through the same
+ * display sanitiser the header uses and is then cut by cluster: a pasted paragraph, two
+ * emoji, or a lone combining mark is refused rather than truncated into something the other
+ * side would render as a different reaction.
+ */
+export function reactionEmojiOf(input: string): string | null {
+	const raw = displayEmoji(input);
+	if (raw.length === 0 || raw.length > MAX_EMOJI_CODE_UNITS) {
+		return null;
+	}
+	return firstGraphemes(raw, 1) === raw ? raw : null;
+}
+
+/**
  * The reaction suffix for a message header: `😀 2 ❤️`, most-reacted first, then in a
  * fixed order so two hosts draw the same row for the same reactions. Counted per emoji
  * rather than per person: the header is one line, and who reacted belongs on a detail

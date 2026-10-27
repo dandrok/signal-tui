@@ -1,7 +1,8 @@
 import type { ConversationId, Message } from "../../domain/types";
-import type { ReplyTarget } from "../../ports/backend";
+import type { ReactionTarget, ReplyTarget } from "../../ports/backend";
 import { applyEvent } from "./apply";
 import { markReadConversation } from "./mark-read";
+import { sendReaction } from "./react";
 import { sendText } from "./send";
 import type { IncomingNotice, Session, SessionContext, SessionDeps } from "./types";
 
@@ -88,6 +89,8 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 			markReadConversation(context, conversationId),
 		send: (conversationId: ConversationId, body: string, replyTo?: ReplyTarget): Promise<void> =>
 			sendText(context, conversationId, body, replyTo),
+		react: (conversationId: ConversationId, target: ReactionTarget, emoji: string): Promise<void> =>
+			sendReaction(context, conversationId, target, emoji),
 		async flush(): Promise<void> {
 			await queue.catch(() => undefined);
 		},

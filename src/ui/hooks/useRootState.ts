@@ -2,10 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "../../app/session";
 import type { Action, AppState } from "../../app/state";
 import { emptyState, reduce, replyTarget, selectedConversation } from "../../app/state";
+import { reactionFor, targetedMessage } from "../../app/usecases/react";
 
 /**
- * The reducer plus the one side effect it cannot perform itself: a submitted draft is sent
- * through the session, and the target it answers is resolved *before* the dispatch clears it.
+ * The reducer plus the side effects it cannot perform itself: a submitted draft is sent
+ * through the session, and a confirmed reaction is sent the same way.
+ *
+ * Both resolve their target from state **before** the dispatch clears it — afterwards the
+ * reducer has forgotten which row the prompt named, and a send built from the new state
+ * would go out plain, which reads as the feature silently not working.
  *
  * `version` is a counter, not a value: it ticks whenever the session says the cache changed,
  * and the hooks that read the store take it as a dependency to reload.
@@ -30,16 +35,18 @@ export function useRootState(session: Session | undefined): RootState {
 
 	const dispatch = useCallback(
 		(action: Action): void => {
+			const current = stateRef.current;
+			const conversation = selectedConversation(current);
+
 			if (action.type === "draft-submitted" && session !== undefined) {
-				const body = stateRef.current.draft.trim();
-				const conversation = selectedConversation(stateRef.current);
+				const body = current.draft.trim();
 				// Resolved before the reducer clears it: the target is what makes this a reply
 				// rather than a message, and only the state knows which row it names.
-				const replyTo = replyTarget(stateRef.current);
+				const replyTo = replyTarget(current);
 				if (body.length > 0 && conversation !== undefined) {
 					void session.send(conversation.id, body, replyTo ?? undefined).catch((error: unknown) => {
-						setState((current) =>
-							reduce(current, {
+						setState((inner) =>
+							reduce(inner, {
 								type: "notice",
 								notice: { kind: "info", text: `send failed: ${describe(error)}` },
 							}),
@@ -47,7 +54,40 @@ export function useRootState(session: Session | undefined): RootState {
 					});
 				}
 			}
-			setState((current) => reduce(current, action));
+
+			if (action.type === "reaction-submitted" && session !== undefined) {
+				const prompt = current.reaction;
+				if (prompt !== null && conversation !== undefined) {
+					const message = targetedMessage(
+						current.messagesByConversation[conversation.id] ?? [],
+						prompt.targetId,
+					);
+					const request = reactionFor(message, conversation.id, prompt.draft);
+					if (request === null) {
+						// The prompt closed either way; saying why is the difference between a
+						// refusal and a reaction that vanished.
+						setState((inner) =>
+							reduce(inner, {
+								type: "notice",
+								notice: { kind: "info", text: "not one emoji: nothing sent" },
+							}),
+						);
+					} else {
+						void session
+							.react(conversation.id, request.target, request.emoji)
+							.catch((error: unknown) => {
+								setState((inner) =>
+									reduce(inner, {
+										type: "notice",
+										notice: { kind: "info", text: `reaction failed: ${describe(error)}` },
+									}),
+								);
+							});
+					}
+				}
+			}
+
+			setState((inner) => reduce(inner, action));
 		},
 		[session],
 	);
