@@ -208,12 +208,25 @@ describe("envelopeSchema", () => {
 		expect(parsed.syncMessage?.sentMessage?.message).toBe("hi");
 	});
 
-	test("requires a timestamp inside a sync transcript", () => {
+	test("accepts a transcript that carries an edit and no timestamp of its own", () => {
+		// An edit made on another device arrives as `syncMessage.sentMessage` holding
+		// `editMessage` and no flattened data message, so the timestamp an ordinary sent
+		// message carries is absent. Requiring it rejected the entire envelope, and the
+		// correction was lost with it.
 		const parsed = envelopeSchema.safeParse({
 			timestamp: 1,
-			syncMessage: { sentMessage: { message: "hi" } },
+			syncMessage: {
+				sentMessage: {
+					destinationUuid: "uuid-bob",
+					editMessage: {
+						targetSentTimestamp: 1_759_999_999_000,
+						dataMessage: { timestamp: 1_759_999_999_000, message: "fixed" },
+					},
+				},
+			},
 		});
-		expect(parsed.success).toBe(false);
+
+		expect(parsed.success).toBe(true);
 	});
 
 	test("leaves unmodelled envelope kinds as opaque", () => {

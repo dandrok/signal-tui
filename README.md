@@ -155,7 +155,8 @@ the last second of typing.
   back to the device that wrote it)
 - messages you send elsewhere show up here, with the server timestamp as identity
 - **edits**: a correction from the other side replaces the body and marks the
-  message `· edited`
+  message `· edited` — including one you made on your phone, which arrives on a
+  second path (`syncMessage.sentMessage`) and is applied the same way
 - unread counts that clear when you open a conversation, and while you watch it
 - **read receipts**: the other side sees "read" when you open the chat, not when the
   message arrives
@@ -201,10 +202,11 @@ the last second of typing.
 
 ## Not there yet
 
-- **Your own edits made on another device** are not applied here — those arrive on a
-  second path (`syncMessage.sentMessage`) that is not mapped yet
 - **sending a reaction** from the TUI: received ones are shown, but there is no key or
   mode for adding your own yet
+- **stickers, polls, polls' votes, pins, payments and group-call updates are ignored.**
+  They arrive as data messages with no text and no files, so the client does not draw a
+  row for them at all — no blank line, no unread count, no notification
 - quoting **attachments** in a reply, and replying to a view-once message — a reply whose
   target is outside the loaded window reads `not loaded`, because the quoted text is not
   stored

@@ -34,6 +34,12 @@ describe("signal-cli adapter over a real child process", () => {
 		const kinds: BackendEvent["kind"][] = [];
 		const receipts: Array<{ timestamps: readonly number[]; state: string }> = [];
 		const reactions: Array<{ targetSentAt: number; emoji: string; isRemove: boolean }> = [];
+		const edits: Array<{
+			conversationId: string;
+			targetSentAt: number;
+			editor: string;
+			body: string;
+		}> = [];
 		backend.subscribe((event) => {
 			kinds.push(event.kind);
 			if (event.kind === "message") {
@@ -47,6 +53,14 @@ describe("signal-cli adapter over a real child process", () => {
 					targetSentAt: event.targetSentAt,
 					emoji: event.emoji,
 					isRemove: event.isRemove,
+				});
+			}
+			if (event.kind === "message-edited") {
+				edits.push({
+					conversationId: event.conversationId,
+					targetSentAt: event.targetSentAt,
+					editor: event.editor.id ?? "",
+					body: event.body,
 				});
 			}
 		});
@@ -105,13 +119,25 @@ describe("signal-cli adapter over a real child process", () => {
 				"conversation-updated",
 				"message",
 				"reaction",
+				// the sync edit, and nothing at all for the sticker before it
+				"message-edited",
 				"receipt",
 			]);
 			expect(receipts).toEqual([{ timestamps: [1_760_000_000_001], state: "read" }]);
 			// A reaction names an existing message and carries none of its own: the three
-			// messages above are still all that arrived.
+			// messages above are still all that arrived. A sticker is content-free and is
+			// dropped for the same reason; a correction synced from another device is an
+			// edit, so it never adds a fourth.
 			expect(reactions).toEqual([
 				{ targetSentAt: 1_760_000_000_000, emoji: "👍", isRemove: false },
+			]);
+			expect(edits).toEqual([
+				{
+					conversationId: "uuid-bob",
+					targetSentAt: 1_760_000_000_001,
+					editor: "self",
+					body: "sent from my phone, fixed",
+				},
 			]);
 			expect(messages).toHaveLength(3);
 

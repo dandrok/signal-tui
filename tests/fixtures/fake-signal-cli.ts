@@ -96,6 +96,31 @@ for await (const line of console) {
 				},
 			},
 		});
+		// A sticker: a data message with no text and no file. It is an event about the
+		// conversation, not a message, so it must not become a blank row.
+		notify({
+			sourceNumber: ACCOUNT,
+			sourceUuid: "uuid-alice",
+			sourceName: "Alice",
+			sourceDevice: 1,
+			timestamp: 1_760_000_000_005,
+			dataMessage: { timestamp: 1_760_000_000_005, sticker: { packId: "pack", stickerId: 3 } },
+		});
+		// A correction made on another device: the transcript carries `editMessage` and no
+		// flattened data message, and it must reach the store as an edit, never as a row.
+		notify({
+			timestamp: 1_760_000_000_006,
+			syncMessage: {
+				sentMessage: {
+					destinationUuid: "uuid-bob",
+					destinationNumber: "+100****0009",
+					editMessage: {
+						targetSentTimestamp: 1_760_000_000_001,
+						dataMessage: { timestamp: 1_760_000_000_001, message: "sent from my phone, fixed" },
+					},
+				},
+			},
+		});
 		// A notification kind the adapter must ignore.
 		write({
 			jsonrpc: "2.0",

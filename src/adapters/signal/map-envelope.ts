@@ -16,13 +16,18 @@ import {
 	groupTarget,
 	peerId,
 	peerName,
+	type Target,
 } from "./map-target";
 import type { DataMessage, EditMessage, Envelope, SentMessage } from "./schemas";
 import { dataMessageSchema } from "./schemas";
-import { contentOf, expiresAtOf, textOf } from "./text";
+import { type Content, contentOf, expiresAtOf, textOf } from "./text";
 
-/** Reactor identity for our own reactions, echoed to this device as a transcript. */
-const SELF_REACTOR: EditAuthor = { id: SELF_AUTHOR_ID, label: SELF_LABEL };
+/**
+ * Identity our own actions carry when the engine echoes them back as a transcript: a
+ * reaction we added, or an edit we made, on another device. `SELF_AUTHOR_ID` is the
+ * marker our own rows store, so an edit resolves to the message it corrects.
+ */
+const SELF_ACTOR: EditAuthor = { id: SELF_AUTHOR_ID, label: SELF_LABEL };
 
 /** Identity of a message that a `remoteDelete` refers to. */
 export interface DeletedMessage {
@@ -69,42 +74,66 @@ const EMPTY: MappedEnvelope = {
 	reaction: null,
 };
 
-/** Incoming message: the sender identifies the conversation. */
 /**
- * An edit carries a *copy* of the data message with the replacement text inside
- * it, so the conversation comes from that inner message's group info and falls
- * back to the envelope's sender. Anything without a body is ignored rather than
- * blanking the message: an edit to nothing is not a thing Signal produces.
+ * Whether a payload carries anything a thread should show.
+ *
+ * A sticker, a poll, a pin, a group-call update, a payment and a shared contact all
+ * arrive as `dataMessage` objects. Mapping them as messages writes a row with an empty
+ * body and no files: a blank line in the thread, a bumped conversation, an unread count
+ * and a notification with no words in it — and a ringing group call emits one every few
+ * seconds. They are events about something else, so no message is built for them.
+ *
+ * A view-once message is the one payload whose content is empty *on purpose*: the sender
+ * asked for it not to be kept, and the row with its notice is what records that it
+ * arrived.
  */
-function mapEdit(envelope: Envelope, edit: EditMessage): MappedEnvelope {
+const carriesContent = (content: Content): boolean =>
+	content.body.length > 0 || content.attachments.length > 0 || content.isViewOnce === true;
+
+/**
+ * An edit's replacement text, as an event rather than a message.
+ *
+ * Two payloads carry one: a peer's edit (`envelope.editMessage`) and one of our own
+ * edits echoed from another device (inside `syncMessage.sentMessage`). Both hold a *copy*
+ * of the data message with the correction inside it, so the conversation comes from that
+ * inner message's group info and falls back to the conversation the payload addressed.
+ * Only real text may replace a body: `bodyOf` answers "[attachment]" for a data message
+ * that carries files and nothing else, and an edit to nothing is not a thing Signal
+ * produces.
+ */
+function editedFor(edit: EditMessage, target: Target, editor: EditAuthor): MappedEnvelope {
 	const parsed =
 		edit.dataMessage === null || edit.dataMessage === undefined
 			? null
 			: dataMessageSchema.safeParse(edit.dataMessage);
 	const data = parsed?.success === true ? parsed.data : undefined;
-	const target =
-		data?.groupInfo === undefined ? conversationTarget(envelope) : groupTarget(data.groupInfo);
-	// Only real text may replace a body. `bodyOf` would answer "[attachment]" for a
-	// data message that carries files and nothing else, which would replace the
-	// message's text with a placeholder.
+	const conversation =
+		data?.groupInfo === undefined ? target : (groupTarget(data.groupInfo) ?? target);
 	const body = data === undefined ? "" : textOf(data);
 
-	if (target === null || body.length === 0) {
-		return target === null ? EMPTY : { ...EMPTY, conversationKind: target.kind };
+	if (body.length === 0) {
+		return { ...EMPTY, conversationKind: conversation.kind };
 	}
 
 	return {
 		...EMPTY,
-		conversationKind: target.kind,
+		conversationKind: conversation.kind,
 		edited: {
-			conversationId: target.id,
+			conversationId: conversation.id,
 			targetSentAt: edit.targetSentTimestamp,
-			// The envelope sender is the editor: Signal refuses an edit from anyone
-			// else, so a mismatch means the cache should not apply it.
-			editor: { id: peerId(envelope), label: peerName(envelope) },
+			editor,
 			body,
 		},
 	};
+}
+
+/** An edit from someone else: the envelope's sender is the editor. */
+function mapEdit(envelope: Envelope, edit: EditMessage): MappedEnvelope {
+	const target = conversationTarget(envelope);
+	if (target === null) {
+		return EMPTY;
+	}
+	return editedFor(edit, target, { id: peerId(envelope), label: peerName(envelope) });
 }
 
 function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
@@ -138,6 +167,12 @@ function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
 		};
 	}
 
+	const content = contentOf(data);
+	if (!carriesContent(content)) {
+		return EMPTY;
+	}
+	const expiresAt = expiresAtOf(data);
+
 	return {
 		...EMPTY,
 		message: {
@@ -148,8 +183,8 @@ function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
 			sentAt: data.timestamp,
 			isOutgoing: false,
 			isDeleted: false,
-			...(expiresAtOf(data) === undefined ? {} : { expiresAt: expiresAtOf(data) as number }),
-			...contentOf(data),
+			...(expiresAt === undefined ? {} : { expiresAt }),
+			...content,
 		},
 		conversation: {
 			id: target.id,
@@ -181,7 +216,7 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 
 	// Our own reaction, made on another device.
 	if (sent.reaction !== undefined) {
-		const reaction = mapReaction(target, sent.reaction, SELF_REACTOR);
+		const reaction = mapReaction(target, sent.reaction, SELF_ACTOR);
 		return reaction === null ? EMPTY : { ...EMPTY, conversationKind: target.kind, reaction };
 	}
 
@@ -196,24 +231,44 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 		};
 	}
 
+	// Our own edit, made on another device: the transcript holds `editMessage` and no
+	// data message of its own, so it corrects a stored row and is never a new one.
+	if (sent.editMessage !== undefined) {
+		return editedFor(sent.editMessage, target, SELF_ACTOR);
+	}
+
+	// A transcript with no timestamp cannot name a message: that timestamp is the row's
+	// identity, so building one writes an id ending in "undefined" and a NULL `sent_at`
+	// the cache refuses — an error notice for a payload that simply carried no message.
+	const sentAt = sent.timestamp;
+	if (typeof sentAt !== "number") {
+		return EMPTY;
+	}
+
+	const content = contentOf(sent);
+	if (!carriesContent(content)) {
+		return EMPTY;
+	}
+	const expiresAt = expiresAtOf({ timestamp: sentAt, expiresInSeconds: sent.expiresInSeconds });
+
 	return {
 		...EMPTY,
 		message: {
-			id: `${target.id}:${sent.timestamp}`,
+			id: `${target.id}:${sentAt}`,
 			conversationId: target.id,
 			author: SELF_LABEL,
 			authorId: SELF_AUTHOR_ID,
-			sentAt: sent.timestamp,
+			sentAt,
 			isOutgoing: true,
 			isDeleted: false,
-			...(expiresAtOf(sent) === undefined ? {} : { expiresAt: expiresAtOf(sent) as number }),
-			...contentOf(sent),
+			...(expiresAt === undefined ? {} : { expiresAt }),
+			...content,
 		},
 		conversation: {
 			id: target.id,
 			name: target.name,
 			unreadCount: 0,
-			lastActivityAt: sent.timestamp,
+			lastActivityAt: sentAt,
 			...(sent.expiresInSeconds === undefined || sent.expiresInSeconds === null
 				? {}
 				: { expiresInSeconds: sent.expiresInSeconds }),
