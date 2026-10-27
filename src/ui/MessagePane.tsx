@@ -2,14 +2,14 @@ import { Box, Text } from "ink";
 import { useMemo } from "react";
 import type { Clock } from "../domain/format";
 import { describeAuthor, displayName, headerLine, headerSuffix, showsBody } from "../domain/format";
-import type { QuoteLookup } from "../domain/layout";
+import type { QuoteLookup } from "../domain/rows";
 import {
 	attachmentsForDisplay,
 	bodyForDisplay,
 	messageRowCount,
 	quoteForDisplay,
 	textForDisplay,
-} from "../domain/layout";
+} from "../domain/rows";
 import type { Conversation, Message, MessageId, QuotedMessage } from "../domain/types";
 
 /** What marks the message `r` would answer: one row, and part of the measured header. */

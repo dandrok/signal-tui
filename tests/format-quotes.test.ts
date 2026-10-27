@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Clock } from "../src/domain/format";
 import { VIEW_ONCE_BODY } from "../src/domain/format";
-import { messageRowCount, QUOTE_NOT_LOADED, quoteForDisplay } from "../src/domain/layout";
+import { messageRowCount, QUOTE_NOT_LOADED, quoteForDisplay } from "../src/domain/rows";
 import type { Message } from "../src/domain/types";
 
 /** A stub clock: layout assertions must not depend on ICU formatting. */
