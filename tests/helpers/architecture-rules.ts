@@ -11,7 +11,7 @@ import { dirname, join, relative, resolve } from "node:path";
  */
 
 export interface SourceModule {
-	/** Repo-relative path, e.g. `src/app/state.ts`. */
+	/** Repo-relative path, e.g. `src/app/session/types.ts`. */
 	readonly path: string;
 	readonly lines: number;
 	/** Repo-relative paths this module imports, already resolved. */
