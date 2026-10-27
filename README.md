@@ -282,16 +282,18 @@ src/
   ports/         MessageStore, SignalBackend interfaces
   adapters/
     memory/      demo store       store · read · conversations · message-rules · seed
-    sqlite/      durable cache    store · read · conversations · message-rules · schema
+    sqlite/      durable cache    store · read-messages · conversations · message-rules
+                                  + hydrate (rows → messages) · schema (runs the migrations)
     signal/      JSON-RPC engine  map-envelope/ · schemas/ · json-rpc-client/ · commands
   app/           state/ (one reducer per subject) · session/ · usecases/ (one folder per feature)
   ui/            ink components · message-pane/ · hooks/
   cli.tsx        composition root · link.ts / doctor.ts entry points
 ```
 
-Both stores answer in the same five files, which is what makes them comparable — and
-`tests/store-parity.test.ts` runs one script through both, comparing state *and* return
-values after every step.
+Both stores answer the same three questions in the same three files — which rows to read, what
+a conversation is, what a message becomes — while SQLite additionally hydrates rows and owns
+the schema. `tests/store-parity.test.ts` runs one script through both and compares state *and*
+return values after every step, which is what keeps the two answering alike.
 
 Four rules, all of them tests rather than intentions:
 

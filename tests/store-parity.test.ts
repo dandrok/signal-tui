@@ -42,6 +42,9 @@ async function state(store: MessageStore): Promise<unknown> {
 		conversations: await store.listConversations(),
 		thread,
 		all: await store.listAllMessages(DIRECT),
+		// A page of two, because a limited read is where insertion order and send order stop
+		// agreeing: the wrong rows or the wrong sequence both show up here and nowhere else.
+		page: await store.listMessages(DIRECT, 2),
 		found,
 		timer: await store.expiresInSeconds(DIRECT),
 	});
@@ -122,6 +125,17 @@ const steps: readonly Step[] = [
 	],
 	["our own message is saved", (store) => store.saveMessage(saved())],
 	[
+		"an older message arrives after a newer one, which is how a sync transcript replays",
+		async (store) => {
+			await store.saveMessage(
+				incoming({ id: `${DIRECT}:5000`, sentAt: 5000, body: "hello latest" }),
+			);
+			await store.saveMessage(
+				incoming({ id: `${DIRECT}:4500`, sentAt: 4500, body: "hello earlier" }),
+			);
+		},
+	],
+	[
 		"unread accumulates",
 		async (store) => {
 			await store.incrementUnread(DIRECT, 2);
@@ -176,6 +190,19 @@ const steps: readonly Step[] = [
 				{ emoji: "🎉", author: "Amber", authorId: "uuid-amber" },
 				false,
 			),
+	],
+	[
+		"reactions arrive in the opposite order to the one they are read in",
+		async (store) => {
+			// 🎉 (from Amber) is already there from the step above; 👍 from a second person is
+			// added now, so arrival order and emoji order disagree in both directions.
+			await store.applyReaction(
+				DIRECT,
+				2000,
+				{ emoji: "❤️", author: "Bo", authorId: "uuid-bo" },
+				false,
+			);
+		},
 	],
 	[
 		"a second person's reaction sits beside it",

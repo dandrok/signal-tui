@@ -16,6 +16,17 @@ export function readConversations(conversations: readonly Conversation[]): reado
 	return [...conversations].sort((a, b) => b.lastActivityAt - a.lastActivityAt);
 }
 
+/**
+ * Reading order, and the tie-break the id already carries.
+ *
+ * The store appends on arrival, which is not send order: a sync transcript replays an hour of
+ * history after a fresh message, and a page cut from insertion order then holds the wrong rows
+ * — the newest two by arrival, not by time. SQLite orders in SQL; this is the same rule, and it
+ * is what lets `store-parity.test.ts` compare the two arrays exactly.
+ */
+const inSendOrder = (messages: readonly Message[]): readonly Message[] =>
+	[...messages].sort((left, right) => left.sentAt - right.sentAt || (left.id < right.id ? -1 : 1));
+
 export function readMessages(
 	messages: readonly Message[],
 	reactions: ReadonlyMap<string, readonly Reaction[]>,
@@ -26,8 +37,7 @@ export function readMessages(
 	if (limit <= 0) {
 		return [];
 	}
-	return messages
-		.filter((message) => message.conversationId === conversationId)
+	return inSendOrder(messages.filter((message) => message.conversationId === conversationId))
 		.slice(-limit)
 		.map((message) => hydrate(message, reactions.get(message.id)));
 }
@@ -42,16 +52,13 @@ export function readMessagesBefore(
 	if (limit <= 0) {
 		return [];
 	}
-	return (
+	return inSendOrder(
 		messages
 			.filter((message) => message.conversationId === conversationId)
-			.filter((message) => message.sentAt < beforeSentAt)
-			// The store keeps insertion order; history is read in send order, which is what the
-			// page after this one will expect of the rows it was cut from.
-			.sort((left, right) => left.sentAt - right.sentAt)
-			.slice(-limit)
-			.map((message) => hydrate(message, reactions.get(message.id)))
-	);
+			.filter((message) => message.sentAt < beforeSentAt),
+	)
+		.slice(-limit)
+		.map((message) => hydrate(message, reactions.get(message.id)));
 }
 
 export function readAllMessages(
@@ -59,9 +66,9 @@ export function readAllMessages(
 	reactions: ReadonlyMap<string, readonly Reaction[]>,
 	conversationId: ConversationId,
 ): readonly Message[] {
-	return messages
-		.filter((entry) => entry.conversationId === conversationId)
-		.map((entry) => hydrate(entry, reactions.get(entry.id)));
+	return inSendOrder(messages.filter((entry) => entry.conversationId === conversationId)).map(
+		(entry) => hydrate(entry, reactions.get(entry.id)),
+	);
 }
 
 export function searchMessages(

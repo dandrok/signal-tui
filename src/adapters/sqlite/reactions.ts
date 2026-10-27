@@ -31,7 +31,7 @@ export function loadReactions(
 				`SELECT message_id, author_id, author, emoji
 				 FROM reactions
 				 WHERE message_id IN (${placeholders})
-				 ORDER BY message_id, emoji`,
+				 ORDER BY message_id, emoji, author_id`,
 			)
 			.all(...chunk);
 

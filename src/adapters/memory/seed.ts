@@ -31,12 +31,31 @@ export function initialContent(options: InMemoryStoreOptions): InitialContent {
 	};
 }
 
-/** Same shape the SQLite adapter returns: always a file array, reactions only when present. */
+/**
+ * Same shape the SQLite adapter returns: always a file array, reactions only when present.
+ *
+ * Reactions come out in a defined order — emoji, then author — because the alternative is
+ * "whatever the storage happened to do": here that is arrival order, in SQLite it is the index
+ * order of a query, and both are facts about storage rather than about a message. The contract
+ * the domains share is the sort, and `sqlite/reactions.ts` states the same one in SQL.
+ */
 export function hydrate(message: Message, reactions: readonly Reaction[] | undefined): Message {
 	return {
 		...message,
 		isEdited: message.isEdited === true,
 		attachments: message.attachments ?? [],
-		...(reactions === undefined || reactions.length === 0 ? {} : { reactions }),
+		...(reactions === undefined || reactions.length === 0
+			? {}
+			: {
+					reactions: [...reactions].sort((left, right) =>
+						left.emoji === right.emoji
+							? left.authorId < right.authorId
+								? -1
+								: 1
+							: left.emoji < right.emoji
+								? -1
+								: 1,
+					),
+				}),
 	};
 }

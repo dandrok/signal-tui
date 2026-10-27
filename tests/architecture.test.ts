@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import {
 	findBarrelBypasses,
 	findCycles,
@@ -28,6 +29,23 @@ import {
 
 const ROOT = resolve(import.meta.dir, "..");
 const modules = loadModules(ROOT);
+
+/** Just enough of `biome.json` to pin the rule and its one exemption. */
+interface BiomeConfig {
+	readonly linter: {
+		readonly rules: {
+			readonly style: {
+				readonly noExcessiveLinesPerFile: unknown;
+			};
+		};
+	};
+	readonly overrides?: readonly {
+		readonly includes: readonly string[];
+		readonly linter?: {
+			readonly rules?: { readonly style?: { readonly noExcessiveLinesPerFile?: unknown } };
+		};
+	}[];
+}
 
 /** A module graph from `path → imports`, for the violating shapes below. */
 const graph = (sources: Record<string, readonly string[]>): SourceModule[] =>
@@ -150,6 +168,21 @@ describe("this tree", () => {
 		// conversation selectors no longer reach back through the reducer. The allowlist is
 		// empty on purpose — a cycle has no reason to exist here.
 		expect(findCycles(modules)).toEqual([]);
+	});
+
+	test("keeps the 200-line rule at error level, and exempts only tests", () => {
+		// The rule above is half the claim. The other half is that `bun run verify` fails on a
+		// long file *before* this test runs — which is only true while biome holds the same
+		// number at error level, and while no override quietly exempts a source folder.
+		const config = JSON.parse(readFileSync(join(ROOT, "biome.json"), "utf8")) as BiomeConfig;
+		expect(config.linter.rules.style.noExcessiveLinesPerFile).toEqual({
+			level: "error",
+			options: { maxLines: 200 },
+		});
+		const exemptions = (config.overrides ?? [])
+			.filter((entry) => entry.linter?.rules?.style?.noExcessiveLinesPerFile !== undefined)
+			.map((entry) => entry.includes);
+		expect(exemptions).toEqual([["tests/**"]]);
 	});
 
 	test("has no file over 200 lines", () => {
