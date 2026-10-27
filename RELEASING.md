@@ -38,11 +38,26 @@ the workflow authenticates through OIDC and generates provenance.
 
 1. Bump `version` in `package.json` (the binary reads it, so they cannot drift).
 2. Open a PR, merge it.
-3. Actions → **release** → *Run workflow* with `dry_run: false`.
+3. Actions → **release** → *Run workflow* with `dry_run` set to **true** — install, `bun run verify`
+   and `bun pm pack --dry-run`, without publishing. It proves the environment and OIDC still
+   work *before* the version number is spent, and a number cannot be reused.
+4. Run it again with `dry_run: false`.
 
 The workflow runs `bun run verify`, checks the packed contents, then
 `npm publish --provenance`. Provenance links the published tarball to this commit
 and workflow run.
+
+5. **Tag the published commit, not `main`.** By the time you tag, `main` may have moved; the
+   authority is `gitHead` on the published version:
+
+   ```sh
+   npm view signal-tui@<version> gitHead     # the commit npm built the tarball from
+   git tag -a v<version> <that-sha> -m "<version>"
+   git push origin v<version>
+   ```
+
+   A tag on a later commit claims something npm did not publish, and the release notes and
+   provenance both hang off this tag.
 
 ## If a release is wrong
 

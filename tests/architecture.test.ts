@@ -85,11 +85,15 @@ describe("the rules fire on a violating graph", () => {
 		]);
 	});
 
-	test("finds a cycle that runs through a barrel", () => {
+	test("finds the three-file cycle this repo actually had", () => {
+		// The real shape, kept as the fixture: the reducer, the history page and the
+		// conversation selectors each imported the next, until the split moved their shared
+		// vocabulary into `state/types.ts`. A detector that only ever sees two-file cycles is
+		// not the detector this repo needed.
 		const cyclic = graph({
-			"src/app/state.ts": ["src/app/history.ts"],
-			"src/app/history.ts": ["src/app/conversations.ts"],
-			"src/app/conversations.ts": ["src/app/state.ts"],
+			"src/app/state/state.ts": ["src/app/state/reduce-history.ts"],
+			"src/app/state/reduce-history.ts": ["src/app/state/selectors.ts"],
+			"src/app/state/selectors.ts": ["src/app/state/state.ts"],
 		});
 
 		expect(findCycles(cyclic)).toHaveLength(1);
