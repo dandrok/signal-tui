@@ -7,6 +7,7 @@ import type {
 	MessageId,
 } from "../../domain/types";
 import { SELF_AUTHOR_ID } from "../../domain/types";
+import { mapEditPayload } from "./map-edit";
 import type { MappedReaction } from "./map-reaction";
 import { mapReaction } from "./map-reaction";
 import { type MappedReceipt, mapReceipt } from "./map-receipt";
@@ -19,8 +20,7 @@ import {
 	type Target,
 } from "./map-target";
 import type { DataMessage, EditMessage, Envelope, SentMessage } from "./schemas";
-import { dataMessageSchema } from "./schemas";
-import { type Content, contentOf, expiresAtOf, textOf } from "./text";
+import { type Content, contentOf, expiresAtOf } from "./text";
 
 /**
  * Identity our own actions carry when the engine echoes them back as a transcript: a
@@ -91,38 +91,22 @@ const carriesContent = (content: Content): boolean =>
 	content.body.length > 0 || content.attachments.length > 0 || content.isViewOnce === true;
 
 /**
- * An edit's replacement text, as an event rather than a message.
- *
- * Two payloads carry one: a peer's edit (`envelope.editMessage`) and one of our own
- * edits echoed from another device (inside `syncMessage.sentMessage`). Both hold a *copy*
- * of the data message with the correction inside it, so the conversation comes from that
- * inner message's group info and falls back to the conversation the payload addressed.
- * Only real text may replace a body: `bodyOf` answers "[attachment]" for a data message
- * that carries files and nothing else, and an edit to nothing is not a thing Signal
- * produces.
+ * An edit, wrapped as an event rather than a message. The rule that decides which
+ * conversation it lands in and whether it carries real text lives in `map-edit.ts`.
  */
-function editedFor(edit: EditMessage, target: Target, editor: EditAuthor): MappedEnvelope {
-	const parsed =
-		edit.dataMessage === null || edit.dataMessage === undefined
-			? null
-			: dataMessageSchema.safeParse(edit.dataMessage);
-	const data = parsed?.success === true ? parsed.data : undefined;
-	const conversation =
-		data?.groupInfo === undefined ? target : (groupTarget(data.groupInfo) ?? target);
-	const body = data === undefined ? "" : textOf(data);
-
-	if (body.length === 0) {
-		return { ...EMPTY, conversationKind: conversation.kind };
+function editEnvelope(edit: EditMessage, target: Target, editor: EditAuthor): MappedEnvelope {
+	const mapped = mapEditPayload(edit, target, editor);
+	if (mapped === null) {
+		return { ...EMPTY, conversationKind: target.kind };
 	}
-
 	return {
 		...EMPTY,
-		conversationKind: conversation.kind,
+		conversationKind: mapped.conversationKind,
 		edited: {
-			conversationId: conversation.id,
-			targetSentAt: edit.targetSentTimestamp,
-			editor,
-			body,
+			conversationId: mapped.conversationId,
+			targetSentAt: mapped.targetSentAt,
+			editor: mapped.editor,
+			body: mapped.body,
 		},
 	};
 }
@@ -133,7 +117,7 @@ function mapEdit(envelope: Envelope, edit: EditMessage): MappedEnvelope {
 	if (target === null) {
 		return EMPTY;
 	}
-	return editedFor(edit, target, { id: peerId(envelope), label: peerName(envelope) });
+	return editEnvelope(edit, target, { id: peerId(envelope), label: peerName(envelope) });
 }
 
 function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelope {
@@ -234,7 +218,7 @@ function mapSent(sent: SentMessage): MappedEnvelope {
 	// Our own edit, made on another device: the transcript holds `editMessage` and no
 	// data message of its own, so it corrects a stored row and is never a new one.
 	if (sent.editMessage !== undefined) {
-		return editedFor(sent.editMessage, target, SELF_ACTOR);
+		return editEnvelope(sent.editMessage, target, SELF_ACTOR);
 	}
 
 	// A transcript with no timestamp cannot name a message: that timestamp is the row's
