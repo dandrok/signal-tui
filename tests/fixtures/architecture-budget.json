@@ -5,9 +5,7 @@
 	"src/adapters/signal/json-rpc-client.ts": 294,
 	"src/adapters/memory/store.ts": 284,
 	"src/adapters/signal/signal-cli-backend.ts": 284,
-	"src/ui/Root.tsx": 262,
 	"src/adapters/sqlite/store.ts": 252,
 	"src/ui/MessagePane.tsx": 228,
-	"src/ui/App.tsx": 213,
 	"src/adapters/signal/schemas.ts": 201
 }

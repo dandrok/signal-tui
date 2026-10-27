@@ -1,0 +1,63 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Session } from "../../app/session";
+import type { Action, AppState } from "../../app/state";
+import { emptyState, reduce, replyTarget, selectedConversation } from "../../app/state";
+
+/**
+ * The reducer plus the one side effect it cannot perform itself: a submitted draft is sent
+ * through the session, and the target it answers is resolved *before* the dispatch clears it.
+ *
+ * `version` is a counter, not a value: it ticks whenever the session says the cache changed,
+ * and the hooks that read the store take it as a dependency to reload.
+ */
+export interface RootState {
+	readonly state: AppState;
+	readonly dispatch: (action: Action) => void;
+	readonly version: number;
+}
+
+const describe = (error: unknown): string =>
+	error instanceof Error ? error.message : String(error);
+
+export function useRootState(session: Session | undefined): RootState {
+	const [state, setState] = useState<AppState>(emptyState);
+	const [version, setVersion] = useState(0);
+	const stateRef = useRef(state);
+
+	useEffect(() => {
+		stateRef.current = state;
+	}, [state]);
+
+	const dispatch = useCallback(
+		(action: Action): void => {
+			if (action.type === "draft-submitted" && session !== undefined) {
+				const body = stateRef.current.draft.trim();
+				const conversation = selectedConversation(stateRef.current);
+				// Resolved before the reducer clears it: the target is what makes this a reply
+				// rather than a message, and only the state knows which row it names.
+				const replyTo = replyTarget(stateRef.current);
+				if (body.length > 0 && conversation !== undefined) {
+					void session.send(conversation.id, body, replyTo ?? undefined).catch((error: unknown) => {
+						setState((current) =>
+							reduce(current, {
+								type: "notice",
+								notice: { kind: "info", text: `send failed: ${describe(error)}` },
+							}),
+						);
+					});
+				}
+			}
+			setState((current) => reduce(current, action));
+		},
+		[session],
+	);
+
+	useEffect(() => {
+		if (session === undefined) {
+			return;
+		}
+		return session.onChange(() => setVersion((current) => current + 1));
+	}, [session]);
+
+	return { state, dispatch, version };
+}
