@@ -22,6 +22,14 @@ describe("parseArgs", () => {
 		expect(parse(["--demo"])).toEqual({ mode: "demo" });
 	});
 
+	test("--ignore-attachments is the flag's say, and absent is not false", () => {
+		expect(parse(["--demo", "--ignore-attachments"])).toEqual({
+			mode: "demo",
+			ignoreAttachments: true,
+		});
+		expect(parse(["--demo"])).not.toHaveProperty("ignoreAttachments");
+	});
+
 	test("--no-notify and --notify are the flag's say, and absent is not false", () => {
 		expect(parse(["--demo", "--no-notify"])).toEqual({ mode: "demo", notify: false });
 		expect(parse(["--demo", "--notify"])).toEqual({ mode: "demo", notify: true });

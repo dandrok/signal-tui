@@ -21,6 +21,7 @@ export class SettingsError extends Error {}
 /** What a config file may say. Absent means "this file has no opinion". */
 export interface SettingsFile {
 	readonly notify?: boolean;
+	readonly ignoreAttachments?: boolean;
 	readonly db?: string;
 	readonly engineArgs?: readonly string[];
 }
@@ -29,12 +30,14 @@ export interface SettingsFile {
 export interface Settings {
 	/** Desktop toast and bell for a message in another thread. */
 	readonly notify: boolean;
+	/** Tell the engine not to download the files that arrive with messages. */
+	readonly ignoreAttachments: boolean;
 	/** Extra arguments for the engine, placed before its subcommand. */
 	readonly engineArgs: readonly string[];
 }
 
 /** One table, used for validation and for the error that names what is allowed. */
-const KNOWN = ["notify", "db", "engineArgs"] as const;
+const KNOWN = ["notify", "ignoreAttachments", "db", "engineArgs"] as const;
 
 /** `$XDG_CONFIG_HOME/signal-tui/config.json`, falling back to `~/.config`. */
 export function configPath(
@@ -71,6 +74,7 @@ export function parseSettingsFile(text: string, path: string): SettingsFile {
 	}
 
 	let notify: boolean | undefined;
+	let ignoreAttachments: boolean | undefined;
 	let db: string | undefined;
 	let engineArgs: readonly string[] | undefined;
 	for (const [key, value] of Object.entries(raw)) {
@@ -79,6 +83,11 @@ export function parseSettingsFile(text: string, path: string): SettingsFile {
 				throw new SettingsError(`${path}: "notify" must be true or false`);
 			}
 			notify = value;
+		} else if (key === "ignoreAttachments") {
+			if (typeof value !== "boolean") {
+				throw new SettingsError(`${path}: "ignoreAttachments" must be true or false`);
+			}
+			ignoreAttachments = value;
 		} else if (key === "db") {
 			if (typeof value !== "string" || value.trim().length === 0) {
 				throw new SettingsError(`${path}: "db" must be a file path`);
@@ -94,6 +103,7 @@ export function parseSettingsFile(text: string, path: string): SettingsFile {
 		}
 	}
 	return {
+		...(ignoreAttachments === undefined ? {} : { ignoreAttachments }),
 		...(notify === undefined ? {} : { notify }),
 		...(db === undefined ? {} : { db }),
 		...(engineArgs === undefined ? {} : { engineArgs }),
@@ -137,26 +147,42 @@ export function cacheDefault(
 }
 
 /**
- * What a run's preferences are, once the flag has had its say.
+ * What a run's preferences are, once the flags have had their say.
  *
- * `notify` is the only setting a flag can override today: `--db` is already resolved by
- * `parseArgs`, and engine arguments are a standing preference, not something to retype per run.
+ * `notify` and `ignoreAttachments` are the settings a flag can override today: `--db` is already
+ * resolved by `parseArgs`, and engine arguments are a standing preference, not something to
+ * retype per run.
  */
 export function resolveSettings(sources: {
 	readonly file: SettingsFile;
 	readonly env?: Readonly<Record<string, string | undefined>>;
 	/** `--no-notify` (false), `--notify` (true), or absent when the flag was not given. */
 	readonly notify?: boolean | undefined;
+	readonly ignoreAttachments?: boolean | undefined;
 }): Settings {
 	const env = sources.env ?? process.env;
 	return {
-		notify: sources.notify ?? envNotify(env.SIGNAL_TUI_NOTIFY) ?? sources.file.notify ?? true,
+		notify:
+			sources.notify ??
+			envFlag("SIGNAL_TUI_NOTIFY", env.SIGNAL_TUI_NOTIFY) ??
+			sources.file.notify ??
+			true,
+		ignoreAttachments:
+			sources.ignoreAttachments ??
+			envFlag("SIGNAL_TUI_IGNORE_ATTACHMENTS", env.SIGNAL_TUI_IGNORE_ATTACHMENTS) ??
+			sources.file.ignoreAttachments ??
+			false,
 		engineArgs: sources.file.engineArgs ?? [],
 	};
 }
 
-/** `SIGNAL_TUI_NOTIFY=off` for a shell that always starts the client in a tmux pane. */
-function envNotify(value: string | undefined): boolean | undefined {
+/**
+ * A boolean from the environment, spelled the way a shell spells one.
+ *
+ * A value nobody can interpret is refused rather than read as "on": an environment variable set
+ * to `maybe` is a mistake, and guessing at it turns a typo into a setting the user cannot see.
+ */
+function envFlag(name: string, value: string | undefined): boolean | undefined {
 	const text = value?.trim().toLowerCase() ?? "";
 	if (text.length === 0) {
 		return undefined;
@@ -167,5 +193,5 @@ function envNotify(value: string | undefined): boolean | undefined {
 	if (["0", "false", "off", "no"].includes(text)) {
 		return false;
 	}
-	throw new SettingsError(`SIGNAL_TUI_NOTIFY must be on or off, got: ${value ?? ""}`);
+	throw new SettingsError(`${name} must be on or off, got: ${value ?? ""}`);
 }

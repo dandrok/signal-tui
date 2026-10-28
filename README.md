@@ -107,6 +107,7 @@ signal-tui --account +48123456789
 | `--account <number>` | the linked account to act as |
 | `--db <path>` | cache location (default `$XDG_DATA_HOME/signal-tui/cache.db`, else `~/.local/share/signal-tui/cache.db`) |
 | `--notify` / `--no-notify` | desktop toast and bell for a message in another thread (on by default) |
+| `--ignore-attachments` | do not download the files that arrive with messages |
 | `--demo` | sample data, no account |
 | `--version`, `--help` | what they say |
 
@@ -121,6 +122,7 @@ Standing preferences live in one JSON file — `$XDG_CONFIG_HOME/signal-tui/conf
 ```json
 {
   "notify": false,
+  "ignoreAttachments": true,
   "db": "/home/you/.local/share/signal-tui/cache.db",
   "engineArgs": ["--config", "/home/you/.config/signal-cli"]
 }
@@ -129,13 +131,21 @@ Standing preferences live in one JSON file — `$XDG_CONFIG_HOME/signal-tui/conf
 | Key | Meaning |
 |---|---|
 | `notify` | toast and bell for a message in a thread you are not looking at |
+| `ignoreAttachments` | stop `signal-cli` downloading every file that arrives into its own directory |
 | `db` | where the cache lives — the same thing `--db` sets, for every run |
-| `engineArgs` | extra arguments for `signal-cli`, placed before its `jsonRpc` subcommand (its global options live there) |
+| `engineArgs` | extra arguments for `signal-cli`, placed before its `jsonRpc` subcommand — they must be options of `signal-cli` itself (a `jsonRpc` option placed there is rejected) |
 
 **`flag > env > file > default`**, per setting: `--db` beats `SIGNAL_TUI_DB`, which beats `"db"`;
 `--notify`/`--no-notify` beats `SIGNAL_TUI_NOTIFY` (`on`/`off`, `1`/`0`, `true`/`false`), which
-beats `"notify"`. Engine arguments are file-only — they are a standing preference, not something
-to retype per run.
+beats `"notify"`; `--ignore-attachments` beats `SIGNAL_TUI_IGNORE_ATTACHMENTS`, which beats
+`"ignoreAttachments"`. Engine arguments are file-only — they are a standing preference, not
+something to retype per run.
+
+**`ignoreAttachments` costs you the file names.** `signal-cli` never downloads a file it was told
+to ignore, so it cannot report a filename: the pane keeps showing the message and says
+`📎 image/jpeg (1.6 MB)` instead of `📎 photo.jpg (1.6 MB)`. It is the honest trade for a client
+that does not want a copy of every attachment a stranger sends sitting in
+`~/.local/share/signal-cli/attachments`, where nothing deletes it.
 
 A config file that cannot be used is an error rather than a shrug: an unknown key, a value of the
 wrong type or unreadable JSON is reported with the path and the setting, and the client exits.

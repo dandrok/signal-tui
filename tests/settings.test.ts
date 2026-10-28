@@ -31,11 +31,14 @@ const refuse = (text: string): string => {
 };
 
 describe("the config file", () => {
-	test("reads the three settings it knows", () => {
+	test("reads the settings it knows", () => {
 		expect(
-			parse('{"notify": false, "db": "/tmp/cache.db", "engineArgs": ["--config", "/etc/sc"]}'),
+			parse(
+				'{"notify": false, "ignoreAttachments": true, "db": "/tmp/cache.db", "engineArgs": ["--config", "/etc/sc"]}',
+			),
 		).toEqual({
 			notify: false,
+			ignoreAttachments: true,
 			db: "/tmp/cache.db",
 			engineArgs: ["--config", "/etc/sc"],
 		});
@@ -57,6 +60,7 @@ describe("the config file", () => {
 	test("refuses a value of the wrong type, naming the setting", () => {
 		expect(refuse('{"notify": "off"}')).toContain("notify");
 		expect(refuse('{"notify": 0}')).toContain("notify");
+		expect(refuse('{"ignoreAttachments": "yes"}')).toContain("ignoreAttachments");
 		expect(refuse('{"db": ""}')).toContain("db");
 		expect(refuse('{"db": 42}')).toContain("db");
 		expect(refuse('{"engineArgs": "--config"}')).toContain("engineArgs");
@@ -119,7 +123,34 @@ describe("the cache location", () => {
 
 describe("what a run settles on", () => {
 	test("notification on, by default", () => {
-		expect(resolveSettings({ file: {}, env: {} })).toEqual({ notify: true, engineArgs: [] });
+		expect(resolveSettings({ file: {}, env: {} })).toEqual({
+			notify: true,
+			ignoreAttachments: false,
+			engineArgs: [],
+		});
+	});
+
+	test("attachments are downloaded by default, and the flag beats env beats file", () => {
+		// The engine writes every received file to its own directory unless told otherwise, so
+		// the default is the behaviour the user already has.
+		expect(resolveSettings({ file: {}, env: {} }).ignoreAttachments).toBe(false);
+
+		expect(resolveSettings({ file: { ignoreAttachments: true }, env: {} }).ignoreAttachments).toBe(
+			true,
+		);
+		expect(
+			resolveSettings({
+				file: { ignoreAttachments: false },
+				env: { SIGNAL_TUI_IGNORE_ATTACHMENTS: "on" },
+			}).ignoreAttachments,
+		).toBe(true);
+		expect(
+			resolveSettings({
+				file: { ignoreAttachments: true },
+				env: { SIGNAL_TUI_IGNORE_ATTACHMENTS: "on" },
+				ignoreAttachments: false,
+			}).ignoreAttachments,
+		).toBe(false);
 	});
 
 	test("the flag beats the environment, which beats the file", () => {
