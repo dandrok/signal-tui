@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AppState } from "../src/app/state";
 import { emptyState, reduce } from "../src/app/state";
-import { type KeyLike, keyAction } from "../src/ui/keymap";
+import { type KeyLike, keyAction } from "../src/ui/keys";
 
 /**
  * The keymap is a pure function now, so the routing rules can be tested without a terminal
@@ -119,7 +119,7 @@ describe("keymap", () => {
 		expect(keyAction({ ...thread, focus: "conversations" }, "r", key())).toBeNull();
 	});
 
-	test("x, e and d open their prompts, and only where a message is pointed at", () => {
+	test("x, e, d and f open their prompts, and only where a message is pointed at", () => {
 		expect(keyAction(thread, "x", key())).toEqual({
 			kind: "action",
 			action: { type: "prompt-opened", kind: "reaction" },
@@ -132,11 +132,15 @@ describe("keymap", () => {
 			kind: "action",
 			action: { type: "prompt-opened", kind: "delete" },
 		});
+		expect(keyAction(thread, "f", key())).toEqual({
+			kind: "action",
+			action: { type: "prompt-opened", kind: "forward" },
+		});
 		expect(keyAction(thread, "D", key())).toEqual({
 			kind: "action",
 			action: { type: "hide-requested" },
 		});
-		for (const input of ["x", "e", "d", "D"]) {
+		for (const input of ["x", "e", "d", "f", "D"]) {
 			expect(keyAction({ ...thread, focus: "conversations" }, input, key())).toBeNull();
 		}
 	});
@@ -205,6 +209,39 @@ describe("keymap", () => {
 
 	test("an unbound key does nothing", () => {
 		expect(keyAction(thread, "z", key())).toBeNull();
+	});
+
+	test("f opens the forward picker, and the arrows walk the other conversations", () => {
+		// Two other threads, so the walk has somewhere to go and a wrap to prove.
+		const threeThreads = state({
+			conversations: [
+				conversation,
+				{ ...conversation, id: "uuid-bob", name: "Bob" },
+				{ ...conversation, id: "uuid-carol", name: "Carol" },
+			],
+			selectedId: "uuid-alice",
+			focus: "messages",
+			messagesByConversation: { "uuid-alice": [message(1)] },
+		});
+		const opened = reduce(threeThreads, { type: "prompt-opened", kind: "forward" });
+
+		expect(opened.prompt).toEqual({
+			kind: "forward",
+			targetId: "uuid-alice:1",
+			draft: "",
+			pick: 0,
+			// Frozen when the prompt opened: the list is ordered by activity, so a live read
+			// could point this index at somebody else by the time `⏎` arrives.
+			candidates: [
+				{ ...conversation, id: "uuid-bob", name: "Bob" },
+				{ ...conversation, id: "uuid-carol", name: "Carol" },
+			],
+		});
+		// The thread being forwarded from is not in the list, so one step down is the second
+		// of two and the next wraps back to the first.
+		const second = reduce(opened, { type: "prompt-moved", delta: 1 });
+		expect(second.prompt?.pick).toBe(1);
+		expect(reduce(second, { type: "prompt-moved", delta: 1 }).prompt?.pick).toBe(0);
 	});
 
 	test("j in the conversation list selects the next thread", () => {

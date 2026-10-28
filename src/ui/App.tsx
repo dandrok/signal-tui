@@ -8,7 +8,7 @@ import { ConversationList } from "./ConversationList";
 import { clockFor, localTimeZone } from "./clock";
 import { hintsFor } from "./hints";
 import { useTerminalSize } from "./hooks/useTerminalSize";
-import { keyAction } from "./keymap";
+import { keyAction } from "./keys";
 import { MessagePane } from "./message-pane";
 import { PromptBar } from "./PromptBar";
 import { SearchPane } from "./SearchPane";
@@ -20,7 +20,7 @@ export interface AppProps {
 
 /**
  * The layout, and nothing else: sizes, panes, the composer and the status line. What a key
- * does lives in `keymap.ts`, what the line says in `hints.ts`.
+ * does lives in `keys/`, what the line says in `hints.ts`.
  */
 export function App({ state, dispatch }: AppProps) {
 	const { exit } = useApp();

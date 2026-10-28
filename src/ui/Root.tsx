@@ -32,7 +32,7 @@ const stdoutWriter: Writer = (chunk) => {
  *
  * Each hook owns exactly one conversation with the outside world — the cache, the session's
  * redraw signal, the notification writer — so a new feature adds a hook (or a key to
- * `keymap.ts`) instead of another effect in a file that already holds nine.
+ * `keys/`) instead of another effect in a file that already holds nine.
  */
 export function Root({ store, session, write = stdoutWriter }: RootProps) {
 	const { state, dispatch, version } = useRootState(session);

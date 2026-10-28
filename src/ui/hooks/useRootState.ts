@@ -10,6 +10,7 @@ import {
 } from "../../app/state";
 import { deleteFor } from "../../app/usecases/delete";
 import { editFor } from "../../app/usecases/edit";
+import { forwardNotice, forwardPlan } from "../../app/usecases/forward";
 import { emojiInputSummary, reactionFor, targetedMessage } from "../../app/usecases/react";
 
 /**
@@ -121,6 +122,32 @@ export function useRootState(session: Session | undefined): RootState {
 							refused("only your own message can be deleted for everyone");
 						} else {
 							void session.remove(conversation.id, target).catch(failed("delete"));
+						}
+					}
+
+					if (prompt.kind === "forward") {
+						// A forward is not a transport method: Signal has no such command, so it
+						// is a plain send addressed to another conversation, and `send` writes
+						// the local echo that makes the copy visible here at all.
+						const plan = forwardPlan(
+							message,
+							conversation.id,
+							prompt.candidates ?? [],
+							prompt.draft,
+							prompt.pick,
+						);
+						if (plan.kind === "refused") {
+							refused(plan.reason);
+						} else {
+							void session
+								.send(plan.to.id, plan.body)
+								.then(() => {
+									apply({
+										type: "notice",
+										notice: { kind: "info", text: forwardNotice(plan.to) },
+									});
+								})
+								.catch(failed("forward"));
 						}
 					}
 				}
