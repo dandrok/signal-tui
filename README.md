@@ -346,6 +346,13 @@ and its permissions. It runs from a clone *or* from the installed package direct
 the tarball ships `src/` and `package.json`. What it does **not** offer is a
 `signal-tui doctor` subcommand — only `signal-tui` itself is a global binary.
 
+The engine row compares against two different versions, because one of them is not
+enough. Below `0.14.0` is a **failure**: the commands this client drives did not exist.
+Below `0.14.9` — the release this build was actually written and read against — is a
+**warning**, since signal-cli tracks a protocol that moves and releases a few months old
+stop working; it may answer today and fail next week. Above it is fine but untested, and
+the row says which of those you are looking at rather than a bare tick.
+
 ## From source
 
 ```sh

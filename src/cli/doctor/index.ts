@@ -16,9 +16,11 @@ export type {
 } from "./types";
 export {
 	atLeast,
+	compareVersions,
 	MINIMUM_BUN,
 	MINIMUM_JAVA,
 	MINIMUM_SIGNAL_CLI,
 	parseVersion,
+	VERIFIED_SIGNAL_CLI,
 	type Version,
 } from "./version";

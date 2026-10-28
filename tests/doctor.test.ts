@@ -3,9 +3,11 @@ import type { Check, CommandRunner, Probes } from "../src/cli/doctor";
 import {
 	atLeast,
 	collectProbes,
+	compareVersions,
 	evaluateChecks,
 	hasFailures,
 	parseVersion,
+	VERIFIED_SIGNAL_CLI,
 } from "../src/cli/doctor";
 
 const probes = (overrides: Partial<Probes> = {}): Probes => ({
@@ -92,6 +94,58 @@ describe("evaluateChecks", () => {
 
 		expect(check?.status).toBe("fail");
 		expect(check?.detail).toContain("older than 0.14");
+	});
+
+	test("warns about an engine older than the release this build was verified against", () => {
+		// Above the floor and still a problem: 0.14.0 answers today and stops answering when
+		// Signal moves. A row that only says "ok, newer than 0.14.0" is the lie this fixes.
+		const check = find(
+			evaluateChecks(probes({ signalCliVersion: "signal-cli 0.14.2" }), {}),
+			"signal-cli",
+		);
+
+		expect(check?.status).toBe("warn");
+		expect(check?.detail).toContain("0.14.2");
+		expect(check?.detail).toContain(VERIFIED_SIGNAL_CLI.join("."));
+		expect(check?.hint).toContain("three months");
+	});
+
+	test("says nothing extra when the engine is the release it was verified against", () => {
+		const check = find(
+			evaluateChecks(
+				probes({ signalCliVersion: `signal-cli ${VERIFIED_SIGNAL_CLI.join(".")}` }),
+				{},
+			),
+			"signal-cli",
+		);
+
+		expect(check).toEqual({
+			name: "signal-cli",
+			status: "ok",
+			detail: `signal-cli ${VERIFIED_SIGNAL_CLI.join(".")}`,
+		});
+	});
+
+	test("accepts a newer engine, and names the one it was tested against", () => {
+		// Newer is untested, not wrong: a hint rather than a warning, because guessing that an
+		// unreleased-in-this-build version is broken would be worse than saying so plainly.
+		const check = find(
+			evaluateChecks(probes({ signalCliVersion: "signal-cli 0.15.1" }), {}),
+			"signal-cli",
+		);
+
+		expect(check?.status).toBe("ok");
+		expect(check?.detail).toContain("newer than");
+		expect(check?.hint).toContain("protocol change");
+	});
+
+	test("compares versions by each part, not by the text", () => {
+		expect(compareVersions([0, 14, 9], [0, 14, 9])).toBe(0);
+		expect(compareVersions([0, 14, 10], [0, 14, 9])).toBe(1);
+		expect(compareVersions([0, 9, 99], [0, 14, 0])).toBe(-1);
+		expect(atLeast([0, 14, 0], [0, 14, 0])).toBe(true);
+		expect(atLeast([0, 13, 99], [0, 14, 0])).toBe(false);
+		expect(atLeast(null, [0, 14, 0])).toBe(false);
 	});
 
 	test("does not require java for a working native build", () => {
