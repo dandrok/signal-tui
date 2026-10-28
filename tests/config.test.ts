@@ -22,6 +22,20 @@ describe("parseArgs", () => {
 		expect(parse(["--demo"])).toEqual({ mode: "demo" });
 	});
 
+	test("--no-notify and --notify are the flag's say, and absent is not false", () => {
+		expect(parse(["--demo", "--no-notify"])).toEqual({ mode: "demo", notify: false });
+		expect(parse(["--demo", "--notify"])).toEqual({ mode: "demo", notify: true });
+		// Absent means the config file and the environment still decide; it must not read as
+		// "the flag said off".
+		expect(parse(["--demo"])).not.toHaveProperty("notify");
+		expect(parse(["--account", "+48123456789", "--no-notify"])).toEqual({
+			mode: "live",
+			account: "+48123456789",
+			dbPath: "/tmp/cache.db",
+			notify: false,
+		});
+	});
+
 	test("selects live mode with the account and default database", () => {
 		expect(parse(["--account", "+48123456789"])).toEqual({
 			mode: "live",

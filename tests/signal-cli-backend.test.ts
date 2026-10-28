@@ -14,6 +14,20 @@ describe("defaultCommand", () => {
 			"--receive-mode=manual",
 		]);
 	});
+
+	test("puts the user's engine arguments before the subcommand", () => {
+		// A `--config` or a proxy flag is global to signal-cli; the same argument after
+		// `jsonRpc` is rejected by that subcommand's own parser.
+		expect(defaultCommand("+48123456789", ["--config", "/etc/sc"])).toEqual([
+			"signal-cli",
+			"-a",
+			"+48123456789",
+			"--config",
+			"/etc/sc",
+			"jsonRpc",
+			"--receive-mode=manual",
+		]);
+	});
 });
 
 describe("unwrapNotification", () => {

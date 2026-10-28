@@ -17,6 +17,7 @@ export function useIncomingNotices(
 	selectedId: string | null,
 	oldestSentAt: number | undefined,
 	write: Writer,
+	notify: boolean,
 	dispatch: (action: Action) => void,
 ): void {
 	useEffect(() => {
@@ -33,7 +34,11 @@ export function useIncomingNotices(
 				}
 				return;
 			}
-			write(incomingSequence(notice));
+			// Off silences the toast and the bell only. The unread badge and the window title
+			// are not interruptions, and a muted pane still has to say something arrived.
+			if (notify) {
+				write(incomingSequence(notice));
+			}
 		});
-	}, [session, write, selectedId, oldestSentAt, dispatch]);
+	}, [session, write, notify, selectedId, oldestSentAt, dispatch]);
 }

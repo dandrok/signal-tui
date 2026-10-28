@@ -18,6 +18,11 @@ export interface RootProps {
 	readonly session?: Session | undefined;
 	/** Where notification sequences go. Injectable so tests can collect them. */
 	readonly write?: Writer | undefined;
+	/**
+	 * Whether an arriving message may ring and toast. Off is a preference, not a mute of the
+	 * inbox: the unread badge and the window title still count what arrived.
+	 */
+	readonly notify?: boolean | undefined;
 }
 
 /** Nothing is written unless a person is looking at a terminal: piped output stays clean. */
@@ -34,7 +39,7 @@ const stdoutWriter: Writer = (chunk) => {
  * redraw signal, the notification writer — so a new feature adds a hook (or a key to
  * `keys/`) instead of another effect in a file that already holds nine.
  */
-export function Root({ store, session, write = stdoutWriter }: RootProps) {
+export function Root({ store, session, write = stdoutWriter, notify = true }: RootProps) {
 	const { state, dispatch, version } = useRootState(session);
 
 	// Derived once per render: the hooks below compare against the thread on screen, and a
@@ -50,7 +55,7 @@ export function Root({ store, session, write = stdoutWriter }: RootProps) {
 	useOlderPage(store, state.olderRequested, conversationId, oldestSentAt, dispatch);
 	useMarkRead(session, conversationId, version);
 	useSearchMode(store, state.search?.query ?? null, dispatch);
-	useIncomingNotices(session, state.selectedId, oldestSentAt, write, dispatch);
+	useIncomingNotices(session, state.selectedId, oldestSentAt, write, notify, dispatch);
 	useWindowTitle(state.conversations, write);
 
 	return <App state={state} dispatch={dispatch} />;

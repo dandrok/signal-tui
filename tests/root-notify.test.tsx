@@ -49,7 +49,9 @@ const toasts = (chunks: readonly string[]): string[] =>
 	chunks.filter((chunk) => chunk.includes("\u001b]9;"));
 
 /** Renders `Root` and collects everything it writes, with a stable writer for the effect. */
-const rendered = (): {
+const rendered = (
+	notify = true,
+): {
 	written: string[];
 	incoming: (notice: IncomingNotice) => void;
 } => {
@@ -58,7 +60,7 @@ const rendered = (): {
 		chunks.push(chunk);
 	};
 	const { session, incoming } = fakeSession();
-	render(<Root store={new InMemoryStore()} session={session} write={write} />);
+	render(<Root store={new InMemoryStore()} session={session} write={write} notify={notify} />);
 	return { written: chunks, incoming };
 };
 
@@ -92,5 +94,30 @@ describe("Root notifications", () => {
 			() => written.some((chunk) => chunk.includes("\u001b]2;signal-tui · 9 unread")),
 			"the unread title",
 		);
+	});
+
+	test("with notifications off, the same arrival says nothing at all", async () => {
+		// Bracketed by a positive control: the same notice, through the same path, with the
+		// preference on, has to produce a toast — otherwise the empty list below would pass
+		// for a writer that was never subscribed.
+		const off = rendered(false);
+		await waitFor(
+			() => off.written.some((chunk) => chunk.includes("9 unread")),
+			"the store to load",
+		);
+		off.incoming({ message: message("c-family"), conversationName: "Family" });
+		await waitFor(
+			() => off.written.some((chunk) => chunk.includes("\u001b]2;")),
+			"the title, which is not a notification",
+		);
+		expect(toasts(off.written)).toHaveLength(0);
+
+		const on = rendered();
+		await waitFor(
+			() => on.written.some((chunk) => chunk.includes("9 unread")),
+			"the store to load",
+		);
+		on.incoming({ message: message("c-family"), conversationName: "Family" });
+		await waitFor(() => toasts(on.written).length === 1, "the same arrival to toast");
 	});
 });

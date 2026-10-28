@@ -12,22 +12,29 @@ export interface SpawnBackendOptions extends SignalCliBackendOptions {
 	/** Defaults to {@link defaultCommand}: manual receive mode, so nothing is
 	 * delivered before `start()` installs its handler. */
 	readonly command?: readonly string[];
+	/** The user's standing engine arguments, placed before the subcommand. */
+	readonly engineArgs?: readonly string[];
 	readonly defaultTimeoutMs?: number;
 }
 
 /**
  * `--receive-mode` belongs to the `jsonRpc` subcommand's own parser, not to the
- * global options, so it must come after the command name.
+ * global options, so it must come after the command name. The same split puts the
+ * user's engine arguments (`--config`, a proxy, a log level) before it: those are
+ * global to `signal-cli`, and one of them after the subcommand would be rejected.
  */
-export function defaultCommand(account: string): readonly string[] {
-	return ["signal-cli", "-a", account, "jsonRpc", "--receive-mode=manual"];
+export function defaultCommand(
+	account: string,
+	engineArgs: readonly string[] = [],
+): readonly string[] {
+	return ["signal-cli", "-a", account, ...engineArgs, "jsonRpc", "--receive-mode=manual"];
 }
 
 export function spawnSignalCliBackend(options: SpawnBackendOptions): {
 	readonly backend: SignalCliBackend;
 	readonly client: JsonRpcClient;
 } {
-	const command = options.command ?? defaultCommand(options.account);
+	const command = options.command ?? defaultCommand(options.account, options.engineArgs ?? []);
 	const stream = createProcessStream({ command });
 	const client = new JsonRpcClient(stream, {
 		defaultTimeoutMs: options.defaultTimeoutMs ?? 30_000,

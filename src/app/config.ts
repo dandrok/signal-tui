@@ -4,8 +4,14 @@ import { join } from "node:path";
 export type CliConfig =
 	| { readonly mode: "help" }
 	| { readonly mode: "version" }
-	| { readonly mode: "demo" }
-	| { readonly mode: "live"; readonly account: string; readonly dbPath: string };
+	| { readonly mode: "demo"; readonly notify?: boolean }
+	| {
+			readonly mode: "live";
+			readonly account: string;
+			readonly dbPath: string;
+			/** Only present when a flag said so: absent means the config file and env decide. */
+			readonly notify?: boolean;
+	  };
 
 /** A problem with what the user typed, as opposed to a bug: reported without a stack. */
 export class UsageError extends Error {}
@@ -50,6 +56,9 @@ export function parseArgs(argv: readonly string[], options: ParseOptions): CliCo
 	let demo = false;
 	let account: string | null = null;
 	let dbPath = options.defaultDbPath;
+	// Undefined is "the flag was not given", which is not the same as `false`: the file and the
+	// environment still have a say below it. Only an explicit flag has the last word.
+	let notify: boolean | undefined;
 
 	const next = (index: number, flag: string): string => {
 		const value = argv[index];
@@ -70,6 +79,10 @@ export function parseArgs(argv: readonly string[], options: ParseOptions): CliCo
 		}
 		if (arg === "--demo") {
 			demo = true;
+			continue;
+		}
+		if (arg === "--notify" || arg === "--no-notify") {
+			notify = arg === "--notify";
 			continue;
 		}
 		if (arg === "--account") {
@@ -97,10 +110,10 @@ export function parseArgs(argv: readonly string[], options: ParseOptions): CliCo
 		throw new UsageError("--demo and --account cannot be combined");
 	}
 	if (account !== null) {
-		return { mode: "live", account, dbPath };
+		return { mode: "live", account, dbPath, ...(notify === undefined ? {} : { notify }) };
 	}
 	if (demo) {
-		return { mode: "demo" };
+		return { mode: "demo", ...(notify === undefined ? {} : { notify }) };
 	}
 	return { mode: "help" };
 }
@@ -125,6 +138,12 @@ Usage:
 Options:
   --account <number>   account to act as; requires signal-cli on PATH
   --db <path>          cache location (default: $XDG_DATA_HOME/signal-tui/cache.db)
+  --notify             desktop toast and bell for other threads (the default)
+  --no-notify          same, switched off — for a pane nobody is looking at
+
+Settings, standing preferences (flag > env > file > default):
+  $XDG_CONFIG_HOME/signal-tui/config.json with "notify", "db" and "engineArgs"
+  (engine arguments are placed before the engine's own subcommand)
 
 Live mode needs signal-cli 0.14+ on PATH, linked to your phone.
 Setup guide: https://github.com/dandrok/signal-tui/blob/main/SETUP.md
