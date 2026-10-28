@@ -38,7 +38,9 @@ try {
 		defaultDbPath: cacheDefault(file, process.env, defaultDbPath()),
 	});
 	const notify = config.mode === "live" || config.mode === "demo" ? config.notify : undefined;
-	settings = resolveSettings({ file, notify });
+	const ignoreAttachments =
+		config.mode === "live" || config.mode === "demo" ? config.ignoreAttachments : undefined;
+	settings = resolveSettings({ file, notify, ignoreAttachments });
 } catch (error) {
 	if (error instanceof UsageError) {
 		console.error(`${error.message}\n\n${USAGE}`);
@@ -72,18 +74,18 @@ async function startDemo(): Promise<Running> {
 	return { store: new InMemoryStore(), session: undefined, dispose: async () => undefined };
 }
 
-async function startLive(
-	account: string,
-	dbPath: string,
-	engineArgs: readonly string[],
-): Promise<Running> {
+async function startLive(account: string, dbPath: string, settings: Settings): Promise<Running> {
 	ensurePrivateDirectory(dbPath);
 	const store = new SqliteMessageStore({ path: dbPath });
 
 	// Spawning happens here too: a missing signal-cli throws before start(), so
 	// both steps share one failure path, and the child is stopped if start fails.
 	const session = await (async () => {
-		const { backend } = spawnSignalCliBackend({ account, engineArgs });
+		const { backend } = spawnSignalCliBackend({
+			account,
+			engineArgs: settings.engineArgs,
+			ignoreAttachments: settings.ignoreAttachments,
+		});
 		const opened = createSession({ store, backend });
 		try {
 			await opened.start();
@@ -110,7 +112,7 @@ async function startLive(
 
 const running =
 	config.mode === "live"
-		? await startLive(config.account, config.dbPath, settings.engineArgs)
+		? await startLive(config.account, config.dbPath, settings)
 		: await startDemo();
 
 const instance = render(

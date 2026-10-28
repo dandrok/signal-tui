@@ -18,7 +18,7 @@ describe("defaultCommand", () => {
 	test("puts the user's engine arguments before the subcommand", () => {
 		// A `--config` or a proxy flag is global to signal-cli; the same argument after
 		// `jsonRpc` is rejected by that subcommand's own parser.
-		expect(defaultCommand("+48123456789", ["--config", "/etc/sc"])).toEqual([
+		expect(defaultCommand("+48123456789", { engineArgs: ["--config", "/etc/sc"] })).toEqual([
 			"signal-cli",
 			"-a",
 			"+48123456789",
@@ -26,6 +26,38 @@ describe("defaultCommand", () => {
 			"/etc/sc",
 			"jsonRpc",
 			"--receive-mode=manual",
+		]);
+	});
+
+	test("puts --ignore-attachments after the subcommand, because that parser owns it", () => {
+		// Verified against signal-cli v0.14.9: the flag is declared by
+		// `JsonRpcDispatcherCommand.attachToSubparser`, i.e. it belongs to `jsonRpc` — the
+		// same place `--receive-mode` lives. Before the command name it is an error.
+		expect(defaultCommand("+48123456789", { ignoreAttachments: true })).toEqual([
+			"signal-cli",
+			"-a",
+			"+48123456789",
+			"jsonRpc",
+			"--receive-mode=manual",
+			"--ignore-attachments",
+		]);
+	});
+
+	test("each kind of argument stays on its own side of the subcommand", () => {
+		expect(
+			defaultCommand("+48123456789", {
+				engineArgs: ["--config", "/etc/sc"],
+				ignoreAttachments: true,
+			}),
+		).toEqual([
+			"signal-cli",
+			"-a",
+			"+48123456789",
+			"--config",
+			"/etc/sc",
+			"jsonRpc",
+			"--receive-mode=manual",
+			"--ignore-attachments",
 		]);
 	});
 });
