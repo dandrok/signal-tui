@@ -19,6 +19,18 @@ export interface IncomingNotice {
 }
 
 /**
+ * A file to send: the path the engine reads, the name to show, and the size to show with it.
+ *
+ * The size is carried because the local echo is written from what was picked — the engine never
+ * echoes a send back, so nothing else would tell the pane how big the file it just sent is.
+ */
+export interface SentFile {
+	readonly path: string;
+	readonly name: string;
+	readonly size: number;
+}
+
+/**
  * Joins the transport to the cache: every backend event is persisted, then
  * listeners are told something changed. Writes are serialised through one queue
  * so a fast burst of envelopes cannot interleave and land out of order (a
@@ -27,8 +39,13 @@ export interface IncomingNotice {
 export interface Session {
 	start(): Promise<void>;
 	stop(): Promise<void>;
-	/** Sends `body`, optionally as a reply to an earlier message. */
-	send(conversationId: ConversationId, body: string, replyTo?: ReplyTarget): Promise<void>;
+	/** Sends `body`, optionally as a reply to an earlier message, optionally with one file. */
+	send(
+		conversationId: ConversationId,
+		body: string,
+		replyTo?: ReplyTarget,
+		file?: SentFile,
+	): Promise<void>;
 	/** Adds our reaction to an earlier message, or takes it back when `isRemove`. */
 	react(
 		conversationId: ConversationId,

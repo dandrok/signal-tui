@@ -1,6 +1,7 @@
 import type { ConversationId } from "../../../domain/types";
 import type { BackendEvent } from "../../../ports/backend";
-import type { MappedEnvelope } from "../map-envelope";
+import { type MappedEnvelope, mapEnvelope } from "../map-envelope";
+import { receiveEnvelopeSchema } from "../schemas";
 
 /**
  * From what a mapper said to what the app hears: one mapped envelope can be several events
@@ -97,4 +98,41 @@ export function unwrapNotification(params: unknown): unknown {
 		return result;
 	}
 	return params;
+}
+
+/** Where one accepted notification goes: the error log, the group book, the listeners. */
+export interface EnvelopeSink {
+	readonly record: (reason: string) => void;
+	readonly addGroup: (conversationId: ConversationId) => void;
+	readonly emit: (event: BackendEvent) => void;
+}
+
+/**
+ * One notification, from wire params to events: the whole receive path, in the order it has to
+ * happen. A notification of another kind is not ours (the client may be shared), a payload that
+ * does not parse is recorded rather than thrown, and the group is registered before its events
+ * are delivered — a send that answers this message needs the id.
+ */
+export function acceptNotification(
+	method: string,
+	params: unknown,
+	expected: string,
+	sink: EnvelopeSink,
+): void {
+	if (method !== expected) {
+		return;
+	}
+	const parsed = receiveEnvelopeSchema.safeParse(unwrapNotification(params));
+	if (!parsed.success) {
+		sink.record(`invalid envelope: ${parsed.error.issues[0]?.message ?? "unknown"}`);
+		return;
+	}
+	const mapped = mapEnvelope(parsed.data.envelope);
+	const groupId = groupConversationOf(mapped);
+	if (groupId !== null) {
+		sink.addGroup(groupId);
+	}
+	for (const event of eventsFrom(mapped)) {
+		sink.emit(event);
+	}
 }

@@ -8,10 +8,8 @@ import type {
 	SignalBackend,
 } from "../../../ports/backend";
 import { deleteParams, editParams, reactionParams, receiptParams, sendParams } from "../commands";
-import { mapEnvelope } from "../map-envelope";
-import { receiveEnvelopeSchema } from "../schemas";
 import { ProtocolErrorLog } from "./error-log";
-import { eventsFrom, groupConversationOf, unwrapNotification } from "./events";
+import { acceptNotification } from "./events";
 import { DEFAULT_NOTIFICATION_METHOD, type RpcCaller, type SignalCliBackendOptions } from "./types";
 
 /**
@@ -95,6 +93,7 @@ export class SignalCliBackend implements SignalBackend {
 		conversationId: ConversationId,
 		body: string,
 		replyTo?: ReplyTarget,
+		filePath?: string,
 	): Promise<SendResult> {
 		const params = sendParams({
 			conversationId,
@@ -102,6 +101,7 @@ export class SignalCliBackend implements SignalBackend {
 			isGroup: this.#groupIds.has(conversationId),
 			account: this.#account,
 			replyTo,
+			filePath,
 		});
 		const result = await this.#client.request<{ timestamp?: unknown } | undefined>("send", params);
 		const timestamp = result?.timestamp;
@@ -163,25 +163,11 @@ export class SignalCliBackend implements SignalBackend {
 	}
 
 	#handleNotification(method: string, params: unknown): void {
-		if (method !== this.#notificationMethod) {
-			return;
-		}
-
-		const parsed = receiveEnvelopeSchema.safeParse(unwrapNotification(params));
-		if (!parsed.success) {
-			this.#errors.record(`invalid envelope: ${parsed.error.issues[0]?.message ?? "unknown"}`);
-			return;
-		}
-
-		const mapped = mapEnvelope(parsed.data.envelope);
-		const groupId = groupConversationOf(mapped);
-		if (groupId !== null) {
-			this.#groupIds.add(groupId);
-		}
-
-		for (const event of eventsFrom(mapped)) {
-			this.#emit(event);
-		}
+		acceptNotification(method, params, this.#notificationMethod, {
+			record: (reason) => this.#errors.record(reason),
+			addGroup: (conversationId) => this.#groupIds.add(conversationId),
+			emit: (event) => this.#emit(event),
+		});
 	}
 
 	#emit(event: BackendEvent): void {

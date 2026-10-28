@@ -232,7 +232,7 @@ describe("keymap", () => {
 			pick: 0,
 			// Frozen when the prompt opened: the list is ordered by activity, so a live read
 			// could point this index at somebody else by the time `⏎` arrives.
-			candidates: [
+			chats: [
 				{ ...conversation, id: "uuid-bob", name: "Bob" },
 				{ ...conversation, id: "uuid-carol", name: "Carol" },
 			],

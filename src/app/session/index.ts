@@ -8,7 +8,7 @@ import { markReadConversation } from "./mark-read";
 import { sendReaction } from "./react";
 import { removeMessage } from "./remove";
 import { sendText } from "./send";
-import type { IncomingNotice, Session, SessionContext, SessionDeps } from "./types";
+import type { IncomingNotice, SentFile, Session, SessionContext, SessionDeps } from "./types";
 import { createTyping } from "./typing";
 
 /**
@@ -107,8 +107,12 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 		markRead: (conversationId: ConversationId): Promise<void> =>
 			markReadConversation(context, conversationId),
 		typingIn: (conversationId: ConversationId): string | null => typing.authorIn(conversationId),
-		send: (conversationId: ConversationId, body: string, replyTo?: ReplyTarget): Promise<void> =>
-			sendText(context, conversationId, body, replyTo),
+		send: (
+			conversationId: ConversationId,
+			body: string,
+			replyTo?: ReplyTarget,
+			file?: SentFile,
+		): Promise<void> => sendText(context, conversationId, body, replyTo, file),
 		react: (
 			conversationId: ConversationId,
 			target: MessageRef,
@@ -143,4 +147,4 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 }
 
 export { isDirectConversationId } from "../../domain/ids";
-export type { IncomingNotice, Session, SessionDeps } from "./types";
+export type { IncomingNotice, SentFile, Session, SessionDeps } from "./types";

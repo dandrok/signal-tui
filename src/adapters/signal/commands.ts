@@ -30,17 +30,25 @@ export interface SendParamsInput {
 	/** The account we act as; the engine resolves it back to us as the quote's author. */
 	readonly account: string;
 	readonly replyTo?: ReplyTarget | undefined;
+	/** One file from this machine, as the engine wants it: a path on the sender's disk. */
+	readonly filePath?: string | undefined;
 }
 
 /**
  * `send` params. A quote names its target by timestamp *and* author, and the engine rejects
  * the first without the second. Our own messages carry `SELF_AUTHOR_ID`, which is not a
  * number or a uuid, so the account number stands in for it.
+ *
+ * `attachment` is a *list* upstream (`SendCommand` reads `ns.<String>getList("attachment")`,
+ * verified at v0.14.9), so one file goes out as a one-element array rather than a bare string —
+ * and a message with an attachment and no text is legal ("either a message, attachment or
+ * sticker must be given"), which is why the body is not required here.
  */
 export function sendParams(input: SendParamsInput): Record<string, unknown> {
 	const address = addressFor(input.conversationId, input.isGroup);
+	const attachment = input.filePath === undefined ? {} : { attachment: [input.filePath] };
 	if (input.replyTo === undefined) {
-		return { ...address, message: input.body };
+		return { ...address, message: input.body, ...attachment };
 	}
 	return {
 		...address,
@@ -48,6 +56,7 @@ export function sendParams(input: SendParamsInput): Record<string, unknown> {
 		quoteTimestamp: input.replyTo.sentAt,
 		quoteAuthor: input.replyTo.authorId === SELF_AUTHOR_ID ? input.account : input.replyTo.authorId,
 		quoteMessage: input.replyTo.text,
+		...attachment,
 	};
 }
 

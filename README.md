@@ -162,6 +162,7 @@ Nothing secret belongs in there — the account is a flag, and the cache path is
 | `r` | reply to the selected message (message pane) |
 | `x` | react to the selected message: a picker opens — `⇥`/`↑↓` to choose, type a name (`heart`, `redheart`, `tada`) to filter, `⏎` sends. Typing the emoji you already added takes it back |
 | `f` | forward a message to another conversation: the picker opens — type to narrow by name, `⇥`/`↑↓` to choose, `⏎` sends. Text only, so a message with files is refused rather than sent as its caption |
+| `a` | send a file to the open conversation: the path prompt opens on the directory you started in — type to narrow, `⇥`/`↑↓` to choose, `⏎` on a folder descends into it, `⏎` on a file sends it. `~` is your home; dotfiles stay hidden unless you type the dot |
 | `e` | edit your own message: the prompt opens with its body, `⏎` saves, `Esc` cancels |
 | `d` | delete your own message for everyone — it asks first, `⏎` or `y` confirms |
 | `D` | hide a message on this device only; nothing is sent and nobody else is affected |
@@ -173,7 +174,8 @@ Nothing secret belongs in there — the account is a flag, and the cache path is
 `e` and `d` act on a message you wrote, so the status line only offers them while the pointer is
 on one of yours — and pressing either on someone else's message says why instead of doing
 nothing. `r`, `x`, `f` and `D` work on anyone's message; `f` is offered while the message has
-text, because a copy that dropped the files would be half a message.
+text, because a copy that dropped the files would be half a message. `a` is about the
+conversation rather than the pointer, so it works from the list too.
 
 The pane border shows which box has the keyboard; while a prompt is open it replaces the
 composer, and its border turns red for the one that changes things for other people.
@@ -254,6 +256,10 @@ the last second of typing.
   a `▸`), `r`, type, `⏎`. The quoted text travels with the message; the cache still keeps
   only its identity. The selection is the bottom-most message in the window, so reaching an
   older one scrolls the thread down to it.
+- **sending a file** (`a`): the path prompt opens on the directory you started in, typing
+  narrows it, `⏎` descends into a folder or sends a file — one file per message, up to Signal's
+  100 MB. The message carries the path the engine reads and the local echo keeps it, so the row
+  shows the name and size without waiting for a transcript that never arrives
 - **notifications**: a message in a thread you are not reading rings the terminal bell and
   sends a desktop notification (`OSC 9` — kitty, Ghostty, WezTerm, iTerm2 and Windows
   Terminal show it; a terminal without it just rings), and the window title carries the
@@ -283,7 +289,9 @@ the last second of typing.
 - **forwarding a message with files**: a forward sends the words only — Signal has no `forward`
   command and no "forwarded" field, so it is a re-send to another conversation, and the picker
   refuses a message with attachments rather than sending its caption alone
-- opening an attachment from the TUI (`xdg-open`), and sending one
+- **opening a received attachment** (`xdg-open`): the pane shows the name and size, and the
+  engine's path is kept, but nothing launches a file the thread carries yet — the first thing
+  this client would do that leaves the terminal, so it gets its own decision
 - the **full** emoji set: the picker carries a curated table of ~50 names rather than Unicode's
   3600, so a rare emoji has to be pasted rather than named. Adding one is a line in
   `src/domain/emoji-catalog.ts`

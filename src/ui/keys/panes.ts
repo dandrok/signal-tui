@@ -38,6 +38,11 @@ export function paneKey(state: AppState, input: string, key: KeyLike): KeyResult
 	if (inMessages && input === "f") {
 		return action({ type: "prompt-opened", kind: "forward" });
 	}
+	// A file goes to the conversation, not to the message under the pointer, so `a` works from
+	// both panes that have a conversation selected.
+	if (input === "a") {
+		return action({ type: "prompt-opened", kind: "attach" });
+	}
 	if (inMessages && input === "D") {
 		return action({ type: "hide-requested" });
 	}
