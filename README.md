@@ -19,6 +19,7 @@ account. What changed, and when, is in [CHANGELOG.md](./CHANGELOG.md).
 - [Install](#install)
 - [Link your account](#link-your-account)
 - [First run](#first-run)
+- [Settings](#settings)
 - [Keys](#keys)
 - [How it works](#how-it-works)
 - [What works](#what-works)
@@ -104,11 +105,40 @@ signal-tui --account +48123456789
 |---|---|
 | `--account <number>` | the linked account to act as |
 | `--db <path>` | cache location (default `$XDG_DATA_HOME/signal-tui/cache.db`, else `~/.local/share/signal-tui/cache.db`) |
+| `--notify` / `--no-notify` | desktop toast and bell for a message in another thread (on by default) |
 | `--demo` | sample data, no account |
 | `--version`, `--help` | what they say |
 
 The first sync fills the cache with what your account can see. History from before
 you linked that device is not available — Signal does not backfill it.
+
+## Settings
+
+Standing preferences live in one JSON file — `$XDG_CONFIG_HOME/signal-tui/config.json`, else
+`~/.config/signal-tui/config.json`. All of it is optional; a missing file is the defaults.
+
+```json
+{
+  "notify": false,
+  "db": "/home/you/.local/share/signal-tui/cache.db",
+  "engineArgs": ["--config", "/home/you/.config/signal-cli"]
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `notify` | toast and bell for a message in a thread you are not looking at |
+| `db` | where the cache lives — the same thing `--db` sets, for every run |
+| `engineArgs` | extra arguments for `signal-cli`, placed before its `jsonRpc` subcommand (its global options live there) |
+
+**`flag > env > file > default`**, per setting: `--db` beats `SIGNAL_TUI_DB`, which beats `"db"`;
+`--notify`/`--no-notify` beats `SIGNAL_TUI_NOTIFY` (`on`/`off`, `1`/`0`, `true`/`false`), which
+beats `"notify"`. Engine arguments are file-only — they are a standing preference, not something
+to retype per run.
+
+A config file that cannot be used is an error rather than a shrug: an unknown key, a value of the
+wrong type or unreadable JSON is reported with the path and the setting, and the client exits.
+Nothing secret belongs in there — the account is a flag, and the cache path is not a credential.
 
 ## Keys
 
@@ -124,15 +154,15 @@ you linked that device is not available — Signal does not backfill it.
 | `e` | edit your own message: the prompt opens with its body, `⏎` saves, `Esc` cancels |
 | `d` | delete your own message for everyone — it asks first, `⏎` or `y` confirms |
 | `D` | hide a message on this device only; nothing is sent and nobody else is affected |
+| `⏎` | send the draft, or send the emoji while reacting |
+| `/` | search cached history — `↑` / `↓` to pick a hit, `⏎` to open it, `Esc` to close |
+| `Esc` | leave the composer, cancel a reply, cancel a reaction, close search |
+| `q` | quit, from any pane; `Ctrl-C` quits from anywhere, modes included |
 
 `e` and `d` act on a message you wrote, so the status line only offers them while the pointer is
 on one of yours — and pressing either on someone else's message says why instead of doing
 nothing. `r`, `x`, `f` and `D` work on anyone's message; `f` is offered while the message has
 text, because a copy that dropped the files would be half a message.
-| `⏎` | send the draft, or send the emoji while reacting |
-| `/` | search cached history — `↑` / `↓` to pick a hit, `⏎` to open it, `Esc` to close |
-| `Esc` | leave the composer, cancel a reply, cancel a reaction, close search |
-| `q` | quit, from any pane; `Ctrl-C` quits from anywhere, modes included |
 
 The pane border shows which box has the keyboard; while a prompt is open it replaces the
 composer, and its border turns red for the one that changes things for other people.
@@ -242,8 +272,9 @@ the last second of typing.
 - the **full** emoji set: the picker carries a curated table of ~50 names rather than Unicode's
   3600, so a rare emoji has to be pasted rather than named. Adding one is a line in
   `src/domain/emoji-catalog.ts`
-- a config file: notification sound off, an editor for long messages, engine arguments. Today
-  that is a flag or nothing — `flag > env > file > default` is the next slice
+- an **editor** for long messages: the config file has no `editor` key yet, because nothing
+  would read it — a message long enough to leave the composer for `$EDITOR` is a feature of its
+  own, and a key the binary ignores is a promise it does not keep
 - history from before you linked this device
 - **view-once messages are not shown at all**, only announced: this client keeps no copy,
   and files are not rendered yet, so there is nothing to open. Note that `signal-cli`

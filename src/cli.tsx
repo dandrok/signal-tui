@@ -8,6 +8,14 @@ import { defaultDbPath, parseArgs, USAGE, UsageError } from "./app/config";
 import { formatStartupFailure } from "./app/report";
 import type { Session } from "./app/session";
 import { createSession } from "./app/session";
+import type { Settings } from "./app/settings";
+import {
+	cacheDefault,
+	configPath,
+	readSettingsFile,
+	resolveSettings,
+	SettingsError,
+} from "./app/settings";
 import { VERSION } from "./app/version";
 import { ensurePrivateDirectory } from "./cli/paths";
 import type { MessageStore } from "./ports/store";
@@ -21,11 +29,24 @@ if (typeof Bun === "undefined") {
 }
 
 let config: CliConfig;
+let settings: Settings;
 try {
-	config = parseArgs(process.argv.slice(2), { defaultDbPath: defaultDbPath() });
+	// The file is read before the flags because it supplies the cache default they override:
+	// `flag > env > file > default`, resolved once instead of in every reader.
+	const file = readSettingsFile(configPath());
+	config = parseArgs(process.argv.slice(2), {
+		defaultDbPath: cacheDefault(file, process.env, defaultDbPath()),
+	});
+	const notify = config.mode === "live" || config.mode === "demo" ? config.notify : undefined;
+	settings = resolveSettings({ file, notify });
 } catch (error) {
 	if (error instanceof UsageError) {
 		console.error(`${error.message}\n\n${USAGE}`);
+		process.exit(2);
+	}
+	if (error instanceof SettingsError) {
+		// The file's own message names the path and the setting; a usage dump would bury it.
+		console.error(`config: ${error.message}`);
 		process.exit(2);
 	}
 	throw error;
@@ -51,14 +72,18 @@ async function startDemo(): Promise<Running> {
 	return { store: new InMemoryStore(), session: undefined, dispose: async () => undefined };
 }
 
-async function startLive(account: string, dbPath: string): Promise<Running> {
+async function startLive(
+	account: string,
+	dbPath: string,
+	engineArgs: readonly string[],
+): Promise<Running> {
 	ensurePrivateDirectory(dbPath);
 	const store = new SqliteMessageStore({ path: dbPath });
 
 	// Spawning happens here too: a missing signal-cli throws before start(), so
 	// both steps share one failure path, and the child is stopped if start fails.
 	const session = await (async () => {
-		const { backend } = spawnSignalCliBackend({ account });
+		const { backend } = spawnSignalCliBackend({ account, engineArgs });
 		const opened = createSession({ store, backend });
 		try {
 			await opened.start();
@@ -84,9 +109,13 @@ async function startLive(account: string, dbPath: string): Promise<Running> {
 }
 
 const running =
-	config.mode === "live" ? await startLive(config.account, config.dbPath) : await startDemo();
+	config.mode === "live"
+		? await startLive(config.account, config.dbPath, settings.engineArgs)
+		: await startDemo();
 
-const instance = render(<Root store={running.store} session={running.session} />);
+const instance = render(
+	<Root store={running.store} session={running.session} notify={settings.notify} />,
+);
 
 try {
 	await instance.waitUntilExit();
