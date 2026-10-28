@@ -8,10 +8,8 @@ import {
 	replyTarget,
 	selectedConversation,
 } from "../../app/state";
-import { deleteFor } from "../../app/usecases/delete";
-import { editFor } from "../../app/usecases/edit";
-import { forwardNotice, forwardPlan } from "../../app/usecases/forward";
-import { emojiInputSummary, reactionFor, targetedMessage } from "../../app/usecases/react";
+import { type AttachContext, attachListing, defaultAttachContext } from "../../app/usecases/attach";
+import { runPromptEffect } from "./prompt-effect";
 
 /**
  * The reducer plus the side effects it cannot perform itself: a submitted draft is sent
@@ -33,7 +31,10 @@ export interface RootState {
 const describe = (error: unknown): string =>
 	error instanceof Error ? error.message : String(error);
 
-export function useRootState(session: Session | undefined): RootState {
+export function useRootState(
+	session: Session | undefined,
+	attachments: AttachContext = defaultAttachContext(),
+): RootState {
 	const [state, setState] = useState<AppState>(emptyState);
 	const [version, setVersion] = useState(0);
 	const stateRef = useRef(state);
@@ -65,6 +66,21 @@ export function useRootState(session: Session | undefined): RootState {
 				(error: unknown): void =>
 					refused(`${what} failed: ${describe(error)}`);
 
+			// The filesystem answers for an attach prompt, and it has to answer *inside* the
+			// keystroke: a listing read a frame later would send the file the user typed before
+			// the one they are looking at.
+			if (action.type === "prompt-opened" && action.kind === "attach") {
+				apply({ ...action, paths: attachListing("", 0, attachments).candidates });
+				return;
+			}
+			if (action.type === "prompt-changed" && current.prompt?.kind === "attach") {
+				apply({
+					...action,
+					paths: attachListing(action.value, 0, attachments).candidates,
+				});
+				return;
+			}
+
 			if (action.type === "draft-submitted" && session !== undefined) {
 				const body = current.draft.trim();
 				// Resolved before the reducer clears it: the target is what makes this a reply
@@ -83,74 +99,9 @@ export function useRootState(session: Session | undefined): RootState {
 			}
 
 			if (action.type === "prompt-submitted" && session !== undefined) {
-				const prompt = current.prompt;
-				if (prompt !== null && conversation !== undefined) {
-					// Resolved from the pre-dispatch state, like the reply target: the reducer is
-					// about to forget which row the prompt named.
-					const message = targetedMessage(
-						current.messagesByConversation[conversation.id] ?? [],
-						prompt.targetId,
-					);
-
-					if (prompt.kind === "reaction") {
-						const request = reactionFor(message, conversation.id, prompt.draft, prompt.pick);
-						// The prompt closed either way; saying why is the difference between a
-						// refusal and a reaction that vanished.
-						if (request === null) {
-							refused(`not one emoji: ${emojiInputSummary(prompt.draft)}`);
-						} else {
-							void session
-								.react(conversation.id, request.target, request.emoji, request.isRemove)
-								.catch(failed("reaction"));
-						}
-					}
-
-					if (prompt.kind === "edit") {
-						const request = editFor(message, conversation.id, prompt.draft);
-						if (request === null) {
-							refused("nothing to change");
-						} else {
-							void session
-								.edit(conversation.id, request.target, request.body)
-								.catch(failed("edit"));
-						}
-					}
-
-					if (prompt.kind === "delete") {
-						const target = deleteFor(message, conversation.id);
-						if (target === null) {
-							refused("only your own message can be deleted for everyone");
-						} else {
-							void session.remove(conversation.id, target).catch(failed("delete"));
-						}
-					}
-
-					if (prompt.kind === "forward") {
-						// A forward is not a transport method: Signal has no such command, so it
-						// is a plain send addressed to another conversation, and `send` writes
-						// the local echo that makes the copy visible here at all.
-						const plan = forwardPlan(
-							message,
-							conversation.id,
-							prompt.candidates ?? [],
-							prompt.draft,
-							prompt.pick,
-						);
-						if (plan.kind === "refused") {
-							refused(plan.reason);
-						} else {
-							void session
-								.send(plan.to.id, plan.body)
-								.then(() => {
-									apply({
-										type: "notice",
-										notice: { kind: "info", text: forwardNotice(plan.to) },
-									});
-								})
-								.catch(failed("forward"));
-						}
-					}
-				}
+				// One branch per prompt kind lives in `prompt-effect.ts`: this hook owns the
+				// transitions, and that file owns what a confirmed one does.
+				runPromptEffect({ session, state: current, apply, refuse: refused, failed, attachments });
 			}
 
 			if (action.type === "hide-requested" && session !== undefined) {
@@ -164,7 +115,7 @@ export function useRootState(session: Session | undefined): RootState {
 
 			apply(action);
 		},
-		[apply, session],
+		[apply, session, attachments],
 	);
 
 	useEffect(() => {

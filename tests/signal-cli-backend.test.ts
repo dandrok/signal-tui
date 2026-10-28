@@ -212,6 +212,26 @@ describe("SignalCliBackend", () => {
 		expect(await backend.sendMessage("uuid-alice", "hello")).toEqual({ timestamp: undefined });
 	});
 
+	test("sends a file as a one-element attachment list, with no text", async () => {
+		// `SendCommand` reads `attachment` as a list (`getList`), and an attachment with an empty
+		// message is legal — the engine only refuses when message, attachment and sticker are all
+		// empty. Asserting the params exactly is the point: a bare string would be a different
+		// payload that parses and sends nothing.
+		const { rpc, backend } = setup();
+		rpc.results.set("send", { timestamp: 1_760_000_000_600 });
+
+		await backend.sendMessage("uuid-alice", "", undefined, "/home/me/photos/cat.jpg");
+
+		expect(rpc.requests.at(-1)).toEqual({
+			method: "send",
+			params: {
+				recipient: ["uuid-alice"],
+				message: "",
+				attachment: ["/home/me/photos/cat.jpg"],
+			},
+		});
+	});
+
 	test("sends a group message with groupId once the group is known", async () => {
 		const { rpc, backend } = setup();
 		await backend.start();

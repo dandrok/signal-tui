@@ -237,7 +237,12 @@ export class RecordingStore implements MessageStore {
 export class FakeBackend implements SignalBackend {
 	started = 0;
 	stopped = 0;
-	readonly sent: Array<{ conversationId: string; body: string; replyTo?: ReplyTarget }> = [];
+	readonly sent: Array<{
+		conversationId: string;
+		body: string;
+		replyTo?: ReplyTarget;
+		filePath?: string;
+	}> = [];
 	failStart = false;
 	#listeners = new Set<(event: BackendEvent) => void>();
 
@@ -270,8 +275,14 @@ export class FakeBackend implements SignalBackend {
 		conversationId: string,
 		body: string,
 		replyTo?: ReplyTarget,
+		filePath?: string,
 	): Promise<{ timestamp: number | undefined }> {
-		this.sent.push({ conversationId, body, ...(replyTo === undefined ? {} : { replyTo }) });
+		this.sent.push({
+			conversationId,
+			body,
+			...(replyTo === undefined ? {} : { replyTo }),
+			...(filePath === undefined ? {} : { filePath }),
+		});
 		return { timestamp: 1_760_000_000_500 };
 	}
 

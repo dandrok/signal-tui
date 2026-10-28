@@ -49,6 +49,7 @@ describe("the message pane's hint", () => {
 		expect(line).toContain("r reply");
 		expect(line).toContain("x react");
 		expect(line).toContain("f forward");
+		expect(line).toContain("a attach");
 		expect(line).toContain("D hide");
 	});
 
@@ -100,7 +101,7 @@ describe("the message pane's hint", () => {
 	});
 
 	test("a prompt owns the line while it is open", () => {
-		const hint = (kind: "reaction" | "edit" | "delete" | "forward"): string =>
+		const hint = (kind: "reaction" | "edit" | "delete" | "forward" | "attach"): string =>
 			hintsFor(
 				{
 					...stateWith(message({ isOutgoing: true, authorId: SELF_AUTHOR_ID })),
@@ -113,5 +114,7 @@ describe("the message pane's hint", () => {
 		expect(hint("edit")).toContain("save");
 		expect(hint("delete")).toContain("delete for everyone");
 		expect(hint("forward")).toContain("pick");
+		// Two ways to confirm, because a folder is a step and a file is the message.
+		expect(hint("attach")).toContain("open");
 	});
 });

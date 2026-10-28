@@ -17,9 +17,9 @@ export function promptKey(state: AppState, input: string, key: KeyLike): KeyResu
 	if (key.escape === true) {
 		return action({ type: "prompt-cancelled" });
 	}
-	if (prompt.kind === "reaction" || prompt.kind === "forward") {
-		// Two pickers, one rule: tab and the arrows walk the suggestions, and every other key
-		// is text the draft is being narrowed with — an emoji name, or a conversation's.
+	if (prompt.kind === "reaction" || prompt.kind === "forward" || prompt.kind === "attach") {
+		// Three pickers, one rule: tab and the arrows walk the suggestions, and every other key
+		// is text the draft is being narrowed with — an emoji name, a chat's, a path's.
 		if (key.tab === true) {
 			return action({ type: "prompt-moved", delta: key.shift === true ? -1 : 1 });
 		}
@@ -35,6 +35,17 @@ export function promptKey(state: AppState, input: string, key: KeyLike): KeyResu
 			return action({ type: "prompt-submitted" });
 		}
 		return input === "n" ? action({ type: "prompt-cancelled" }) : null;
+	}
+	if (prompt.kind === "attach" && key.return === true) {
+		// A directory is a step, not a message: `⏎` on one descends into it, and the next `⏎`
+		// on a file sends. That is what makes the listing usable without a second key. Every
+		// other key stays a keystroke in the path.
+		const picked = prompt.paths?.[prompt.pick];
+		return action(
+			picked?.isDirectory === true
+				? { type: "prompt-changed", value: `${picked.path}/` }
+				: { type: "prompt-submitted" },
+		);
 	}
 	if (key.return === true) {
 		return action({ type: "prompt-submitted" });

@@ -131,11 +131,12 @@ export interface SignalBackend {
 	 * the instant of the message being corrected — so the same address rules apply.
 	 */
 	sendEdit(conversationId: ConversationId, target: MessageRef, body: string): Promise<void>;
-	/** Sends `body`, optionally as a reply to an earlier message. */
+	/** Sends `body`, optionally as a reply to an earlier message, optionally with one file. */
 	sendMessage(
 		conversationId: ConversationId,
 		body: string,
 		replyTo?: ReplyTarget,
+		filePath?: string,
 	): Promise<SendResult>;
 	subscribe(listener: (event: BackendEvent) => void): () => void;
 }

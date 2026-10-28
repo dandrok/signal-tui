@@ -1,4 +1,5 @@
 import type { Conversation, ConversationId, Message, MessageId } from "../../domain/types";
+import type { AttachCandidate } from "../usecases/attach";
 
 /**
  * The shape of app state, and the vocabulary its transitions speak.
@@ -27,10 +28,10 @@ export interface SearchState {
 }
 
 /**
- * What a prompt is for. One mode, four questions, because they share everything that
- * matters: a target row, a draft, enter to confirm, escape to leave.
+ * What a prompt is for. One mode, five questions, because they share everything that matters:
+ * a draft, enter to confirm, escape to leave — and, for four of them, a row to point at.
  */
-export type PromptKind = "reaction" | "edit" | "delete" | "forward";
+export type PromptKind = "reaction" | "edit" | "delete" | "forward" | "attach";
 
 /**
  * An open prompt: which message it names, and what has been typed into it.
@@ -41,12 +42,16 @@ export type PromptKind = "reaction" | "edit" | "delete" | "forward";
  */
 export interface PromptState {
 	readonly kind: PromptKind;
-	readonly targetId: MessageId;
-	/** The emoji, the replacement body, the conversation filter, or (for a delete) nothing. */
+	/**
+	 * The row the prompt names, or null for the one prompt that names no row: a file is sent to
+	 * the conversation, not to a message.
+	 */
+	readonly targetId: MessageId | null;
+	/** The emoji, the replacement body, the conversation filter, a file path, or (for a delete) nothing. */
 	readonly draft: string;
 	/**
-	 * Which suggestion the arrow keys are on. The reaction and forward prompts both have a
-	 * list; a draft that is already one emoji ignores this, and typing resets it to the best
+	 * Which suggestion the arrow keys are on. The reaction, forward and attach prompts all have
+	 * a list; a draft that is already one emoji ignores this, and typing resets it to the best
 	 * match.
 	 */
 	readonly pick: number;
@@ -58,7 +63,15 @@ export interface PromptState {
 	 * between the keystroke and the confirm would send somebody's message to whoever slid into
 	 * that row. The list the user is looking at is the list they are choosing from.
 	 */
-	readonly candidates?: readonly Conversation[];
+	readonly chats?: readonly Conversation[];
+	/**
+	 * What an attach prompt matched, listed from the draft on the keystroke that changed it.
+	 *
+	 * Carried on the action rather than read in the reducer: the filesystem is the one source
+	 * this state cannot own, and a list read a frame late would send the file the user typed
+	 * *before* the one they are looking at.
+	 */
+	readonly paths?: readonly AttachCandidate[];
 }
 
 export interface AppState {
@@ -130,9 +143,19 @@ export type Action =
 	| { readonly type: "reply-started" }
 	| { readonly type: "reply-cancelled" }
 	/** Opens a prompt on the message the pane points at, if that message can take one. */
-	| { readonly type: "prompt-opened"; readonly kind: PromptKind }
+	| {
+			readonly type: "prompt-opened";
+			readonly kind: PromptKind;
+			/** The listing the attach prompt starts with, read from the input, not here. */
+			readonly paths?: readonly AttachCandidate[];
+	  }
 	| { readonly type: "prompt-cancelled" }
-	| { readonly type: "prompt-changed"; readonly value: string }
+	| {
+			readonly type: "prompt-changed";
+			readonly value: string;
+			/** What the new draft matches, for the one prompt whose list is a directory. */
+			readonly paths?: readonly AttachCandidate[];
+	  }
 	/** Moves the highlight through what is suggested for the current draft. */
 	| { readonly type: "prompt-moved"; readonly delta: number }
 	/** The prompt was confirmed: whatever can be sent, is sent by the wiring. */

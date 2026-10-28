@@ -24,13 +24,15 @@ export function hintsFor(state: AppState, isReplying: boolean): string {
 				return "⏎ delete for everyone · esc keep";
 			case "forward":
 				return "⇥/↕ pick · ⏎ send · esc cancel";
+			case "attach":
+				return "⇥/↕ pick · ⏎ open or send · esc cancel";
 		}
 	}
 	if (state.focus === "composer") {
 		return isReplying ? "⏎ send · esc cancel reply · tab panes" : "⏎ send · esc back · tab panes";
 	}
 	const panes = "tab panes · i compose · / search · q quit";
-	return state.focus === "messages" ? messageHints(state) : `j/k move · ${panes}`;
+	return state.focus === "messages" ? messageHints(state) : `j/k move · a attach · ${panes}`;
 }
 
 /**
@@ -53,6 +55,7 @@ function messageHints(state: AppState): string {
 		...(own && canForward(target, conversation.id) ? ["f forward"] : []),
 		...(own && canEdit(target, conversation.id) ? ["e edit"] : []),
 		...(own && canDelete(target, conversation.id) ? ["d delete"] : []),
+		"a attach",
 		"D hide",
 		"tab",
 		"i",
