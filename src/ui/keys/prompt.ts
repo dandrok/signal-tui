@@ -17,9 +17,9 @@ export function promptKey(state: AppState, input: string, key: KeyLike): KeyResu
 	if (key.escape === true) {
 		return action({ type: "prompt-cancelled" });
 	}
-	if (prompt.kind === "reaction") {
-		// The picker: tab and the arrows walk the suggestions, and every other key is text the
-		// draft is being narrowed with.
+	if (prompt.kind === "reaction" || prompt.kind === "forward") {
+		// Two pickers, one rule: tab and the arrows walk the suggestions, and every other key
+		// is text the draft is being narrowed with — an emoji name, or a conversation's.
 		if (key.tab === true) {
 			return action({ type: "prompt-moved", delta: key.shift === true ? -1 : 1 });
 		}

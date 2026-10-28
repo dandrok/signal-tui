@@ -27,10 +27,10 @@ export interface SearchState {
 }
 
 /**
- * What a prompt is for. One mode, three questions, because they share everything that
+ * What a prompt is for. One mode, four questions, because they share everything that
  * matters: a target row, a draft, enter to confirm, escape to leave.
  */
-export type PromptKind = "reaction" | "edit" | "delete";
+export type PromptKind = "reaction" | "edit" | "delete" | "forward";
 
 /**
  * An open prompt: which message it names, and what has been typed into it.
@@ -42,13 +42,23 @@ export type PromptKind = "reaction" | "edit" | "delete";
 export interface PromptState {
 	readonly kind: PromptKind;
 	readonly targetId: MessageId;
-	/** The emoji, the replacement body, or (for a delete) nothing at all. */
+	/** The emoji, the replacement body, the conversation filter, or (for a delete) nothing. */
 	readonly draft: string;
 	/**
-	 * Which suggestion the arrow keys are on. Only the reaction prompt has suggestions; a
-	 * draft that is already one emoji ignores this, and typing resets it to the best match.
+	 * Which suggestion the arrow keys are on. The reaction and forward prompts both have a
+	 * list; a draft that is already one emoji ignores this, and typing resets it to the best
+	 * match.
 	 */
 	readonly pick: number;
+	/**
+	 * Where a forward can go, frozen when the prompt opened.
+	 *
+	 * A snapshot rather than a fresh read of the conversation list, because that list is ordered
+	 * by activity and reorders whenever a message arrives: an index into a list that moved
+	 * between the keystroke and the confirm would send somebody's message to whoever slid into
+	 * that row. The list the user is looking at is the list they are choosing from.
+	 */
+	readonly candidates?: readonly Conversation[];
 }
 
 export interface AppState {

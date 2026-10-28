@@ -48,6 +48,7 @@ describe("the message pane's hint", () => {
 		expect(line).toContain("d delete");
 		expect(line).toContain("r reply");
 		expect(line).toContain("x react");
+		expect(line).toContain("f forward");
 		expect(line).toContain("D hide");
 	});
 
@@ -60,21 +61,46 @@ describe("the message pane's hint", () => {
 		expect(line).not.toContain("d delete");
 		expect(line).toContain("r reply");
 		expect(line).toContain("x react");
+		expect(line).toContain("f forward");
 		expect(line).toContain("D hide");
 	});
 
-	test("a deleted message of ours offers neither, though it is still ours", () => {
-		const line = hintsFor(
-			stateWith(message({ isOutgoing: true, authorId: SELF_AUTHOR_ID, isDeleted: true })),
-			false,
-		);
+	test("a message with files offers no forward, though the same words do", () => {
+		// Both halves in one test: the positive control is what proves the absence below is
+		// `canForward` saying no, and not the hint having dropped the key for everyone.
+		const files = [
+			{
+				id: null,
+				contentType: "image/jpeg",
+				filename: "/tmp/photo.jpg",
+				size: 2_048,
+				caption: null,
+				isVoiceNote: false,
+			},
+		];
+		const line = (over: Partial<Message>): string => hintsFor(stateWith(message(over)), false);
 
-		expect(line).not.toContain("e edit");
-		expect(line).not.toContain("d delete");
+		expect(line({})).toContain("f forward");
+		expect(line({ attachments: files })).not.toContain("f forward");
+	});
+
+	test("a deleted message of ours offers no edit, no delete and no forward", () => {
+		// One helper, two rows: the same message before and after it is deleted. The positives
+		// are what prove the absences below are the per-message rules, not a hint that dropped
+		// the keys for everybody.
+		const line = (over: Partial<Message>): string =>
+			hintsFor(stateWith(message({ isOutgoing: true, authorId: SELF_AUTHOR_ID, ...over })), false);
+
+		expect(line({})).toContain("e edit");
+		expect(line({})).toContain("d delete");
+		expect(line({})).toContain("f forward");
+		expect(line({ isDeleted: true })).not.toContain("e edit");
+		expect(line({ isDeleted: true })).not.toContain("d delete");
+		expect(line({ isDeleted: true })).not.toContain("f forward");
 	});
 
 	test("a prompt owns the line while it is open", () => {
-		const hint = (kind: "reaction" | "edit" | "delete"): string =>
+		const hint = (kind: "reaction" | "edit" | "delete" | "forward"): string =>
 			hintsFor(
 				{
 					...stateWith(message({ isOutgoing: true, authorId: SELF_AUTHOR_ID })),
@@ -86,5 +112,6 @@ describe("the message pane's hint", () => {
 		expect(hint("reaction")).toContain("send");
 		expect(hint("edit")).toContain("save");
 		expect(hint("delete")).toContain("delete for everyone");
+		expect(hint("forward")).toContain("pick");
 	});
 });

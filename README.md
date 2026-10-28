@@ -120,13 +120,15 @@ you linked that device is not available — Signal does not backfill it.
 | `i` or `⏎` | focus the composer |
 | `r` | reply to the selected message (message pane) |
 | `x` | react to the selected message: a picker opens — `⇥`/`↑↓` to choose, type a name (`heart`, `redheart`, `tada`) to filter, `⏎` sends. Typing the emoji you already added takes it back |
+| `f` | forward a message to another conversation: the picker opens — type to narrow by name, `⇥`/`↑↓` to choose, `⏎` sends. Text only, so a message with files is refused rather than sent as its caption |
 | `e` | edit your own message: the prompt opens with its body, `⏎` saves, `Esc` cancels |
 | `d` | delete your own message for everyone — it asks first, `⏎` or `y` confirms |
 | `D` | hide a message on this device only; nothing is sent and nobody else is affected |
 
 `e` and `d` act on a message you wrote, so the status line only offers them while the pointer is
 on one of yours — and pressing either on someone else's message says why instead of doing
-nothing. `r`, `x` and `D` work on anyone's message.
+nothing. `r`, `x`, `f` and `D` work on anyone's message; `f` is offered while the message has
+text, because a copy that dropped the files would be half a message.
 | `⏎` | send the draft, or send the emoji while reacting |
 | `/` | search cached history — `↑` / `↓` to pick a hit, `⏎` to open it, `Esc` to close |
 | `Esc` | leave the composer, cancel a reply, cancel a reaction, close search |
@@ -233,8 +235,9 @@ the last second of typing.
 - quoting **attachments** in a reply, and replying to a view-once message — a reply whose
   target is outside the loaded window reads `not loaded`, because the quoted text is not
   stored
-- **forwarding a message to another chat**: Signal has no `forward` command and no "forwarded"
-  field, so it would be a re-send with a conversation picker — designed, not built
+- **forwarding a message with files**: a forward sends the words only — Signal has no `forward`
+  command and no "forwarded" field, so it is a re-send to another conversation, and the picker
+  refuses a message with attachments rather than sending its caption alone
 - opening an attachment from the TUI (`xdg-open`), typing indicators
 - the **full** emoji set: the picker carries a curated table of ~50 names rather than Unicode's
   3600, so a rare emoji has to be pasted rather than named. Adding one is a line in

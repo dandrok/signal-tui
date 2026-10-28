@@ -35,6 +35,9 @@ export function paneKey(state: AppState, input: string, key: KeyLike): KeyResult
 	if (inMessages && input === "d") {
 		return action({ type: "prompt-opened", kind: "delete" });
 	}
+	if (inMessages && input === "f") {
+		return action({ type: "prompt-opened", kind: "forward" });
+	}
 	if (inMessages && input === "D") {
 		return action({ type: "hide-requested" });
 	}
