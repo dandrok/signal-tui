@@ -16,13 +16,15 @@ import { SearchPane } from "./SearchPane";
 export interface AppProps {
 	readonly state: AppState;
 	readonly dispatch: (action: Action) => void;
+	/** Who is writing in the open thread, or null. Shown in the composer, never stored. */
+	readonly typing?: string | null;
 }
 
 /**
  * The layout, and nothing else: sizes, panes, the composer and the status line. What a key
  * does lives in `keys/`, what the line says in `hints.ts`.
  */
-export function App({ state, dispatch }: AppProps) {
+export function App({ state, dispatch, typing = null }: AppProps) {
 	const { exit } = useApp();
 	const { columns, rows } = useTerminalSize();
 
@@ -94,6 +96,7 @@ export function App({ state, dispatch }: AppProps) {
 								width={messageWidth}
 								replyTo={replyTo}
 								clock={clock}
+								typing={typing}
 							/>
 						) : (
 							<PromptBar prompt={state.prompt} width={messageWidth} />

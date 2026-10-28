@@ -10,6 +10,7 @@ import { useOlderPage } from "./hooks/useOlderPage";
 import { useRootState } from "./hooks/useRootState";
 import { useSearchMode } from "./hooks/useSearchMode";
 import { useThreadMessages } from "./hooks/useThreadMessages";
+import { useTyping } from "./hooks/useTyping";
 import { useWindowTitle } from "./hooks/useWindowTitle";
 
 export interface RootProps {
@@ -58,5 +59,9 @@ export function Root({ store, session, write = stdoutWriter, notify = true }: Ro
 	useIncomingNotices(session, state.selectedId, oldestSentAt, write, notify, dispatch);
 	useWindowTitle(state.conversations, write);
 
-	return <App state={state} dispatch={dispatch} />;
+	// Asked again on its own timer rather than pushed: the notice expires, and the render that
+	// follows the expiry is what takes the line off the screen.
+	const typing = useTyping(session, conversationId);
+
+	return <App state={state} dispatch={dispatch} typing={typing} />;
 }

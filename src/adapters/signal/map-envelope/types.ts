@@ -10,6 +10,7 @@ import { SELF_AUTHOR_ID } from "../../../domain/types";
 import type { MappedReaction } from "../map-reaction";
 import type { MappedReceipt } from "../map-receipt";
 import type { ConversationKind } from "../map-target";
+import type { MappedTyping } from "../map-typing";
 
 /**
  * What a mapper may say, and the empty answer it says it with.
@@ -53,6 +54,8 @@ export interface MappedEnvelope {
 	readonly receipt: MappedReceipt | null;
 	/** A reaction on an existing message; never a message of its own. */
 	readonly reaction: MappedReaction | null;
+	/** Someone is (or stopped) writing. State, never content: nothing is stored. */
+	readonly typing: MappedTyping | null;
 }
 
 export const EMPTY: MappedEnvelope = {
@@ -63,4 +66,5 @@ export const EMPTY: MappedEnvelope = {
 	edited: null,
 	receipt: null,
 	reaction: null,
+	typing: null,
 };

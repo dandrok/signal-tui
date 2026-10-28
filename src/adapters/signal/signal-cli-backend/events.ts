@@ -51,6 +51,14 @@ export function eventsFrom(mapped: MappedEnvelope): readonly BackendEvent[] {
 			state: mapped.receipt.state,
 		});
 	}
+	if (mapped.typing !== null) {
+		events.push({
+			kind: "typing",
+			conversationId: mapped.typing.conversationId,
+			author: mapped.typing.author,
+			isTyping: mapped.typing.isTyping,
+		});
+	}
 	return events;
 }
 
@@ -70,6 +78,7 @@ export function groupConversationOf(mapped: MappedEnvelope): ConversationId | nu
 		mapped.deleted?.conversationId ??
 		mapped.edited?.conversationId ??
 		mapped.reaction?.conversationId ??
+		mapped.typing?.conversationId ??
 		null
 	);
 }

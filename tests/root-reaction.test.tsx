@@ -40,6 +40,7 @@ const fakeSession = (): {
 			stop: async () => undefined,
 			send: async () => undefined,
 			markRead: async () => undefined,
+			typingIn: () => null,
 			react: async (conversationId, target, emoji, isRemove = false) => {
 				reactions.push({ conversationId, target, emoji, isRemove });
 			},

@@ -35,6 +35,7 @@ const fakeSession = (): { session: Session; calls: Calls } => {
 			stop: async () => undefined,
 			send: async () => undefined,
 			markRead: async () => undefined,
+			typingIn: () => null,
 			react: async () => undefined,
 			edit: async (conversationId, target, body) => {
 				calls.edits.push({ conversationId, target, body });

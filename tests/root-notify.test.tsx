@@ -15,6 +15,7 @@ const fakeSession = (): { session: Session; incoming: (notice: IncomingNotice) =
 			stop: async () => undefined,
 			send: async () => undefined,
 			markRead: async () => undefined,
+			typingIn: () => null,
 			react: async () => undefined,
 			edit: async () => undefined,
 			remove: async () => undefined,
