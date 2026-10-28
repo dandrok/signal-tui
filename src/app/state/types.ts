@@ -126,6 +126,12 @@ export type Action =
 	| { readonly type: "scroll-moved"; readonly delta: number }
 	| { readonly type: "draft-changed"; readonly value: string }
 	| { readonly type: "draft-submitted" }
+	/**
+	 * The composer's contents went out another way — a file sent with the words already typed.
+	 * Nothing is sent by this action: it only stops the composer from still holding text that
+	 * has already left.
+	 */
+	| { readonly type: "composer-cleared" }
 	/** Asks for the page above the oldest loaded message. */
 	| { readonly type: "older-requested" }
 	/** The read failed: the pane must be able to ask again after a transient error. */

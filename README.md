@@ -162,7 +162,7 @@ Nothing secret belongs in there — the account is a flag, and the cache path is
 | `r` | reply to the selected message (message pane) |
 | `x` | react to the selected message: a picker opens — `⇥`/`↑↓` to choose, type a name (`heart`, `redheart`, `tada`) to filter, `⏎` sends. Typing the emoji you already added takes it back |
 | `f` | forward a message to another conversation: the picker opens — type to narrow by name, `⇥`/`↑↓` to choose, `⏎` sends. Text only, so a message with files is refused rather than sent as its caption |
-| `a` | send a file to the open conversation: the path prompt opens on the directory you started in — type to narrow, `⇥`/`↑↓` to choose, `⏎` on a folder descends into it, `⏎` on a file sends it. `~` is your home; dotfiles stay hidden unless you type the dot |
+| `a` | send a file to the open conversation: the path prompt opens on the directory you started in — type to narrow, `⇥`/`↑↓` to choose, `⏎` on a folder descends into it, `⏎` on a file sends it. Whatever is in the composer rides along as the message, and a reply in progress is answered. `~` is your home; dotfiles stay hidden unless you type the dot |
 | `e` | edit your own message: the prompt opens with its body, `⏎` saves, `Esc` cancels |
 | `d` | delete your own message for everyone — it asks first, `⏎` or `y` confirms |
 | `D` | hide a message on this device only; nothing is sent and nobody else is affected |
@@ -258,8 +258,10 @@ the last second of typing.
   older one scrolls the thread down to it.
 - **sending a file** (`a`): the path prompt opens on the directory you started in, typing
   narrows it, `⏎` descends into a folder or sends a file — one file per message, up to Signal's
-  100 MB. The message carries the path the engine reads and the local echo keeps it, so the row
-  shows the name and size without waiting for a transcript that never arrives
+  100 MB. The words already in the composer are the message the file belongs to, and a reply in
+  progress is answered, quote and all: "here's the CV" then `a` is one message, not two. The
+  echo keeps the path, so the row shows the name and size without waiting for a transcript that
+  never arrives
 - **notifications**: a message in a thread you are not reading rings the terminal bell and
   sends a desktop notification (`OSC 9` — kitty, Ghostty, WezTerm, iTerm2 and Windows
   Terminal show it; a terminal without it just rings), and the window title carries the

@@ -1,6 +1,6 @@
 import type { Session } from "../../app/session";
 import type { Action, AppState } from "../../app/state";
-import { selectedConversation } from "../../app/state";
+import { replyTarget, selectedConversation } from "../../app/state";
 import {
 	type AttachContext,
 	attachNotice,
@@ -78,9 +78,10 @@ export function runPromptEffect(effect: PromptEffect): void {
 			return;
 		}
 		case "attach": {
-			// A file is not a message about a row: it goes to the conversation, with no body —
-			// this prompt does not read the composer's draft, so claiming to send one would be
-			// a lie about what went out.
+			// A file goes to the conversation, and the words already in the composer go with it
+			// as the message they belong to — typing "here's the CV", pressing `a` and losing the
+			// sentence would be the one thing nobody expects. An empty composer is a file with no
+			// text, which is a legal message.
 			//
 			// The *picked* path wins over the typed text: the row is what the user is looking
 			// at, and a filter is a fragment (`cv`) rather than a path. With nothing picked —
@@ -89,17 +90,22 @@ export function runPromptEffect(effect: PromptEffect): void {
 			const plan = attachPlan(picked, effect.attachments ?? defaultAttachContext());
 			if (plan.kind === "refused") {
 				refuse(plan.reason);
-			} else {
-				void session
-					.send(conversation.id, "", undefined, plan.file)
-					.then(() => {
-						apply({
-							type: "notice",
-							notice: { kind: "info", text: attachNotice(plan.file) },
-						});
-					})
-					.catch(failed("attach"));
+				return;
 			}
+			const caption = state.draft.trim();
+			// A reply in progress is answered by this message too, exactly as the `⏎` path
+			// does with text alone: the quote and the file are not alternatives.
+			const replyTo = replyTarget(state);
+			apply({ type: "composer-cleared" });
+			void session
+				.send(conversation.id, caption, replyTo ?? undefined, plan.file)
+				.then(() => {
+					apply({
+						type: "notice",
+						notice: { kind: "info", text: attachNotice(plan.file) },
+					});
+				})
+				.catch(failed("attach"));
 			return;
 		}
 		case "forward": {

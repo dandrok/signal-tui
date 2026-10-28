@@ -80,6 +80,23 @@ describe("reduce", () => {
 		expect(state.notice).toEqual({ kind: "info", text: "reconnecting" });
 	});
 
+	test("clearing the composer for a file send leaves the notice alone", () => {
+		// The file's own "sent" notice is the one worth reading: a `queued:` line about words
+		// that were never queued on their own would be a second, wrong account of the same send.
+		let state = reduce(loaded(), { type: "focus", focus: "composer" });
+		state = reduce(state, { type: "draft-changed", value: "here's the CV" });
+		state = reduce(state, { type: "notice", notice: { kind: "info", text: "sent cv.pdf" } });
+		state = reduce(state, { type: "composer-cleared" });
+
+		expect(state.draft).toBe("");
+		expect(state.notice).toEqual({ kind: "info", text: "sent cv.pdf" });
+	});
+
+	test("clearing an already empty composer changes nothing", () => {
+		const state = loaded();
+		expect(reduce(state, { type: "composer-cleared" })).toBe(state);
+	});
+
 	test("setting the same focus returns the same object", () => {
 		const state = loaded();
 		expect(reduce(state, { type: "focus", focus: "conversations" })).toBe(state);

@@ -26,6 +26,7 @@ export function reduce(state: AppState, action: Action): AppState {
 		case "scroll-moved":
 		case "draft-changed":
 		case "draft-submitted":
+		case "composer-cleared":
 		case "notice":
 			return reduceSelection(state, action);
 		case "messages-loaded":

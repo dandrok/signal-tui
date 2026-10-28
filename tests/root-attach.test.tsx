@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { render } from "ink-testing-library";
 import { InMemoryStore } from "../src/adapters/memory/store";
+import type { ReplyTargetIn } from "../src/app/reply";
 import type { SentFile, Session } from "../src/app/session";
 import { nodeAttachFs } from "../src/app/usecases/attach";
 import type { Message } from "../src/domain/types";
@@ -26,6 +27,7 @@ const SENT_AT = 1_760_000_000_000;
 interface Send {
 	readonly conversationId: string;
 	readonly body: string;
+	readonly replyTo: ReplyTargetIn | undefined;
 	readonly file: SentFile | undefined;
 }
 
@@ -36,8 +38,8 @@ const fakeSession = (): { session: Session; sent: Send[] } => {
 		session: {
 			start: async () => undefined,
 			stop: async () => undefined,
-			send: async (conversationId, body, _replyTo, file) => {
-				sent.push({ conversationId, body, file });
+			send: async (conversationId, body, replyTo, file) => {
+				sent.push({ conversationId, body, replyTo, file });
 			},
 			markRead: async () => undefined,
 			typingIn: () => null,
@@ -103,6 +105,9 @@ const press = async (
 
 const frameText = (lastFrame: Frame): string => plain(lastFrame() ?? "");
 
+/** How many times `needle` appears in the frame: a quoted row repeats the thread's words. */
+const count = (haystack: string, needle: string): number => haystack.split(needle).length - 1;
+
 describe("attaching a file from the keyboard", () => {
 	test("a lists the folder the client was started in, and enter sends the picked file", async () => {
 		const { root, store } = await workspace();
@@ -129,6 +134,7 @@ describe("attaching a file from the keyboard", () => {
 			{
 				conversationId: CONVERSATION,
 				body: "",
+				replyTo: undefined,
 				file: { path: join(root, "cv.pdf"), name: "cv.pdf", size: 120 },
 			},
 		]);
@@ -159,6 +165,7 @@ describe("attaching a file from the keyboard", () => {
 			{
 				conversationId: CONVERSATION,
 				body: "",
+				replyTo: undefined,
 				file: { path: join(root, "photos", "cat.jpg"), name: "cat.jpg", size: 40 },
 			},
 		]);
@@ -204,6 +211,79 @@ describe("attaching a file from the keyboard", () => {
 		await press(stdin, "\r", lastFrame, "nothing at");
 
 		expect(sent).toEqual([]);
+		unmount();
+	});
+	test("the words already in the composer travel with the file", async () => {
+		// "here's the CV", then `a`: the sentence is the message the file belongs to. Sending the
+		// file alone and leaving the draft in the box was the first cut of this, and it read as
+		// a bug the moment anyone tried it.
+		const { root, store } = await workspace();
+		const { session, sent } = fakeSession();
+		const { stdin, lastFrame, unmount } = render(
+			<Root
+				store={store}
+				session={session}
+				attachments={{ cwd: root, home: root, fs: nodeAttachFs }}
+			/>,
+		);
+
+		await waitFor(() => frameText(lastFrame).includes("dinner at 7?"), "the thread to load");
+		await press(stdin, "\t", lastFrame, "a attach");
+		await press(stdin, "i", lastFrame);
+		await press(stdin, "here is the CV", lastFrame);
+		// Back to the thread, and *waited for*: two keys in one tick are both read against the
+		// state before either landed, so `a` would be typed into the composer it just left.
+		await press(stdin, "\u001b", lastFrame, "a attach");
+		await press(stdin, "a", lastFrame, "attach ›");
+		await press(stdin, "cv", lastFrame, "cv.pdf");
+		await press(stdin, "\r", lastFrame, "sent cv.pdf");
+
+		expect(sent).toEqual([
+			{
+				conversationId: CONVERSATION,
+				body: "here is the CV",
+				replyTo: undefined,
+				file: { path: join(root, "cv.pdf"), name: "cv.pdf", size: 120 },
+			},
+		]);
+		unmount();
+	});
+
+	test("a reply in progress is answered by the file, quote and all", async () => {
+		// The quote and the file are not alternatives: `⏎` on a draft answers the pointed row,
+		// and so does a file. Dropping the target silently would send the file dangling.
+		const { root, store } = await workspace();
+		const { session, sent } = fakeSession();
+		const { stdin, lastFrame, unmount } = render(
+			<Root
+				store={store}
+				session={session}
+				attachments={{ cwd: root, home: root, fs: nodeAttachFs }}
+			/>,
+		);
+
+		await waitFor(() => frameText(lastFrame).includes("dinner at 7?"), "the thread to load");
+		await press(stdin, "\t", lastFrame, "r reply");
+		await press(stdin, "r", lastFrame);
+		await waitFor(
+			() => count(frameText(lastFrame), "dinner at 7?") >= 2,
+			"the quoted target in the composer",
+		);
+		// Out of the composer without dropping the reply: the box keeps its target while the
+		// list has the keyboard.
+		await press(stdin, "\t", lastFrame, "j/k move");
+		await press(stdin, "a", lastFrame, "attach ›");
+		await press(stdin, "cv", lastFrame, "cv.pdf");
+		await press(stdin, "\r", lastFrame, "sent cv.pdf");
+
+		expect(sent).toEqual([
+			{
+				conversationId: CONVERSATION,
+				body: "",
+				replyTo: { sentAt: SENT_AT, authorId: "uuid-amber", text: "dinner at 7?" },
+				file: { path: join(root, "cv.pdf"), name: "cv.pdf", size: 120 },
+			},
+		]);
 		unmount();
 	});
 });
