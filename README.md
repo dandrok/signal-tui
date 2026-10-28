@@ -4,10 +4,10 @@ A terminal Signal client. Ink + Bun, local-first: messages live in SQLite on you
 machine, and the TUI never touches the network itself — it drives
 [`signal-cli`](https://github.com/AsamK/signal-cli) over JSON-RPC on stdio.
 
-**Status: `0.3.0` — usable for text conversations.** Read, send, groups, replies, reactions,
-edits, delete-for-everyone, local hiding, forwarding, typing indicators, unread counts and read
-receipts work against a real account. What changed, and when, is in
-[CHANGELOG.md](./CHANGELOG.md).
+**Status: `0.4.0` — usable for text conversations, and it can send files.** Read, send, groups,
+replies, reactions, edits, delete-for-everyone, local hiding, forwarding, typing indicators,
+unread counts, read receipts and sending a file with a caption work against a real account. What
+changed, and when, is in [CHANGELOG.md](./CHANGELOG.md).
 
 > **Unofficial.** Not affiliated with Signal Messenger LLC. It is a terminal front
 > end for [`signal-cli`](https://github.com/AsamK/signal-cli), which does the

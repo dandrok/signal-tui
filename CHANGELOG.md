@@ -3,9 +3,54 @@
 Notable changes, newest first. This file starts at 0.1.0 — earlier versions are in the
 [releases](https://github.com/dandrok/signal-tui/releases).
 
-`0.3.0` is the release where the chat stops being the whole client: a message can be forwarded to
-another conversation, the composer says when somebody is typing, and the preferences that used to
-be one flag per run have a file to live in.
+`0.4.0` is the release where the client starts moving files: a message can carry one you pick
+from a path prompt, and the engine can be told to stop downloading the ones you receive.
+
+## [0.4.0] — 2026-10-28
+
+### Added
+
+- **Send a file** (`a`): the path prompt opens on the directory the client was started in. Typing
+  narrows the listing, `⇥`/`↑↓` walk it, `⏎` on a folder descends into it and `⏎` on a file sends
+  it. `~` is your home, and a dotfile stays out of the list until you type the dot — a picker
+  that opens on `.bashrc` is worse than one that shows nothing. One file per message, up to
+  Signal's 100 MB; an empty file and anything over the cap are refused before an upload starts,
+  because a refused upload is a slower way of saying no.
+- **The composer's words travel with the file.** "here's the CV" then `a` is one message, not a
+  file followed by a sentence you have to paste back in: the draft is the message the attachment
+  belongs to, and a reply in progress is answered — the quote and the file are not alternatives,
+  the same rule `⏎` on a draft already followed. An empty composer sends a file with no text,
+  which is a legal message.
+- **`ignoreAttachments`**, as a config key, as `SIGNAL_TUI_IGNORE_ATTACHMENTS`, and as
+  `--ignore-attachments`, resolved `flag > env > file > default` like every other setting. It is
+  the only lever that stops `signal-cli` writing every file of every received message into
+  `~/.local/share/signal-cli/attachments`, where nothing ever deletes it. Turning it on costs the
+  file **names** — the engine never downloads what it was told to ignore, so it cannot report one,
+  and the row falls back to `📎 image/jpeg (1.6 MB)`. That trade is stated next to the key in the
+  README, because a preference that quietly makes the thread worse is not one worth hiding.
+
+### Changed
+
+- **A refused send gives the words back.** The composer is emptied when a file is submitted, the
+  way `⏎` empties it, but a failure now restores the draft and its reply target instead of leaving
+  you to retype a sentence you already wrote. Only into an empty box: a draft typed since is newer
+  than the one that failed, and recovering old text by overwriting new text would be a second loss
+  rather than a fix.
+
+### Internal
+
+- **The attachment slice is a folder** (`src/app/usecases/attach/`) with two halves and a barrel:
+  `listing` answers *what can I pick* on every keystroke, `plan` answers *what happens if I pick
+  this* once, on `⏎`. The listing is read inside the keystroke that changed the draft, so `a` then
+  `⏎` in one tick sends the file the row was showing rather than the one before it.
+- **Each prompt's confirm branch lives in `ui/hooks/prompt-effect.ts`**, and the backend's receive
+  path in `signal-cli-backend/events.ts`: `useRootState` and the backend class had both passed the
+  200-line cap, and neither was one subject any more.
+- **`--ignore-attachments` is a `jsonRpc` argument, not a global one.** Checked against
+  `signal-cli` v0.14.9: it is declared by `JsonRpcDispatcherCommand.attachToSubparser`, so it
+  belongs after the subcommand, where `engineArgs` — placed before it, beside `--config` and the
+  proxy flags — could never have put it. Both positions are pinned by a test.
+- No schema change: an existing cache opens as it is. 836 tests across 100 files.
 
 ## [0.3.0] — 2026-10-28
 
