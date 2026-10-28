@@ -21,6 +21,7 @@ type SelectionAction = Extract<
 			| "draft-changed"
 			| "draft-submitted"
 			| "composer-cleared"
+			| "composer-restored"
 			| "notice";
 	}
 >;
@@ -117,6 +118,14 @@ export function reduceSelection(state: AppState, action: SelectionAction): AppSt
 			return state.draft.length === 0 && state.replyToId === null
 				? state
 				: { ...state, draft: "", replyToId: null };
+		}
+		case "composer-restored": {
+			// A failed send gives the words back, but not over anything typed since: the newer
+			// draft is the user's, and recovering old text by overwriting new text is a second
+			// loss, not a fix.
+			return state.draft.length > 0
+				? state
+				: { ...state, draft: action.draft, replyToId: action.replyToId };
 		}
 		case "notice": {
 			const current = state.notice;

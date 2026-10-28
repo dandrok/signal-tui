@@ -96,6 +96,10 @@ export function runPromptEffect(effect: PromptEffect): void {
 			// A reply in progress is answered by this message too, exactly as the `⏎` path
 			// does with text alone: the quote and the file are not alternatives.
 			const replyTo = replyTarget(state);
+			// What the box held, in case the send is refused: `composer-cleared` is optimistic,
+			// the same way `⏎` is, and a failure has to give the words back rather than leave
+			// the user retyping a sentence they already wrote.
+			const restore = { draft: state.draft, replyToId: state.replyToId };
 			apply({ type: "composer-cleared" });
 			void session
 				.send(conversation.id, caption, replyTo ?? undefined, plan.file)
@@ -105,7 +109,10 @@ export function runPromptEffect(effect: PromptEffect): void {
 						notice: { kind: "info", text: attachNotice(plan.file) },
 					});
 				})
-				.catch(failed("attach"));
+				.catch((error: unknown) => {
+					apply({ type: "composer-restored", ...restore });
+					failed("attach")(error);
+				});
 			return;
 		}
 		case "forward": {

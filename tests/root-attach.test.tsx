@@ -31,7 +31,7 @@ interface Send {
 	readonly file: SentFile | undefined;
 }
 
-const fakeSession = (): { session: Session; sent: Send[] } => {
+const fakeSession = (refuse = false): { session: Session; sent: Send[] } => {
 	const sent: Send[] = [];
 	return {
 		sent,
@@ -39,6 +39,9 @@ const fakeSession = (): { session: Session; sent: Send[] } => {
 			start: async () => undefined,
 			stop: async () => undefined,
 			send: async (conversationId, body, replyTo, file) => {
+				if (refuse) {
+					throw new Error("engine is gone");
+				}
 				sent.push({ conversationId, body, replyTo, file });
 			},
 			markRead: async () => undefined,
@@ -284,6 +287,34 @@ describe("attaching a file from the keyboard", () => {
 				file: { path: join(root, "cv.pdf"), name: "cv.pdf", size: 120 },
 			},
 		]);
+		unmount();
+	});
+	test("a refused send gives the sentence back", async () => {
+		// The box was emptied optimistically, the way `⏎` empties it. If the engine refuses the
+		// file, that optimism has to be undone: retyping a sentence you already wrote is the
+		// worst thing a failed send can cost you.
+		const { root, store } = await workspace();
+		const { session, sent } = fakeSession(true);
+		const { stdin, lastFrame, unmount } = render(
+			<Root
+				store={store}
+				session={session}
+				attachments={{ cwd: root, home: root, fs: nodeAttachFs }}
+			/>,
+		);
+
+		await waitFor(() => frameText(lastFrame).includes("dinner at 7?"), "the thread to load");
+		await press(stdin, "\t", lastFrame, "a attach");
+		await press(stdin, "i", lastFrame);
+		await press(stdin, "here is the CV", lastFrame);
+		await press(stdin, "\u001b", lastFrame, "a attach");
+		await press(stdin, "a", lastFrame, "attach ›");
+		await press(stdin, "cv", lastFrame, "cv.pdf");
+		await press(stdin, "\r", lastFrame, "attach failed");
+
+		expect(sent).toEqual([]);
+		// Back in the composer, not in the thread: the message never went.
+		expect(frameText(lastFrame)).toContain("here is the CV");
 		unmount();
 	});
 });

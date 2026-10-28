@@ -132,6 +132,15 @@ export type Action =
 	 * has already left.
 	 */
 	| { readonly type: "composer-cleared" }
+	/**
+	 * A send failed, so the words that went with it come back — into an empty box only, because
+	 * anything typed since is newer than what failed.
+	 */
+	| {
+			readonly type: "composer-restored";
+			readonly draft: string;
+			readonly replyToId: MessageId | null;
+	  }
 	/** Asks for the page above the oldest loaded message. */
 	| { readonly type: "older-requested" }
 	/** The read failed: the pane must be able to ask again after a transient error. */

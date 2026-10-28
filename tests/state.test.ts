@@ -97,6 +97,35 @@ describe("reduce", () => {
 		expect(reduce(state, { type: "composer-cleared" })).toBe(state);
 	});
 
+	test("clearing for a file send drops the reply that went with it", () => {
+		// The words and their reply left together, so the empty-box check must not be what
+		// decides: a reply target with no draft is still something to clear.
+		const state = { ...loaded(), replyToId: "m-4" };
+
+		expect(reduce(state, { type: "composer-cleared" }).replyToId).toBeNull();
+	});
+
+	test("a failed send puts the words back", () => {
+		const state = loaded();
+		const next = reduce(state, {
+			type: "composer-restored",
+			draft: "here is the CV",
+			replyToId: "m-4",
+		});
+
+		expect(next.draft).toBe("here is the CV");
+		expect(next.replyToId).toBe("m-4");
+	});
+
+	test("a failed send never overwrites a draft typed since", () => {
+		// Recovering the old sentence by destroying the new one would be a second loss.
+		const state = reduce(loaded(), { type: "draft-changed", value: "something newer" });
+
+		expect(
+			reduce(state, { type: "composer-restored", draft: "here is the CV", replyToId: null }),
+		).toBe(state);
+	});
+
 	test("setting the same focus returns the same object", () => {
 		const state = loaded();
 		expect(reduce(state, { type: "focus", focus: "conversations" })).toBe(state);
