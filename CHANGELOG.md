@@ -3,8 +3,59 @@
 Notable changes, newest first. This file starts at 0.1.0 — earlier versions are in the
 [releases](https://github.com/dandrok/signal-tui/releases).
 
-`0.2.0` is the release where the chat stops being read-only: a message can be corrected, removed
-for everyone, hidden on this device, and reacted to from a picker rather than from memory.
+`0.3.0` is the release where the chat stops being the whole client: a message can be forwarded to
+another conversation, the composer says when somebody is typing, and the preferences that used to
+be one flag per run have a file to live in.
+
+## [0.3.0] — 2026-10-28
+
+### Added
+
+- **Forward a message** (`f`): the picker opens over the conversations, typing narrows it by name,
+  `⇥`/`↑↓` choose and `⏎` sends the same words on. Signal has no `forward` command and no
+  "forwarded" field, so this is an ordinary send addressed elsewhere — which is also why the copy
+  is text only: a message carrying files is refused out loud rather than sent as its caption. The
+  chat the message came from is not one of the destinations.
+- **Typing indicators**: a peer composing in the thread you have open fills the composer's empty
+  row with `Marta is typing…`. It goes away on its own, because Signal never says "gave up":
+  eight seconds is the deadline, and STOPPED ends it sooner when the other side sends one.
+  Nothing is stored — a notice about the present lives in memory — so opening the client
+  tomorrow never shows someone mid-sentence from last night.
+- **A settings file** at `$XDG_CONFIG_HOME/signal-tui/config.json` (else
+  `~/.config/signal-tui/config.json`) with `notify`, `db` and `engineArgs`, resolved per setting
+  as `flag > env > file > default`. `--notify`/`--no-notify` and `SIGNAL_TUI_NOTIFY` override it
+  for one run; `--db` and `SIGNAL_TUI_DB` do the same for the cache. Engine arguments are
+  file-only — they are a standing preference — and are placed before `signal-cli`'s own
+  subcommand, where its global options belong.
+- A config file that cannot be used exits with the path and the offending setting instead of a
+  shrug: an unknown key, a value of the wrong type or unreadable JSON is a mistake worth naming,
+  and a silently ignored key is how a typo becomes "the binary is broken".
+
+### Changed
+
+- **Notifications can be switched off without muting the inbox.** `--no-notify`, the environment
+  or the config file stop the toast and the bell; the unread badge and the window title still
+  count what arrived, because they are not interruptions.
+- The README's key table is one table again — a paragraph had split it in two, so four rows
+  rendered as a second table with no header.
+
+### Internal
+
+- **The keymap is one file per mode** (`src/ui/keys/`): the map reached 201 lines against a hard
+  cap of 200, so `types`, `search`, `prompt`, `composer` and `panes` sit behind a barrel that owns
+  only the order they are asked in. A fifth prompt kind now has somewhere to be added without
+  lengthening the file that orders them.
+- **A forward freezes its candidate list** (`PromptState.candidates`) when the picker opens. The
+  conversation list is ordered by activity, so an index resolved at confirm time could name
+  whoever slid into that row — the row that is drawn and the row that is sent are now the same
+  snapshot.
+- **Typing never reaches the store or the write queue**, and a STOPPED for someone who was not
+  showing is not a redraw. Its group id registers the group, because a typing notice can be the
+  first thing a session sees from one.
+- `.gitignore` said `node_modules/`, which matches a directory but not a symlink, so a worktree's
+  link to the shared install could be committed — and was, breaking `bun install` on CI. The
+  pattern matches either form now.
+- No schema change: an existing cache opens as it is. 799 tests across 97 files.
 
 ## [0.2.0] — 2026-10-27
 
