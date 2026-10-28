@@ -9,6 +9,7 @@ import { sendReaction } from "./react";
 import { removeMessage } from "./remove";
 import { sendText } from "./send";
 import type { IncomingNotice, Session, SessionContext, SessionDeps } from "./types";
+import { createTyping } from "./typing";
 
 /**
  * The session: one write queue, one redraw signal, one error log, and the use cases in
@@ -29,6 +30,12 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 	const names = new Map<ConversationId, string>();
 	const errors: string[] = [];
 	let queue: Promise<void> = Promise.resolve();
+	/**
+	 * Typing is the one event that never reaches the store or the queue: it is an assertion
+	 * about the present, it expires, and a write would make it survive a restart. Handled
+	 * before `enqueue` for exactly that reason.
+	 */
+	const typing = createTyping(() => clock());
 
 	const notify = (): void => {
 		for (const listener of listeners) {
@@ -74,6 +81,14 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 
 	// Subscribed before start() so no already-delivered envelope is missed.
 	const unsubscribe = backend.subscribe((event) => {
+		if (event.kind === "typing") {
+			// A redraw only when the line on screen would change: a STOPPED for someone who
+			// was not shown is not news.
+			if (typing.apply(event)) {
+				notify();
+			}
+			return;
+		}
 		void enqueue(() => applyEvent(context, event));
 	});
 
@@ -91,6 +106,7 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 		},
 		markRead: (conversationId: ConversationId): Promise<void> =>
 			markReadConversation(context, conversationId),
+		typingIn: (conversationId: ConversationId): string | null => typing.authorIn(conversationId),
 		send: (conversationId: ConversationId, body: string, replyTo?: ReplyTarget): Promise<void> =>
 			sendText(context, conversationId, body, replyTo),
 		react: (

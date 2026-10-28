@@ -252,11 +252,14 @@ describe("mapEnvelope", () => {
 			edited: null,
 			receipt: null,
 			reaction: null,
+			typing: null,
 		});
 	});
 
-	test("returns nothing for envelopes without a data message", () => {
-		const mapped = mapEnvelope(envelope({ typingMessage: { action: "STARTED", timestamp: 1 } }));
+	test("returns nothing for an envelope carrying no payload at all", () => {
+		// Not a typing envelope: that one carries state the session keeps (see
+		// `map-envelope-typing.test.ts`), it just never becomes a message.
+		const mapped = mapEnvelope({ timestamp: 1 });
 		expect(mapped).toEqual({
 			message: null,
 			conversation: null,
@@ -265,6 +268,7 @@ describe("mapEnvelope", () => {
 			edited: null,
 			receipt: null,
 			reaction: null,
+			typing: null,
 		});
 	});
 
@@ -278,6 +282,7 @@ describe("mapEnvelope", () => {
 			edited: null,
 			receipt: null,
 			reaction: null,
+			typing: null,
 		});
 	});
 });

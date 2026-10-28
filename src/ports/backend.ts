@@ -46,6 +46,16 @@ export type BackendEvent =
 			readonly reactor: EditAuthor;
 			readonly emoji: string;
 			readonly isRemove: boolean;
+	  }
+	| {
+			/**
+			 * A peer started or stopped writing. State, not content: the session keeps it in
+			 * memory and it expires, so a restart never shows someone typing.
+			 */
+			readonly kind: "typing";
+			readonly conversationId: ConversationId;
+			readonly author: string;
+			readonly isTyping: boolean;
 	  };
 
 /**

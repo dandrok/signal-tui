@@ -44,6 +44,13 @@ export interface Session {
 	hide(conversationId: ConversationId, messageId: MessageId): Promise<void>;
 	/** Clears the unread count for a conversation the user is looking at. */
 	markRead(conversationId: ConversationId): Promise<void>;
+	/**
+	 * Who is writing in that conversation right now, or null.
+	 *
+	 * Read, not subscribed: it is state with an expiry, so the pane asks again when it wants a
+	 * fresh answer. Nothing about it is stored, which is why a restart never shows it.
+	 */
+	typingIn(conversationId: ConversationId): string | null;
 	/** Resolves once every queued write has been applied. */
 	flush(): Promise<void>;
 	onChange(listener: () => void): () => void;

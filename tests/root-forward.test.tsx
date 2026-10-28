@@ -52,6 +52,7 @@ const fakeSession = (): Harness => {
 				sent.push({ conversationId, body });
 			},
 			markRead: async () => undefined,
+			typingIn: () => null,
 			react: async () => undefined,
 			edit: async () => undefined,
 			remove: async () => undefined,

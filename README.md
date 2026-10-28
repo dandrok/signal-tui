@@ -248,6 +248,10 @@ the last second of typing.
   Terminal show it; a terminal without it just rings), and the window title carries the
   unread count. The text is sanitised and length-capped before it enters the sequence: a
   notification is the one place a peer's words leave the pane.
+- **typing indicators**: a peer composing in the thread you have open fills the composer's
+  empty row with `Marta is typing…`, and the line goes away on its own even if they stop
+  without saying so. Nothing of it is stored — a notice about the present, in memory, with a
+  deadline — so opening the client tomorrow never shows someone mid-sentence from last night
 - **view-once messages** are recorded but never kept: their text and file references
   are not written to the cache or the search index, so the row says
   `view-once message · not stored` and there is nothing to recover later
@@ -268,7 +272,7 @@ the last second of typing.
 - **forwarding a message with files**: a forward sends the words only — Signal has no `forward`
   command and no "forwarded" field, so it is a re-send to another conversation, and the picker
   refuses a message with attachments rather than sending its caption alone
-- opening an attachment from the TUI (`xdg-open`), typing indicators
+- opening an attachment from the TUI (`xdg-open`), and sending one
 - the **full** emoji set: the picker carries a curated table of ~50 names rather than Unicode's
   3600, so a rare emoji has to be pasted rather than named. Adding one is a line in
   `src/domain/emoji-catalog.ts`
