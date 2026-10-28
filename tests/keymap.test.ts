@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AppState } from "../src/app/state";
 import { emptyState, reduce } from "../src/app/state";
-import { type KeyLike, keyAction } from "../src/ui/keymap";
+import { type KeyLike, keyAction } from "../src/ui/keys";
 
 /**
  * The keymap is a pure function now, so the routing rules can be tested without a terminal
