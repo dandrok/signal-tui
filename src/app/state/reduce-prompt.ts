@@ -45,6 +45,12 @@ function refusalFor(
 			return forwardRefusal(message, conversationId);
 		case "attach":
 			return null;
+		case "open":
+			// Nothing to refuse here: whether the row's file may be launched is a question about
+			// the filesystem and the engine's directory, and the wiring has already asked it
+			// before dispatching this. The submit path asks again, because a row can be swept
+			// while the prompt is open.
+			return null;
 	}
 }
 
@@ -165,6 +171,17 @@ export function movePrompt(state: AppState, delta: number): AppState {
 
 export function cancelPrompt(state: AppState): AppState {
 	return state.prompt === null ? state : { ...state, prompt: null };
+}
+
+/**
+ * Consent to launch files, granted by the first confirmed open and kept for the run.
+ *
+ * Returns the same object when it is already true, like every other no-op path here: a state
+ * that changes identity for nothing re-renders the panes and re-runs the effects that depend
+ * on it.
+ */
+export function allowFiles(state: AppState): AppState {
+	return state.filesMayOpen === true ? state : { ...state, filesMayOpen: true };
 }
 
 /**

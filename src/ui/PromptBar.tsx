@@ -20,6 +20,7 @@ const LABELS = {
 	delete: "delete › ",
 	forward: "forward › ",
 	attach: "attach › ",
+	open: "open › ",
 } as const;
 const HINTS = {
 	reaction: "  ⏎ send · esc cancel",
@@ -27,10 +28,14 @@ const HINTS = {
 	delete: "  ⏎ delete for everyone · esc keep",
 	forward: "  ⇥/↕ pick · ⏎ send · esc cancel",
 	attach: "  ⇥/↕ pick · ⏎ open or send · esc cancel",
+	open: "  ⏎ open · esc keep",
 } as const;
 
-/** What a delete asks, in the place the others show what was typed. */
-const CONFIRM_TEXT = "this message, for everyone?";
+/** What a question asks, in the place the text fields show what was typed. */
+const CONFIRM_TEXT = {
+	delete: "this message, for everyone?",
+	open: "the file on that row?",
+} as const;
 
 /** Cells a name may take before it is cut: a picked row, not a list. */
 const NAME_CELLS = 22;
@@ -54,9 +59,14 @@ const NO_CHATS: readonly Conversation[] = [];
 export function PromptBar({ prompt, width = 80 }: PromptBarProps) {
 	const inner = Math.max(8, width - 4);
 	const label = LABELS[prompt.kind];
+	// Two of the six ask instead of taking text, and only one of those changes anything for
+	// other people: the red frame stays the delete's alone, because colour is the terminal's
+	// only way to say "this leaves the machine".
 	const confirming = prompt.kind === "delete";
-	const cursorCells = confirming ? 0 : 1;
-	const body = confirming ? CONFIRM_TEXT : prompt.draft;
+	const asks = confirming || prompt.kind === "open";
+	const cursorCells = asks ? 0 : 1;
+	const body =
+		prompt.kind === "delete" || prompt.kind === "open" ? CONFIRM_TEXT[prompt.kind] : prompt.draft;
 
 	// A one-emoji draft needs no picker; anything else (a name, or nothing) shows what it
 	// matches, so the row is doing the work the terminal cannot do itself.
@@ -80,10 +90,10 @@ export function PromptBar({ prompt, width = 80 }: PromptBarProps) {
 		1,
 		inner - label.length - cursorCells - hint.length - chips - destinationCells,
 	);
-	const tail = confirming
+	const tail = asks
 		? { text: body.slice(0, room), truncated: body.length > room }
 		: draftTail(body, room);
-	const empty = !confirming && tail.text.length === 0;
+	const empty = !asks && tail.text.length === 0;
 
 	return (
 		<Box borderStyle="round" borderColor={confirming ? "red" : "cyan"} paddingX={1} height={3}>
@@ -91,7 +101,7 @@ export function PromptBar({ prompt, width = 80 }: PromptBarProps) {
 				<Text color={confirming ? "red" : "cyan"}>{label}</Text>
 				{tail.truncated ? <Text dimColor>…</Text> : null}
 				<Text>{tail.text}</Text>
-				{confirming ? null : <Text color="cyan">▌</Text>}
+				{asks ? null : <Text color="cyan">▌</Text>}
 				{empty && prompt.kind === "edit" ? <Text dimColor> a new body</Text> : null}
 				{picker.emoji.map((emoji, index) => (
 					<Text key={emoji} {...(index === picker.picked ? { inverse: true } : {})}>

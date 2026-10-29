@@ -46,6 +46,11 @@ export function paneKey(state: AppState, input: string, key: KeyLike): KeyResult
 	if (inMessages && input === "D") {
 		return action({ type: "hide-requested" });
 	}
+	// `o` opens the file on the pointed row. The verdict — whether that file may be launched at
+	// all — is the wiring's, because it needs the filesystem; the key only says which row.
+	if (inMessages && input === "o") {
+		return action({ type: "open-requested" });
+	}
 	if (inMessages && key.pageUp === true) {
 		return action({ type: "scroll-moved", delta: SCROLL_STEP });
 	}

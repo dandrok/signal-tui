@@ -30,7 +30,10 @@ export function promptKey(state: AppState, input: string, key: KeyLike): KeyResu
 			return action({ type: "prompt-moved", delta: 1 });
 		}
 	}
-	if (prompt.kind === "delete") {
+	if (prompt.kind === "delete" || prompt.kind === "open") {
+		// Two answers, not a text field: a delete changes the message on everyone else's phone
+		// and an open leaves the terminal, so neither may be triggered by a keystroke meant for
+		// the pane. `y` and `⏎` say yes, anything else leaves it alone.
 		if (key.return === true || input === "y") {
 			return action({ type: "prompt-submitted" });
 		}

@@ -3,6 +3,7 @@ import type { Writer } from "../app/notify";
 import type { Session } from "../app/session";
 import { selectedConversation } from "../app/state";
 import { type AttachContext, defaultAttachContext } from "../app/usecases/attach";
+import { defaultOpenContext, type OpenContext } from "../app/usecases/open";
 import type { MessageStore } from "../ports/store";
 import { App } from "./App";
 import { useConversations } from "./hooks/useConversations";
@@ -31,6 +32,11 @@ export interface RootProps {
 	 * it made, instead of whatever directory the test runner happens to start in.
 	 */
 	readonly attachments?: AttachContext | undefined;
+	/**
+	 * Where `o` may reach and what it launches with. Injectable so a test opens nothing: the
+	 * default is the engine's own attachments directory and the desktop's viewer.
+	 */
+	readonly open?: OpenContext | undefined;
 }
 
 /** Nothing is written unless a person is looking at a terminal: piped output stays clean. */
@@ -53,11 +59,14 @@ export function Root({
 	write = stdoutWriter,
 	notify = true,
 	attachments,
+	open,
 }: RootProps) {
 	// One identity for the whole session: the attach context is a dependency of the dispatcher,
-	// and a fresh object per render would re-subscribe every effect that names it.
+	// and a fresh object per render would re-subscribe every effect that names it. The open
+	// context is one too — it is what a keystroke launches with.
 	const paths = useMemo(() => attachments ?? defaultAttachContext(), [attachments]);
-	const { state, dispatch, version } = useRootState(session, paths);
+	const opener = useMemo(() => open ?? defaultOpenContext(), [open]);
+	const { state, dispatch, version } = useRootState(session, paths, opener);
 
 	// Derived once per render: the hooks below compare against the thread on screen, and a
 	// value read by an effect belongs in its dependencies rather than behind a ref.
@@ -79,5 +88,5 @@ export function Root({
 	// follows the expiry is what takes the line off the screen.
 	const typing = useTyping(session, conversationId);
 
-	return <App state={state} dispatch={dispatch} typing={typing} />;
+	return <App state={state} dispatch={dispatch} typing={typing} openRoot={opener.root} />;
 }

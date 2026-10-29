@@ -9,7 +9,8 @@ import {
 	selectedConversation,
 } from "../../app/state";
 import { type AttachContext, attachListing, defaultAttachContext } from "../../app/usecases/attach";
-import { runPromptEffect } from "./prompt-effect";
+import { defaultOpenContext, type OpenContext, openPlan } from "../../app/usecases/open";
+import { launchOpen, runPromptEffect } from "./prompt-effect";
 
 /**
  * The reducer plus the side effects it cannot perform itself: a submitted draft is sent
@@ -34,6 +35,7 @@ const describe = (error: unknown): string =>
 export function useRootState(
 	session: Session | undefined,
 	attachments: AttachContext = defaultAttachContext(),
+	open: OpenContext = defaultOpenContext(),
 ): RootState {
 	const [state, setState] = useState<AppState>(emptyState);
 	const [version, setVersion] = useState(0);
@@ -101,7 +103,38 @@ export function useRootState(
 			if (action.type === "prompt-submitted" && session !== undefined) {
 				// One branch per prompt kind lives in `prompt-effect.ts`: this hook owns the
 				// transitions, and that file owns what a confirmed one does.
-				runPromptEffect({ session, state: current, apply, refuse: refused, failed, attachments });
+				runPromptEffect({
+					session,
+					state: current,
+					apply,
+					refuse: refused,
+					failed,
+					attachments,
+					open,
+				});
+			}
+
+			if (action.type === "open-requested") {
+				// `o` is decided here rather than in the reducer, because the verdict needs the
+				// filesystem and the reducer has none. A refusal is said out loud: nothing opened
+				// and no prompt appeared, which otherwise reads as a dead key.
+				const message = pointedMessage(current);
+				const plan =
+					conversation === undefined
+						? ({ kind: "refused", reason: "no conversation is open" } as const)
+						: openPlan(message, conversation.id, open);
+				if (plan.kind === "refused") {
+					refused(plan.reason);
+					return;
+				}
+				// The first file of the run is a question; after that, `o` opens. Consent is state
+				// so the keymap and the prompt agree, and it is not persisted: a new shell asks.
+				if (current.filesMayOpen !== true) {
+					apply({ type: "prompt-opened", kind: "open" });
+					return;
+				}
+				launchOpen(plan.file, open, apply, failed);
+				return;
 			}
 
 			if (action.type === "hide-requested" && session !== undefined) {
@@ -115,7 +148,7 @@ export function useRootState(
 
 			apply(action);
 		},
-		[apply, session, attachments],
+		[apply, session, attachments, open],
 	);
 
 	useEffect(() => {

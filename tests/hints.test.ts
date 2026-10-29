@@ -101,7 +101,7 @@ describe("the message pane's hint", () => {
 	});
 
 	test("a prompt owns the line while it is open", () => {
-		const hint = (kind: "reaction" | "edit" | "delete" | "forward" | "attach"): string =>
+		const hint = (kind: "reaction" | "edit" | "delete" | "forward" | "attach" | "open"): string =>
 			hintsFor(
 				{
 					...stateWith(message({ isOutgoing: true, authorId: SELF_AUTHOR_ID })),
@@ -116,5 +116,48 @@ describe("the message pane's hint", () => {
 		expect(hint("forward")).toContain("pick");
 		// Two ways to confirm, because a folder is a step and a file is the message.
 		expect(hint("attach")).toContain("open");
+		// One answer, and the honest one: `o` hands a path to the desktop.
+		expect(hint("open")).toBe("⏎ open · esc keep");
+	});
+});
+
+/**
+ * `o` is the one key that leaves the terminal, so the line has to be careful about offering it:
+ * a row with no file, a file the engine never kept, and one named from outside its directory all
+ * refuse — and a hint for a key that refuses is the same lie as a dead key.
+ */
+describe("the hint for `o`", () => {
+	const ROOT = "/home/you/.local/share/signal-cli/attachments";
+	const withFile = (filename: string | null): AppState =>
+		stateWith(
+			message({
+				attachments: [
+					{
+						id: "file-1",
+						contentType: "image/jpeg",
+						filename,
+						size: 120,
+						caption: null,
+						isVoiceNote: false,
+					},
+				],
+			}),
+		);
+
+	test("is offered for a file the engine downloaded into its own directory", () => {
+		expect(hintsFor(withFile(`${ROOT}/photo.jpg`), false, ROOT)).toContain("o open");
+	});
+
+	test("is withheld for a row with no file at all", () => {
+		expect(hintsFor(stateWith(message()), false, ROOT)).not.toContain("o open");
+	});
+
+	test("is withheld for a file the engine did not keep", () => {
+		expect(hintsFor(withFile(null), false, ROOT)).not.toContain("o open");
+	});
+
+	test("is withheld for a path outside the engine's directory", () => {
+		expect(hintsFor(withFile("/home/you/.bashrc"), false, ROOT)).not.toContain("o open");
+		expect(hintsFor(withFile(`${ROOT}-evil/photo.jpg`), false, ROOT)).not.toContain("o open");
 	});
 });

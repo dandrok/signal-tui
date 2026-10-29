@@ -261,4 +261,21 @@ describe("keymap", () => {
 		}
 		expect(reduce(twoThreads, produced.action).selectedId).toBe("uuid-bob");
 	});
+
+	test("`o` asks to open in the message pane, and is a letter in the composer", () => {
+		// The branch that has to win: a key that means "leave the terminal" in one pane is the
+		// first character of a sentence in the other.
+		expect(keyAction(thread, "o", key())).toEqual({
+			kind: "action",
+			action: { type: "open-requested" },
+		});
+		expect(keyAction({ ...thread, focus: "composer" }, "o", key())).toEqual({
+			kind: "action",
+			action: { type: "draft-changed", value: "o" },
+		});
+	});
+
+	test("`o` asks nothing in the conversation list, where there is no row to open", () => {
+		expect(keyAction({ ...thread, focus: "conversations" }, "o", key())).toBeNull();
+	});
 });

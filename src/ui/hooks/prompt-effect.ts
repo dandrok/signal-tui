@@ -10,6 +10,7 @@ import {
 import { deleteFor } from "../../app/usecases/delete";
 import { editFor } from "../../app/usecases/edit";
 import { forwardNotice, forwardPlan } from "../../app/usecases/forward";
+import { type OpenContext, type OpenFile, openNotice, openPlan } from "../../app/usecases/open";
 import { emojiInputSummary, reactionFor, targetedMessage } from "../../app/usecases/react";
 
 /**
@@ -29,6 +30,32 @@ export interface PromptEffect {
 	readonly failed: (what: string) => (error: unknown) => void;
 	/** Where an attach prompt reads its paths from. Injected so a test needs no real files. */
 	readonly attachments?: AttachContext | undefined;
+	/** Where an open may reach, and what it launches with. Injected so a test opens nothing. */
+	readonly open: OpenContext;
+}
+
+/**
+ * Hands a planned file to the desktop, and says so.
+ *
+ * Shared by the confirm prompt and by every later `o` in the run, because the two paths differ
+ * only in whether a question was asked first. A launcher that throws — no `xdg-open` on a bare
+ * box — is reported rather than swallowed, and consent is granted only for a launch that
+ * actually happened: a machine that cannot open files should keep saying so.
+ */
+export function launchOpen(
+	file: OpenFile,
+	open: OpenContext,
+	apply: (action: Action) => void,
+	failed: (what: string) => (error: unknown) => void,
+): void {
+	try {
+		open.launch(file.path);
+	} catch (error) {
+		failed("open")(error);
+		return;
+	}
+	apply({ type: "notice", notice: { kind: "info", text: openNotice(file) } });
+	apply({ type: "files-may-open" });
 }
 
 export function runPromptEffect(effect: PromptEffect): void {
@@ -75,6 +102,18 @@ export function runPromptEffect(effect: PromptEffect): void {
 			} else {
 				void session.remove(conversation.id, target).catch(failed("delete"));
 			}
+			return;
+		}
+		case "open": {
+			// Asked again, even though the key already did: a row can be deleted, expire or lose
+			// its file between the keystroke and the confirm, and a launch is the one action that
+			// must never act on a verdict from an earlier frame.
+			const plan = openPlan(message, conversation.id, effect.open);
+			if (plan.kind === "refused") {
+				refuse(plan.reason);
+				return;
+			}
+			launchOpen(plan.file, effect.open, apply, failed);
 			return;
 		}
 		case "attach": {
