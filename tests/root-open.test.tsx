@@ -88,7 +88,7 @@ const workspace = async (
 const context = (root: string, launched: string[]): OpenContext => ({
 	root,
 	fs: nodeOpenFs,
-	launch: (path) => {
+	launch: async (path) => {
 		launched.push(path);
 	},
 });
@@ -179,8 +179,9 @@ describe("opening a received file", () => {
 		);
 
 		await waitFor(() => text(lastFrame).includes("look"), "the thread to load");
-		// The row is not advertised either: `o` would refuse it.
-		await press(stdin, "\t", lastFrame, "a attach");
+		// The row is not advertised either: `o` would refuse it. The wait names a hint only the
+		// message pane prints, so the assertion cannot run against the conversation list's frame.
+		await press(stdin, "\t", lastFrame, "j/k select");
 		expect(text(lastFrame)).not.toContain("o open");
 
 		await press(stdin, "o", lastFrame, "is outside the engine's attachments folder");
@@ -196,7 +197,9 @@ describe("opening a received file", () => {
 		);
 
 		await waitFor(() => text(lastFrame).includes("look"), "the thread to load");
-		await press(stdin, "	", lastFrame, "a attach");
+		// A hint only the message pane prints, so the `o` assertion below cannot be made
+		// against the conversation list's frame.
+		await press(stdin, "	", lastFrame, "j/k select");
 		await press(stdin, "o", lastFrame, "was not downloaded");
 		expect(text(lastFrame)).not.toContain("open ›");
 		expect(launched).toEqual([]);
@@ -208,7 +211,7 @@ describe("opening a received file", () => {
 		const failing: OpenContext = {
 			root,
 			fs: nodeOpenFs,
-			launch: () => {
+			launch: async () => {
 				throw new Error("xdg-open is not on PATH");
 			},
 		};

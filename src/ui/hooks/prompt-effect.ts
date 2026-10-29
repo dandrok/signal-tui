@@ -35,12 +35,13 @@ export interface PromptEffect {
 }
 
 /**
- * Hands a planned file to the desktop, and says so.
+ * Hands a planned file to the desktop, and says so once it has started.
  *
  * Shared by the confirm prompt and by every later `o` in the run, because the two paths differ
- * only in whether a question was asked first. A launcher that throws — no `xdg-open` on a bare
- * box — is reported rather than swallowed, and consent is granted only for a launch that
- * actually happened: a machine that cannot open files should keep saying so.
+ * only in whether a question was asked first. The notice follows the promise, not the call: a
+ * launcher that fails — no `xdg-open` on a bare box, a binary that vanished — is reported
+ * instead of announced, and consent is granted only for a launch that actually happened, so a
+ * machine that cannot open files keeps saying so rather than remembering a yes.
  */
 export function launchOpen(
 	file: OpenFile,
@@ -48,14 +49,10 @@ export function launchOpen(
 	apply: (action: Action) => void,
 	failed: (what: string) => (error: unknown) => void,
 ): void {
-	try {
-		open.launch(file.path);
-	} catch (error) {
-		failed("open")(error);
-		return;
-	}
-	apply({ type: "notice", notice: { kind: "info", text: openNotice(file) } });
-	apply({ type: "files-may-open" });
+	void open.launch(file.path).then(() => {
+		apply({ type: "notice", notice: { kind: "info", text: openNotice(file) } });
+		apply({ type: "files-may-open" });
+	}, failed("open"));
 }
 
 export function runPromptEffect(effect: PromptEffect): void {

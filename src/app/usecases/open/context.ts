@@ -49,8 +49,14 @@ export interface OpenContext {
 	 */
 	readonly root: string;
 	readonly fs: OpenFs;
-	/** Hands a path to the desktop. Injectable so a test launches nothing. */
-	readonly launch: (path: string) => void;
+	/**
+	 * Hands a path to the desktop. Injectable so a test launches nothing.
+	 *
+	 * A promise rather than a fire-and-forget call: "it spawned" and "it could spawn" are
+	 * different answers, and only the second one is worth telling the user about. The viewer
+	 * itself is not waited for — nothing here cares when a window closes.
+	 */
+	readonly launch: (path: string) => Promise<void>;
 }
 
 /**
@@ -90,24 +96,30 @@ export function inAttachmentsDir(path: string, root: string): boolean {
 const systemOpener = (): string => (process.platform === "darwin" ? "open" : "xdg-open");
 
 /**
- * Starts the desktop's viewer and returns at once.
+ * Starts the desktop's viewer, and resolves once it has started.
  *
  * Detached and with its output discarded, because the child outlives the redraw: a viewer
- * that held the pipe open would make the TUI wait on a window it does not own. The opener is
- * looked up first so a machine without `xdg-open` says so instead of moving the mouse and
- * doing nothing — the status line is the only place the user learns why `o` had no effect.
+ * that held the pipe open would make the TUI wait on a window it does not own.
  *
- * The `error` listener is not decoration: a spawn that fails emits the event, and an
- * unhandled one takes the whole TUI down for a missing viewer.
+ * The promise is the point. A missing opener, a permission problem or a binary that vanished
+ * between the look-up and the call all arrive as a rejection on the next tick — after the key
+ * was pressed but before anyone was told it worked. Resolving on `spawn` rather than returning
+ * at once is what keeps "opened photo.jpg" from being printed by a client that started nothing.
  */
-export function nodeLaunch(path: string): void {
+export function nodeLaunch(path: string): Promise<void> {
 	const opener = systemOpener();
 	if (Bun.which(opener) === null) {
-		throw new Error(`${opener} is not on PATH`);
+		return Promise.reject(new Error(`${opener} is not on PATH`));
 	}
-	const child = spawn(opener, [path], { detached: true, stdio: "ignore" });
-	child.on("error", () => undefined);
-	child.unref();
+	return new Promise((resolve, reject) => {
+		const child = spawn(opener, [path], { detached: true, stdio: "ignore" });
+		child.once("spawn", () => {
+			// The viewer outlives us: no exit to wait for, no pipe to keep open.
+			child.unref();
+			resolve();
+		});
+		child.once("error", reject);
+	});
 }
 
 /** The real attachments directory, the real filesystem and the real desktop opener. */

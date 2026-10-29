@@ -47,7 +47,7 @@ const fakeFs = (files: readonly string[], links: Readonly<Record<string, string>
 const context = (fs: OpenFs = fakeFs([DOWNLOADED])): OpenContext => ({
 	root: ROOT,
 	fs,
-	launch: () => undefined,
+	launch: async () => undefined,
 });
 
 const attachment = (filename: string | null, over: Partial<Attachment> = {}): Attachment => ({
