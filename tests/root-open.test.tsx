@@ -20,10 +20,18 @@ import { waitFor } from "./helpers/wait";
  * that only records: nothing here starts a viewer, and nothing depends on where the suite runs.
  * That matters more than usual — this is the one command in the client that runs something
  * outside the terminal, so its tests are the only proof of what it is allowed to run.
+ *
+ * The row is modelled the way a real cache writes one: the file on disk is named after the
+ * attachment id, and `filename` is the name the sender gave it — the pair that made the first
+ * cut refuse every live attachment.
  */
 
 const CONVERSATION = "uuid-amber";
 const SENT_AT = 1_760_000_000_000;
+/** What signal-cli writes into its attachments directory. */
+const LOCAL = "abc123XYZ-photo.jpg";
+/** What the sender called it, which is what the pane draws. */
+const DISPLAY = "signal-2026-10-24-203528.jpeg";
 
 const fakeSession = (): Session => ({
 	start: async () => undefined,
@@ -46,13 +54,14 @@ const fakeSession = (): Session => ({
 	errors: [],
 });
 
-const file = (path: string | null): Attachment => ({
-	id: "file-1",
+const file = (over: Partial<Attachment> = {}): Attachment => ({
+	id: LOCAL,
 	contentType: "image/jpeg",
-	filename: path,
+	filename: DISPLAY,
 	size: 120,
 	caption: null,
 	isVoiceNote: false,
+	...over,
 });
 
 const messageWith = (attachments: readonly Attachment[]): Message => ({
@@ -69,11 +78,11 @@ const messageWith = (attachments: readonly Attachment[]): Message => ({
 
 /** A real attachments directory with one real file, and a store holding one row about it. */
 const workspace = async (
-	attachments: (root: string) => readonly Attachment[],
+	attachments: () => readonly Attachment[],
 ): Promise<{ root: string; store: InMemoryStore; launched: string[] }> => {
 	const root = join(mkdtempSync(join(tmpdir(), "signal-tui-open-")), "signal-cli", "attachments");
 	mkdirSync(root, { recursive: true });
-	writeFileSync(join(root, "photo.jpg"), "x".repeat(120));
+	writeFileSync(join(root, LOCAL), "x".repeat(120));
 	const store = new InMemoryStore({ seed: false });
 	await store.upsertConversation({
 		id: CONVERSATION,
@@ -81,7 +90,7 @@ const workspace = async (
 		unreadCount: 0,
 		lastActivityAt: SENT_AT,
 	});
-	await store.saveMessage(messageWith(attachments(root)));
+	await store.saveMessage(messageWith(attachments()));
 	return { root, store, launched: [] };
 };
 
@@ -113,8 +122,8 @@ const press = async (
 };
 
 describe("opening a received file", () => {
-	test("the first `o` asks, ⏎ opens, and the next `o` does not ask again", async () => {
-		const { root, store, launched } = await workspace((dir) => [file(join(dir, "photo.jpg"))]);
+	test("the first `o` asks, ⏎ opens the file on disk, and the next `o` does not ask again", async () => {
+		const { root, store, launched } = await workspace(() => [file()]);
 		const { stdin, lastFrame, unmount } = render(
 			<Root store={store} session={fakeSession()} open={context(root, launched)} />,
 		);
@@ -126,8 +135,9 @@ describe("opening a received file", () => {
 		expect(text(lastFrame)).toContain("the file on that row?");
 		expect(launched).toEqual([]);
 
-		await press(stdin, "\r", lastFrame, "opened photo.jpg");
-		expect(launched).toEqual([join(root, "photo.jpg")]);
+		// The notice names the file the way the row does, not the id it is stored under.
+		await press(stdin, "\r", lastFrame, `opened ${DISPLAY}`);
+		expect(launched).toEqual([join(root, LOCAL)]);
 		await waitFor(() => !text(lastFrame).includes("open ›"), "the prompt to close");
 
 		// Consent is remembered for the run: the second press opens without a question.
@@ -138,7 +148,7 @@ describe("opening a received file", () => {
 	});
 
 	test("escape keeps the file shut, and leaves the key working", async () => {
-		const { root, store, launched } = await workspace((dir) => [file(join(dir, "photo.jpg"))]);
+		const { root, store, launched } = await workspace(() => [file()]);
 		const { stdin, lastFrame, unmount } = render(
 			<Root store={store} session={fakeSession()} open={context(root, launched)} />,
 		);
@@ -157,7 +167,7 @@ describe("opening a received file", () => {
 	});
 
 	test("`n` answers the question with no", async () => {
-		const { root, store, launched } = await workspace((dir) => [file(join(dir, "photo.jpg"))]);
+		const { root, store, launched } = await workspace(() => [file()]);
 		const { stdin, lastFrame, unmount } = render(
 			<Root store={store} session={fakeSession()} open={context(root, launched)} />,
 		);
@@ -172,8 +182,12 @@ describe("opening a received file", () => {
 		unmount();
 	});
 
-	test("a file outside the engine's directory is refused by name, and never asked about", async () => {
-		const { root, store, launched } = await workspace(() => [file("/home/you/.bashrc")]);
+	test("a row the engine kept no copy of is refused by name, and never asked about", async () => {
+		// Our own send, or a file downloaded by another client: an id of null, and a `filename`
+		// that is a path this machine never wrote.
+		const { root, store, launched } = await workspace(() => [
+			file({ id: null, filename: "/home/you/cv.pdf" }),
+		]);
 		const { stdin, lastFrame, unmount } = render(
 			<Root store={store} session={fakeSession()} open={context(root, launched)} />,
 		);
@@ -184,30 +198,27 @@ describe("opening a received file", () => {
 		await press(stdin, "\t", lastFrame, "j/k select");
 		expect(text(lastFrame)).not.toContain("o open");
 
-		await press(stdin, "o", lastFrame, "is outside the engine's attachments folder");
+		await press(stdin, "o", lastFrame, "the engine kept no copy of that file");
 		expect(text(lastFrame)).not.toContain("open ›");
 		expect(launched).toEqual([]);
 		unmount();
 	});
 
-	test("a row whose file was never downloaded says so instead of asking", async () => {
-		const { root, store, launched } = await workspace(() => [file(null)]);
+	test("a file that left the disk after the row was cached says so", async () => {
+		const { root, store, launched } = await workspace(() => [file({ id: "gone.jpg" })]);
 		const { stdin, lastFrame, unmount } = render(
 			<Root store={store} session={fakeSession()} open={context(root, launched)} />,
 		);
 
 		await waitFor(() => text(lastFrame).includes("look"), "the thread to load");
-		// A hint only the message pane prints, so the `o` assertion below cannot be made
-		// against the conversation list's frame.
-		await press(stdin, "	", lastFrame, "j/k select");
-		await press(stdin, "o", lastFrame, "was not downloaded");
-		expect(text(lastFrame)).not.toContain("open ›");
+		await press(stdin, "\t", lastFrame, "j/k select");
+		await press(stdin, "o", lastFrame, "is no longer on disk");
 		expect(launched).toEqual([]);
 		unmount();
 	});
 
 	test("demo mode, which has no engine, still opens: a launch is not a message", async () => {
-		const { root, store, launched } = await workspace((dir) => [file(join(dir, "photo.jpg"))]);
+		const { root, store, launched } = await workspace(() => [file()]);
 		// No `session` prop at all, which is how `--demo` runs.
 		const { stdin, lastFrame, unmount } = render(
 			<Root store={store} open={context(root, launched)} />,
@@ -216,14 +227,14 @@ describe("opening a received file", () => {
 		await waitFor(() => text(lastFrame).includes("look"), "the thread to load");
 		await press(stdin, "\t", lastFrame, "j/k select");
 		await press(stdin, "o", lastFrame, "open ›");
-		await press(stdin, "\r", lastFrame, "opened photo.jpg");
+		await press(stdin, "\r", lastFrame, `opened ${DISPLAY}`);
 
-		expect(launched).toEqual([join(root, "photo.jpg")]);
+		expect(launched).toEqual([join(root, LOCAL)]);
 		unmount();
 	});
 
 	test("a launcher that fails is reported, and consent is not granted", async () => {
-		const { root, store } = await workspace((dir) => [file(join(dir, "photo.jpg"))]);
+		const { root, store } = await workspace(() => [file()]);
 		const failing: OpenContext = {
 			root,
 			fs: nodeOpenFs,

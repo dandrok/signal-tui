@@ -15,9 +15,9 @@ export interface Conversation {
 }
 
 /**
- * A file that came with a message. `filename` is what signal-cli handed us,
- * which for a received attachment is the path it downloaded to; rendering uses
- * the last path segment, so the label stays readable either way.
+ * A file that came with a message: where the engine put it, and what to call it.
+ * The two are different fields, and reading one for the other is a live bug — see
+ * `usecases/open`.
  */
 /** Who asked for a change, as both a stable id and the label shown on screen. */
 export interface EditAuthor {
@@ -69,8 +69,18 @@ export interface QuotedMessage {
 }
 
 export interface Attachment {
+	/**
+	 * The name `signal-cli` saved the file under **inside its own attachments directory**,
+	 * extension included — the local path is that directory plus this. Null when the engine kept
+	 * no copy (it was told not to download, or the file is one we sent).
+	 */
 	readonly id: string | null;
 	readonly contentType: string | null;
+	/**
+	 * The name the file was *sent* with, for display: `signal-2026-10-24-203528.jpeg` is a name,
+	 * not a path, and nothing on disk is called that. Our own sends carry the path we picked
+	 * here, because that is the only name there is for them.
+	 */
 	readonly filename: string | null;
 	readonly size: number | null;
 	readonly caption: string | null;

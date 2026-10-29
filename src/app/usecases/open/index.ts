@@ -18,9 +18,10 @@ export {
 export { nodeLaunch } from "./launch";
 export {
 	canOpen,
-	downloadedPath,
+	type OpenCandidate,
 	type OpenFile,
 	type OpenPlan,
+	openCandidate,
 	openNotice,
 	openPlan,
 } from "./plan";

@@ -1,4 +1,4 @@
-import { basename } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import type { Attachment, ConversationId, Message } from "../../../domain/types";
 import type { OpenContext } from "./context";
 import { inAttachmentsDir } from "./root";
@@ -10,6 +10,14 @@ import { inAttachmentsDir } from "./root";
  * Pure over the injected context — the verdict is a value, so the key, the confirm prompt and
  * the status line all read the same answer. Nothing here launches anything: the wiring does
  * that, once, after this says it is allowed.
+ *
+ * **The local file is the attachment's `id`, not its `filename`.** `signal-cli` writes what it
+ * downloads as `<data-dir>/attachments/<id>` — the id carries the extension — and reports the
+ * original name separately as `filename`, for display. Reading `filename` as a path is what made
+ * the first version refuse every real attachment ("signal-2026-…​.jpeg is outside the engine's
+ * attachments folder"): the name was right there on the row, and it named nothing on disk.
+ * Checked against a real cache: 32 rows, 30 with an id, all 30 present at `<root>/<id>`, all 30
+ * sizes matching.
  */
 
 /** The file a launched row would open. */
@@ -26,26 +34,66 @@ export type OpenPlan =
 	| { readonly kind: "refused"; readonly reason: string };
 
 /**
- * The first file on a message that the engine actually downloaded, or null.
+ * The name the engine gave the downloaded file, or null when this attachment was not kept.
  *
- * The first rather than a picker: a row with several files is rare, and the one the pane draws
- * first is the one a keystroke reads as "this file". A file with no path is skipped rather than
- * ending the search — with `ignoreAttachments` the engine reports the files it did not keep, so
- * a message can carry one of those beside one that arrived.
+ * A bare name only. The id comes off the wire, so it is treated as a component and never as a
+ * path: anything with a separator or a `.`/`..` in it is not something the engine writes, and
+ * joining it would let a peer name a file outside the directory. Null is the `ignoreAttachments`
+ * case, and our own sends — the engine uploaded those and kept no local copy.
  */
-function firstDownloaded(message: Message): string | null {
-	const files: readonly Attachment[] = message.attachments ?? [];
-	for (const file of files) {
-		if (typeof file.filename === "string" && file.filename.length > 0) {
-			return file.filename;
+function localName(attachment: Attachment): string | null {
+	const id = attachment.id;
+	if (typeof id !== "string" || id.length === 0 || id === "." || id === "..") {
+		return null;
+	}
+	if (id.includes("/") || id.includes("\\") || basename(id) !== id) {
+		return null;
+	}
+	return id;
+}
+
+/** A file a row could open: where it is, and what to call it. */
+export interface OpenCandidate {
+	/** Where the engine wrote it, built from the directory and the attachment's id. */
+	readonly path: string;
+	/**
+	 * What the user sees: the name the sender gave the file, which is what the row draws, falling
+	 * back to the engine's own name when the sender gave none. Never used as a path.
+	 */
+	readonly name: string;
+}
+
+/**
+ * The file a row would open, or null when the engine kept no copy.
+ *
+ * The first attachment that has an id — a row with several is rare, and the one the pane draws
+ * first is the one a keystroke reads as "this file". A file with no id is skipped rather than
+ * ending the search, because a message can carry a file the engine did not download beside one it
+ * did.
+ *
+ * An absolute `filename` inside the directory is accepted too, and only there: that is an engine
+ * reporting the path it wrote rather than the name it was sent. The directory check is the same
+ * one the launch gets, so this cannot widen what `o` may reach.
+ */
+export function openCandidate(message: Message, root: string): OpenCandidate | null {
+	for (const attachment of message.attachments ?? []) {
+		const id = localName(attachment);
+		const path = id === null ? absoluteInside(attachment.filename, root) : join(root, id);
+		if (path !== null) {
+			const name = attachment.filename;
+			return { path, name: typeof name === "string" && name.length > 0 ? name : basename(path) };
 		}
 	}
 	return null;
 }
 
-/** Whether the row's first file is one the engine downloaded — the cheap half of the rule. */
-export function downloadedPath(message: Message): string | null {
-	return firstDownloaded(message);
+/** `filename` as a path, but only when the engine wrote one and it is in its own directory. */
+function absoluteInside(filename: string | null, root: string): string | null {
+	// A name is not a path: `photo.jpg` is what a sender called the file, and joining it would be
+	// the bug this slice shipped with.
+	return typeof filename === "string" && isAbsolute(filename) && inAttachmentsDir(filename, root)
+		? filename
+		: null;
 }
 
 /** What the status line says once a file has been handed to the desktop. */
@@ -57,9 +105,9 @@ export function openNotice(file: OpenFile): string {
  * What `o` on this row would do.
  *
  * The refusals are ordered by what the user can act on. A deleted, expired or view-once row has
- * no file at all, so saying that is truer than saying the path is missing. The security rule
- * comes before the filesystem: a path outside the engine's directory is refused on its text
- * alone, without a stat, so nothing a peer named can even be probed for existence.
+ * no file at all, so saying that is truer than saying the path is missing. The directory rule
+ * comes before the filesystem: a path outside the engine's folder is refused on its text alone,
+ * without a stat, so nothing a peer named can even be probed for existence.
  *
  * The launch path is the *canonical* one — `realpath` of a file that lives under a symlinked
  * attachments directory — and it is checked against the canonical root for the same reason: the
@@ -85,42 +133,42 @@ export function openPlan(
 	if (message.isViewOnce === true) {
 		return { kind: "refused", reason: "a view-once file was never stored: nothing to open" };
 	}
-	const named = firstDownloaded(message);
-	if (named === null) {
+	const candidate = openCandidate(message, context.root);
+	if (candidate === null) {
 		const count = message.attachments?.length ?? 0;
 		return {
 			kind: "refused",
 			reason:
 				count === 0
 					? "that message has no file"
-					: "that file was not downloaded, so there is nothing to open",
+					: "the engine kept no copy of that file: nothing to open",
 		};
 	}
+	const named = candidate.path;
 	// The canonical root, because `$XDG_DATA_HOME` is allowed to be a symlink and the engine
 	// then writes through it: a file can be inside the *place* while its text names the real
-	// directory. Both spellings count on the way in; the real one is what the launch is checked
-	// against on the way out.
+	// directory. Both spellings are checked on the way in; the real one on the way out.
 	const base = context.fs.realPath(context.root) ?? context.root;
 	if (!inAttachmentsDir(named, context.root) && !inAttachmentsDir(named, base)) {
 		return {
 			kind: "refused",
-			reason: `${basename(named)} is outside the engine's attachments folder: not opening it`,
+			reason: `${candidate.name} is outside the engine's attachments folder: not opening it`,
 		};
 	}
 	const real = context.fs.realPath(named);
 	if (real === null) {
-		return { kind: "refused", reason: `${basename(named)} is no longer on disk` };
+		return { kind: "refused", reason: `${candidate.name} is no longer on disk` };
 	}
 	if (!inAttachmentsDir(real, base)) {
 		return {
 			kind: "refused",
-			reason: `${basename(named)} points outside the engine's attachments folder: not opening it`,
+			reason: `${candidate.name} points outside the engine's attachments folder: not opening it`,
 		};
 	}
 	if (!context.fs.isFile(real)) {
-		return { kind: "refused", reason: `${basename(real)} is a folder, not a file` };
+		return { kind: "refused", reason: `${candidate.name} is a folder, not a file` };
 	}
-	return { kind: "open", file: { path: real, name: basename(real) } };
+	return { kind: "open", file: { path: real, name: candidate.name } };
 }
 
 /**
@@ -131,6 +179,5 @@ export function openPlan(
  * which is the moment the user can be told.
  */
 export function canOpen(message: Message, root: string): boolean {
-	const named = downloadedPath(message);
-	return named !== null && inAttachmentsDir(named, root);
+	return openCandidate(message, root) !== null;
 }
