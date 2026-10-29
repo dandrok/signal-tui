@@ -7,7 +7,8 @@ import { action, type KeyLike, type KeyResult } from "./types";
  * A delete is confirmed rather than typed: `⏎` or `y` sends it, anything else leaves it alone,
  * so a keystroke meant for the pane cannot remove a message from everyone else's phone. The
  * other three are text fields, and they share one rule — type, backspace, `⏎` to send. The
- * reaction and forward prompts also have a list, which tab and the arrows walk.
+ * reaction, forward and attach prompts also have a list, which tab and the arrows walk; the
+ * open prompt has *only* a list, and no field at all.
  */
 export function promptKey(state: AppState, input: string, key: KeyLike): KeyResult {
 	const prompt = state.prompt;
@@ -25,8 +26,8 @@ export function promptKey(state: AppState, input: string, key: KeyLike): KeyResu
 	) {
 		// Four pickers, one rule: tab and the arrows walk the suggestions, and every other key is
 		// text the draft is being narrowed with — an emoji name, a chat's, a path's. The open
-		// picker's list cannot be narrowed (it is the files this message carries), so its keys
-		// are only the two that walk it.
+		// picker's list cannot be narrowed: it is the files this message carries, so the block
+		// below swallows everything that is not one of these keys.
 		if (key.tab === true) {
 			return action({ type: "prompt-moved", delta: key.shift === true ? -1 : 1 });
 		}
@@ -36,6 +37,12 @@ export function promptKey(state: AppState, input: string, key: KeyLike): KeyResu
 		if (key.downArrow === true) {
 			return action({ type: "prompt-moved", delta: 1 });
 		}
+	}
+	if (prompt.kind === "open") {
+		// A picker with no field, so nothing else may reach the draft: `changePrompt` resets the
+		// highlight to the first item whenever the draft changes, and the draft is never drawn
+		// here — a stray keystroke on `3/4` would silently put the next `⏎` back on `1/4`.
+		return key.return === true ? action({ type: "prompt-submitted" }) : null;
 	}
 	if (prompt.kind === "delete") {
 		// Two answers, not a text field: a delete changes the message on everyone else's phone, so

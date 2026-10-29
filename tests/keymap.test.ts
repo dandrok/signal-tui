@@ -278,4 +278,44 @@ describe("keymap", () => {
 	test("`o` asks nothing in the conversation list, where there is no row to open", () => {
 		expect(keyAction({ ...thread, focus: "conversations" }, "o", key())).toBeNull();
 	});
+
+	test("an open picker walks with the arrows, opens on ⏎, and swallows every other key", () => {
+		// A stray key used to reach the draft, and `changePrompt` resets the highlight when the
+		// draft changes — so typing on `3/4` quietly put the next ⏎ back on `1/4`, invisibly,
+		// because the open prompt draws no draft.
+		const opening: AppState = {
+			...thread,
+			prompt: {
+				kind: "open",
+				targetId: "uuid-alice:2",
+				draft: "",
+				pick: 2,
+				files: [
+					{ path: "/r/a.jpg", name: "a.jpg" },
+					{ path: "/r/b.jpg", name: "b.jpg" },
+					{ path: "/r/c.jpg", name: "c.jpg" },
+					{ path: "/r/d.jpg", name: "d.jpg" },
+				],
+			},
+		};
+
+		expect(keyAction(opening, "", key({ downArrow: true }))).toEqual({
+			kind: "action",
+			action: { type: "prompt-moved", delta: 1 },
+		});
+		expect(keyAction(opening, "\r", key({ return: true }))).toEqual({
+			kind: "action",
+			action: { type: "prompt-submitted" },
+		});
+		for (const [input, pressed] of [
+			["x", key()],
+			["", key({ backspace: true })],
+			["n", key()],
+			["y", key()],
+		] as const) {
+			expect(keyAction(opening, input, pressed)).toBeNull();
+		}
+		// And the highlight the reducer holds did not move through any of that.
+		expect(reduce(opening, { type: "prompt-moved", delta: 1 }).prompt?.pick).toBe(3);
+	});
 });
