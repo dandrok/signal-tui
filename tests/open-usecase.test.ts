@@ -113,6 +113,17 @@ describe("the engine's attachments directory", () => {
 		).toBe("/mnt/s/attachments");
 	});
 
+	test("takes every name the engine's parser gives that option, short forms included", () => {
+		// `addArgument("-d", "--data-dir", "-c", "--config")` is one option in App.java, so a
+		// user who wrote `-d /mnt/s` moved their data exactly as far as `--config` would.
+		for (const flag of ["--data-dir", "-d", "-c"]) {
+			expect(engineAttachmentsRoot({}, "/home/you", [flag, "/mnt/s"])).toBe("/mnt/s/attachments");
+		}
+		expect(engineAttachmentsRoot({}, "/home/you", ["--data-dir=/mnt/s"])).toBe(
+			"/mnt/s/attachments",
+		);
+	});
+
 	test("resolves a relative --config from the working directory, where the engine starts", () => {
 		expect(engineAttachmentsRoot({}, "/home/you", ["--config", "elsewhere"])).toBe(
 			`${resolve("elsewhere")}/attachments`,

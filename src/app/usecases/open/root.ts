@@ -9,6 +9,11 @@ import { isAbsolute, join, resolve, sep } from "node:path";
  * everyone who moved their data, which reads as a broken key rather than a rule.
  */
 
+/** The names the engine's global parser gives its data-directory option, one option each. */
+const DATA_DIR_FLAGS = new Set(["--config", "--data-dir", "-c", "-d"]);
+/** The two long names in their `=value` form; the short ones have no such spelling. */
+const DATA_DIR_INLINE = ["--config=", "--data-dir="];
+
 /**
  * Where signal-cli keeps what it downloaded: its own data directory, under `attachments`.
  *
@@ -27,7 +32,7 @@ export function engineAttachmentsRoot(
 	home: string = homedir(),
 	engineArgs: readonly string[] = [],
 ): string {
-	const configured = configDir(engineArgs);
+	const configured = dataDir(engineArgs);
 	if (configured !== null) {
 		return join(configured, "attachments");
 	}
@@ -37,17 +42,20 @@ export function engineAttachmentsRoot(
 }
 
 /**
- * The directory `--config` names, or null when the arguments do not set one.
+ * The directory the engine's data lives in, or null when the arguments do not name one.
  *
- * Both spellings, because the engine accepts both, and a relative path is resolved against the
- * working directory — the same place the engine would resolve it from, since it was started
- * here. A flag with nothing after it is not a directory: falling back beats inventing one.
+ * `--config`, `--data-dir`, `-c` and `-d` are **one** option with four names in signal-cli's
+ * global parser (`App.java` declares them in a single `addArgument`), so all four count —
+ * reading only the two long spellings would refuse the files of anyone who used the short one.
+ * A relative path is resolved against the working directory, the same place the engine would
+ * resolve it from, since it was started here. A flag with nothing usable after it is not a
+ * directory: falling back beats inventing one.
  */
-function configDir(engineArgs: readonly string[]): string | null {
+function dataDir(engineArgs: readonly string[]): string | null {
 	for (const [index, arg] of engineArgs.entries()) {
-		const inline = arg.startsWith("--config=") ? arg.slice("--config=".length) : null;
-		const separate = arg === "--config" ? (engineArgs[index + 1] ?? null) : null;
-		const value = inline ?? separate;
+		const inline = DATA_DIR_INLINE.find((flag) => arg.startsWith(flag));
+		const separate = DATA_DIR_FLAGS.has(arg) ? (engineArgs[index + 1] ?? null) : null;
+		const value = inline === undefined ? separate : arg.slice(inline.length);
 		if (value === null) {
 			continue;
 		}
