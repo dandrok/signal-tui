@@ -1,5 +1,13 @@
 import type { Check, Probes } from "../types";
-import { atLeast, MINIMUM_BUN, MINIMUM_JAVA, MINIMUM_SIGNAL_CLI, parseVersion } from "../version";
+import {
+	atLeast,
+	compareVersions,
+	MINIMUM_BUN,
+	MINIMUM_JAVA,
+	MINIMUM_SIGNAL_CLI,
+	parseVersion,
+	VERIFIED_SIGNAL_CLI,
+} from "../version";
 
 /**
  * Runtime and engine checks: what has to be installed before anything can start.
@@ -8,47 +16,75 @@ import { atLeast, MINIMUM_BUN, MINIMUM_JAVA, MINIMUM_SIGNAL_CLI, parseVersion } 
  * satisfied or unnecessary, and Java only becomes actionable when signal-cli itself fails: a
  * successful version check does not reveal which build is installed, so absent java proves a
  * native build and present java proves nothing.
+ *
+ * The engine check carries two facts, because one of them is a lie on its own. `>= 0.14.0` says
+ * the commands this client uses existed once; it does not say they still answer. signal-cli
+ * tracks a protocol that moves, and a release a few months old stops working — so the row also
+ * knows which release this build was written against, and says when the installed one is behind
+ * it. Older than the baseline is still a failure, older than the verified release is a warning,
+ * newer is fine but untested, and the hint says which of those you are looking at.
  */
 export function runtimeChecks(probes: Probes): readonly Check[] {
-	const checks: Check[] = [];
-	const bunOk = atLeast(parseVersion(probes.bunVersion), MINIMUM_BUN);
+	return [bunCheck(probes), signalCliCheck(probes), javaCheck(probes)];
+}
 
-	checks.push({
+function bunCheck(probes: Probes): Check {
+	const ok = atLeast(parseVersion(probes.bunVersion), MINIMUM_BUN);
+	return {
 		name: "bun runtime",
-		status: bunOk ? "ok" : "warn",
+		status: ok ? "ok" : "warn",
 		detail: `Bun ${probes.bunVersion}`,
-		hint: bunOk ? undefined : `the project targets Bun >= ${MINIMUM_BUN.join(".")}`,
-	});
+		hint: ok ? undefined : `the project targets Bun >= ${MINIMUM_BUN.join(".")}`,
+	};
+}
 
-	if (probes.signalCliVersion === null) {
-		checks.push(
-			probes.signalCliError === null
-				? {
-						name: "signal-cli",
-						status: "fail",
-						detail: "not found on PATH",
-						hint: "install signal-cli 0.14 or newer: https://github.com/AsamK/signal-cli#installation",
-					}
-				: {
-						name: "signal-cli",
-						status: "fail",
-						detail: `found but failed to run: ${probes.signalCliError}`,
-						hint: "run it directly to see the full error (that is not a missing binary)",
-					},
-		);
-	} else if (!atLeast(parseVersion(probes.signalCliVersion), MINIMUM_SIGNAL_CLI)) {
-		checks.push({
-			name: "signal-cli",
-			status: "fail",
-			detail: `${probes.signalCliVersion} is older than ${MINIMUM_SIGNAL_CLI.slice(0, 2).join(".")}`,
-			hint: "upgrade: releases older than ~3 months stop working as Signal changes",
-		});
-	} else {
-		checks.push({ name: "signal-cli", status: "ok", detail: probes.signalCliVersion });
+function signalCliCheck(probes: Probes): Check {
+	const reported = probes.signalCliVersion;
+	if (reported === null) {
+		return probes.signalCliError === null
+			? {
+					name: "signal-cli",
+					status: "fail",
+					detail: "not found on PATH",
+					hint: "install signal-cli 0.14 or newer: https://github.com/AsamK/signal-cli#installation",
+				}
+			: {
+					name: "signal-cli",
+					status: "fail",
+					detail: `found but failed to run: ${probes.signalCliError}`,
+					hint: "run it directly to see the full error (that is not a missing binary)",
+				};
 	}
 
-	checks.push(javaCheck(probes));
-	return checks;
+	const installed = parseVersion(reported);
+	if (!atLeast(installed, MINIMUM_SIGNAL_CLI) || installed === null) {
+		return {
+			name: "signal-cli",
+			status: "fail",
+			detail: `${reported} is older than ${MINIMUM_SIGNAL_CLI.slice(0, 2).join(".")}`,
+			hint: "upgrade: releases older than ~3 months stop working as Signal changes",
+		};
+	}
+
+	const verified = VERIFIED_SIGNAL_CLI.join(".");
+	const against = compareVersions(installed, VERIFIED_SIGNAL_CLI);
+	if (against === 0) {
+		return { name: "signal-cli", status: "ok", detail: reported };
+	}
+	if (against > 0) {
+		return {
+			name: "signal-cli",
+			status: "ok",
+			detail: `${reported} (newer than ${verified})`,
+			hint: `this build was written against ${verified}: if something breaks, a protocol change is the first thing to suspect`,
+		};
+	}
+	return {
+		name: "signal-cli",
+		status: "warn",
+		detail: `${reported} (older than ${verified})`,
+		hint: `this build was verified against ${verified}. Releases older than about three months stop working — upgrade before it fails mid-conversation`,
+	};
 }
 
 function javaCheck(probes: Probes): Check {
