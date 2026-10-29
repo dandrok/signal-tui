@@ -3,8 +3,56 @@
 Notable changes, newest first. This file starts at 0.1.0 — earlier versions are in the
 [releases](https://github.com/dandrok/signal-tui/releases).
 
-`0.4.0` is the release where the client starts moving files: a message can carry one you pick
-from a path prompt, and the engine can be told to stop downloading the ones you receive.
+`0.5.0` is the release where a received file opens: `o` hands it to your desktop, and `doctor`
+starts saying when the engine is drifting rather than only when it is ancient.
+
+## [0.5.0] — 2026-10-29
+
+### Added
+
+- **Open a received file** (`o`): the path `signal-cli` downloaded goes to your desktop's viewer
+  (`xdg-open`, `open` on macOS). A message carrying several files opens a picker — `⇥`/`↑↓` walk
+  it, `⏎` opens the highlighted one, and the list is frozen on the keystroke so `⏎` opens the row
+  you are looking at. One file shows as `name 1/1` and opens on `⏎`; after the first successful
+  open of the run, a one-file row opens with no prompt at all. This is the first thing the client
+  does that leaves the terminal, so the rule is fixed in the use case: **only a file inside the
+  engine's own attachments directory is launched** — `<data-dir>/attachments/<id>`, with `--config`
+  and `--data-dir` honoured — and anything else is refused by name, without the path ever being
+  probed for existence. A deleted, expired or view-once row, a file the engine kept no copy of
+  (that includes everything you sent yourself), and a file that has left the disk each say why
+  instead of doing nothing.
+- **`doctor` warns when the engine drifts**: `0.14.9` is the release this build was verified
+  against, `0.14.0` stays the floor. Below the floor it fails, between the two it warns and names
+  both versions, above it says which one it was tested with. signal-cli has a roughly three-month
+  compatibility clock, so "newer than 0.14.0" can be true, runnable, and about to silently stop
+  receiving — which is not an `ok`.
+
+### Fixed
+
+- Confirming `o` in `--demo`, where there is no engine, did nothing at all: the prompt's effect was
+  reachable only with a session, and a launch never needed one.
+- The status line advertises `o` only for a row whose file the engine actually kept, so the hint
+  cannot offer a key that would refuse.
+
+### Internal
+
+- **The open slice is a folder** (`src/app/usecases/open/`) split by how often each question is
+  asked: `candidates` (what a row offers, from the paths' text alone — the status line asks it on
+  every keystroke), `plan` (the same list once the disk agrees, and whether one may launch),
+  `root` (which directory, and the boundary test), `launch` (a launch resolves "it did not fail
+  immediately": `xdg-open` forks and then exits `3` when nothing handles the file, so the notice
+  follows a 500 ms window rather than a `spawn` event), `context` (the wiring a test replaces).
+- **`Attachment.id` is the file's name on disk; `filename` is what the sender called it.** A
+  comment said the opposite, and `o` first shipped refusing every live attachment because of it.
+  Checked against a real cache rather than the comment: 32 rows, 30 with an id, all 30 present at
+  `<root>/<id>` with matching sizes.
+- **The engine's data directory is one option with four names** — `-d`, `--data-dir`, `-c`,
+  `--config` (`App.java:72` at v0.14.9) — so every spelling is read, and `undefined`/relative
+  `XDG_DATA_HOME` behaviour matches the engine's.
+- `state/prompt-refusals.ts` and `state/prompt-types.ts` split out of files that crossed the
+  200-line cap; `ui/hooks/open-effect.ts` holds the one prompt effect that needs no session.
+- No schema change: an existing cache opens as it is, still at version 10. 885 tests across 102
+  files.
 
 ## [0.4.0] — 2026-10-28
 
