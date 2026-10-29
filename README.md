@@ -166,6 +166,7 @@ Nothing secret belongs in there — the account is a flag, and the cache path is
 | `e` | edit your own message: the prompt opens with its body, `⏎` saves, `Esc` cancels |
 | `d` | delete your own message for everyone — it asks first, `⏎` or `y` confirms |
 | `D` | hide a message on this device only; nothing is sent and nobody else is affected |
+| `o` | open a file on the selected message with your desktop's viewer (`xdg-open`, `open` on macOS). A message with several files opens a picker — `⇥`/`↑↓` to choose, `⏎` opens the highlighted one; a message with one opens it directly, after the first press of the run. Only files `signal-cli` itself downloaded are launched; anything outside its attachments directory is refused by name |
 | `⏎` | send the draft, or send the emoji while reacting |
 | `/` | search cached history — `↑` / `↓` to pick a hit, `⏎` to open it, `Esc` to close |
 | `Esc` | leave the composer, cancel a reply, cancel a reaction, close search |
@@ -291,9 +292,6 @@ the last second of typing.
 - **forwarding a message with files**: a forward sends the words only — Signal has no `forward`
   command and no "forwarded" field, so it is a re-send to another conversation, and the picker
   refuses a message with attachments rather than sending its caption alone
-- **opening a received attachment** (`xdg-open`): the pane shows the name and size, and the
-  engine's path is kept, but nothing launches a file the thread carries yet — the first thing
-  this client would do that leaves the terminal, so it gets its own decision
 - the **full** emoji set: the picker carries a curated table of ~50 names rather than Unicode's
   3600, so a rare emoji has to be pasted rather than named. Adding one is a line in
   `src/domain/emoji-catalog.ts`
@@ -310,7 +308,9 @@ the last second of typing.
 
 Attachments themselves are never downloaded by this app: `signal-cli` stores them
 under `~/.local/share/signal-cli/attachments`, and the pane shows the file's name and
-size, not where it sits on disk.
+size. `o` hands one of those paths to your desktop's viewer — and only one of *those*:
+a path that is not inside the engine's directory is refused, because a filename a
+sender chose must never be able to make this client run something.
 
 ## Security notes
 

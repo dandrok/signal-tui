@@ -1,5 +1,7 @@
 import type { Conversation, ConversationId, Message, MessageId } from "../../domain/types";
 import type { AttachCandidate } from "../usecases/attach";
+import type { OpenFile } from "../usecases/open";
+import type { PromptKind, PromptState } from "./prompt-types";
 
 /**
  * The shape of app state, and the vocabulary its transitions speak.
@@ -27,52 +29,7 @@ export interface SearchState {
 	readonly ran: boolean;
 }
 
-/**
- * What a prompt is for. One mode, five questions, because they share everything that matters:
- * a draft, enter to confirm, escape to leave — and, for four of them, a row to point at.
- */
-export type PromptKind = "reaction" | "edit" | "delete" | "forward" | "attach";
-
-/**
- * An open prompt: which message it names, and what has been typed into it.
- *
- * A mode like search — while it is open the keyboard belongs to it — but it holds an id
- * rather than a message: the row can be edited, deleted or swept while the prompt is open,
- * and the send path resolves it again before anything goes on the wire.
- */
-export interface PromptState {
-	readonly kind: PromptKind;
-	/**
-	 * The row the prompt names, or null for the one prompt that names no row: a file is sent to
-	 * the conversation, not to a message.
-	 */
-	readonly targetId: MessageId | null;
-	/** The emoji, the replacement body, the conversation filter, a file path, or (for a delete) nothing. */
-	readonly draft: string;
-	/**
-	 * Which suggestion the arrow keys are on. The reaction, forward and attach prompts all have
-	 * a list; a draft that is already one emoji ignores this, and typing resets it to the best
-	 * match.
-	 */
-	readonly pick: number;
-	/**
-	 * Where a forward can go, frozen when the prompt opened.
-	 *
-	 * A snapshot rather than a fresh read of the conversation list, because that list is ordered
-	 * by activity and reorders whenever a message arrives: an index into a list that moved
-	 * between the keystroke and the confirm would send somebody's message to whoever slid into
-	 * that row. The list the user is looking at is the list they are choosing from.
-	 */
-	readonly chats?: readonly Conversation[];
-	/**
-	 * What an attach prompt matched, listed from the draft on the keystroke that changed it.
-	 *
-	 * Carried on the action rather than read in the reducer: the filesystem is the one source
-	 * this state cannot own, and a list read a frame late would send the file the user typed
-	 * *before* the one they are looking at.
-	 */
-	readonly paths?: readonly AttachCandidate[];
-}
+export type { PromptKind, PromptState };
 
 export interface AppState {
 	readonly conversations: readonly Conversation[];
@@ -110,6 +67,15 @@ export interface AppState {
 	readonly notice: Notice | null;
 	readonly search: SearchState | null;
 	readonly prompt: PromptState | null;
+	/**
+	 * True once the user confirmed that `o` may launch a file, for the rest of this run.
+	 *
+	 * Asked once rather than every time: the question is about the *client's* behaviour, not
+	 * about one file, and a confirm on every press would make the key not worth having. It is
+	 * deliberately not a preference — nothing is written to the config, so a new shell starts
+	 * by asking again, and consent given in a demo mode never outlives the session.
+	 */
+	readonly filesMayOpen?: true;
 }
 
 export type Action =
@@ -163,6 +129,8 @@ export type Action =
 			readonly kind: PromptKind;
 			/** The listing the attach prompt starts with, read from the input, not here. */
 			readonly paths?: readonly AttachCandidate[];
+			/** The files an open prompt offers, read from the disk by the wiring before this. */
+			readonly files?: readonly OpenFile[];
 	  }
 	| { readonly type: "prompt-cancelled" }
 	| {
@@ -177,6 +145,16 @@ export type Action =
 	| { readonly type: "prompt-submitted" }
 	/** Hides the message the pane points at, in this cache only. Resolved by the wiring. */
 	| { readonly type: "hide-requested" }
+	/**
+	 * `o`: open the file on the pointed row. Resolved by the wiring, because the verdict needs
+	 * the filesystem the reducer does not have.
+	 */
+	| { readonly type: "open-requested" }
+	/**
+	 * The first open in this run was confirmed, so the rest may launch without asking. A
+	 * transition, not an effect: `o` reads it on the next keystroke.
+	 */
+	| { readonly type: "files-may-open" }
 	| { readonly type: "notice"; readonly notice: Notice | null }
 	| { readonly type: "search-opened" }
 	| { readonly type: "search-closed" }

@@ -16,6 +16,7 @@ import {
 	resolveSettings,
 	SettingsError,
 } from "./app/settings";
+import { defaultOpenContext } from "./app/usecases/open";
 import { VERSION } from "./app/version";
 import { ensurePrivateDirectory } from "./cli/paths";
 import type { MessageStore } from "./ports/store";
@@ -116,7 +117,14 @@ const running =
 		: await startDemo();
 
 const instance = render(
-	<Root store={running.store} session={running.session} notify={settings.notify} />,
+	<Root
+		store={running.store}
+		session={running.session}
+		notify={settings.notify}
+		// The engine's own data directory, which `--config` in `engineArgs` may have moved: `o`
+		// may only launch files the engine downloaded, so it has to look where the engine writes.
+		open={defaultOpenContext(settings.engineArgs)}
+	/>,
 );
 
 try {

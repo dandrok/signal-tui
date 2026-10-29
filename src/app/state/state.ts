@@ -5,7 +5,14 @@ import {
 	releaseOlder,
 	requestOlder,
 } from "./reduce-history";
-import { cancelPrompt, changePrompt, movePrompt, openPrompt, submitPrompt } from "./reduce-prompt";
+import {
+	allowFiles,
+	cancelPrompt,
+	changePrompt,
+	movePrompt,
+	openPrompt,
+	submitPrompt,
+} from "./reduce-prompt";
 import { cancelReply, startReply } from "./reduce-reply";
 import { reduceSearch } from "./reduce-search";
 import { reduceSelection } from "./reduce-selection";
@@ -45,7 +52,7 @@ export function reduce(state: AppState, action: Action): AppState {
 		case "reply-cancelled":
 			return cancelReply(state);
 		case "prompt-opened":
-			return openPrompt(state, action.kind, action.paths);
+			return openPrompt(state, action.kind, action.paths, action.files);
 		case "prompt-changed":
 			return changePrompt(state, action.value, action.paths);
 		case "prompt-moved":
@@ -58,6 +65,12 @@ export function reduce(state: AppState, action: Action): AppState {
 			// A side effect, not a transition: the wiring reads the pointed message and
 			// writes the flag, so there is nothing for the reducer to change.
 			return state;
+		case "open-requested":
+			// The same: the verdict belongs to `usecases/open`, and the wiring has it. What this
+			// action owes the state is a prompt or nothing at all.
+			return state;
+		case "files-may-open":
+			return allowFiles(state);
 		case "search-opened":
 		case "search-closed":
 		case "search-changed":

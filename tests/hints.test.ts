@@ -101,7 +101,7 @@ describe("the message pane's hint", () => {
 	});
 
 	test("a prompt owns the line while it is open", () => {
-		const hint = (kind: "reaction" | "edit" | "delete" | "forward" | "attach"): string =>
+		const hint = (kind: "reaction" | "edit" | "delete" | "forward" | "attach" | "open"): string =>
 			hintsFor(
 				{
 					...stateWith(message({ isOutgoing: true, authorId: SELF_AUTHOR_ID })),
@@ -116,5 +116,53 @@ describe("the message pane's hint", () => {
 		expect(hint("forward")).toContain("pick");
 		// Two ways to confirm, because a folder is a step and a file is the message.
 		expect(hint("attach")).toContain("open");
+		// A list to walk, because a row can carry several files.
+		expect(hint("open")).toBe("⇥/↕ pick · ⏎ open · esc cancel");
+	});
+});
+
+/**
+ * `o` is the one key that leaves the terminal, so the line has to be careful about offering it.
+ * What decides it is the attachment's **id** — the name the engine saved the file under — not the
+ * `filename` the row draws: a row whose file the engine kept no copy of, or whose id is not a bare
+ * name, refuses, and a hint for a key that refuses is the same lie as a dead key.
+ */
+describe("the hint for `o`", () => {
+	const ROOT = "/home/you/.local/share/signal-cli/attachments";
+	const withFile = (id: string | null, filename: string | null = "photo.jpg"): AppState =>
+		stateWith(
+			message({
+				attachments: [
+					{ id, contentType: "image/jpeg", filename, size: 120, caption: null, isVoiceNote: false },
+				],
+			}),
+		);
+
+	test("is offered for a file the engine saved under a plain name", () => {
+		expect(hintsFor(withFile("abc123-photo.jpg"), false, ROOT)).toContain("o open");
+		// The display name is a name, not a path, and its shape does not matter.
+		expect(hintsFor(withFile("abc123-photo.jpg", "/home/you/.bashrc"), false, ROOT)).toContain(
+			"o open",
+		);
+	});
+
+	test("is offered for an absolute filename inside the directory, which an engine may report", () => {
+		expect(hintsFor(withFile(null, `${ROOT}/photo.jpg`), false, ROOT)).toContain("o open");
+	});
+
+	test("is withheld for a row with no file at all", () => {
+		expect(hintsFor(stateWith(message()), false, ROOT)).not.toContain("o open");
+	});
+
+	test("is withheld for a file the engine kept no copy of", () => {
+		// `ignoreAttachments`, and our own sends: an id of null means nothing on disk.
+		expect(hintsFor(withFile(null, null), false, ROOT)).not.toContain("o open");
+		expect(hintsFor(withFile(null, "/home/you/cv.pdf"), false, ROOT)).not.toContain("o open");
+	});
+
+	test("is withheld when the id is not a bare name", () => {
+		for (const id of ["../../../etc/passwd", "/etc/passwd", "a/b.jpg", ".."]) {
+			expect(hintsFor(withFile(id), false, ROOT)).not.toContain("o open");
+		}
 	});
 });

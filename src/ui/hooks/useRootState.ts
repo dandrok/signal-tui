@@ -9,6 +9,8 @@ import {
 	selectedConversation,
 } from "../../app/state";
 import { type AttachContext, attachListing, defaultAttachContext } from "../../app/usecases/attach";
+import { defaultOpenContext, type OpenContext, openFiles, openPlan } from "../../app/usecases/open";
+import { launchOpen, openEffect } from "./open-effect";
 import { runPromptEffect } from "./prompt-effect";
 
 /**
@@ -34,6 +36,7 @@ const describe = (error: unknown): string =>
 export function useRootState(
 	session: Session | undefined,
 	attachments: AttachContext = defaultAttachContext(),
+	open: OpenContext = defaultOpenContext(),
 ): RootState {
 	const [state, setState] = useState<AppState>(emptyState);
 	const [version, setVersion] = useState(0);
@@ -98,10 +101,58 @@ export function useRootState(
 				}
 			}
 
-			if (action.type === "prompt-submitted" && session !== undefined) {
+			if (action.type === "prompt-submitted") {
 				// One branch per prompt kind lives in `prompt-effect.ts`: this hook owns the
-				// transitions, and that file owns what a confirmed one does.
-				runPromptEffect({ session, state: current, apply, refuse: refused, failed, attachments });
+				// transitions, and that file owns what a confirmed one does. `o` is the one kind
+				// that needs no engine — a launch is a local process — so it is answered even in
+				// demo mode, where a prompt that closed with nothing happening would read as a
+				// dead key.
+				if (session === undefined) {
+					if (current.prompt?.kind === "open") {
+						openEffect({ state: current, open, apply, refuse: refused, failed });
+					}
+				} else {
+					runPromptEffect({
+						session,
+						state: current,
+						apply,
+						refuse: refused,
+						failed,
+						attachments,
+						open,
+					});
+				}
+			}
+
+			if (action.type === "open-requested") {
+				// `o` is decided here rather than in the reducer, because the verdict needs the
+				// filesystem and the reducer has none. A refusal is said out loud: nothing opened and
+				// no prompt appeared, which otherwise reads as a dead key.
+				const listed =
+					conversation === undefined
+						? ({ kind: "refused", reason: "no conversation is open" } as const)
+						: openFiles(pointedMessage(current), conversation.id, open);
+				if (listed.kind === "refused") {
+					refused(listed.reason);
+					return;
+				}
+				// One file and a yes already given: open it. Anything else — several files to choose
+				// between, or the first launch of the run — is a question, and the picker is the
+				// question: choosing a row and pressing ⏎ is the confirmation.
+				if (current.filesMayOpen === true && listed.files.length === 1) {
+					const [only] = listed.files;
+					if (only !== undefined) {
+						const plan = openPlan(only, open);
+						if (plan.kind === "refused") {
+							refused(plan.reason);
+							return;
+						}
+						launchOpen(plan.file, open, apply, failed);
+						return;
+					}
+				}
+				apply({ type: "prompt-opened", kind: "open", files: listed.files });
+				return;
 			}
 
 			if (action.type === "hide-requested" && session !== undefined) {
@@ -115,7 +166,7 @@ export function useRootState(
 
 			apply(action);
 		},
-		[apply, session, attachments],
+		[apply, session, attachments, open],
 	);
 
 	useEffect(() => {

@@ -10,7 +10,9 @@ import {
 import { deleteFor } from "../../app/usecases/delete";
 import { editFor } from "../../app/usecases/edit";
 import { forwardNotice, forwardPlan } from "../../app/usecases/forward";
+import type { OpenContext } from "../../app/usecases/open";
 import { emojiInputSummary, reactionFor, targetedMessage } from "../../app/usecases/react";
+import { openEffect } from "./open-effect";
 
 /**
  * What a confirmed prompt *does*: one branch per kind, each resolving its target from the state
@@ -29,6 +31,8 @@ export interface PromptEffect {
 	readonly failed: (what: string) => (error: unknown) => void;
 	/** Where an attach prompt reads its paths from. Injected so a test needs no real files. */
 	readonly attachments?: AttachContext | undefined;
+	/** Where an open may reach, and what it launches with. Injected so a test opens nothing. */
+	readonly open: OpenContext;
 }
 
 export function runPromptEffect(effect: PromptEffect): void {
@@ -75,6 +79,12 @@ export function runPromptEffect(effect: PromptEffect): void {
 			} else {
 				void session.remove(conversation.id, target).catch(failed("delete"));
 			}
+			return;
+		}
+		case "open": {
+			// The one branch with nothing engine-shaped in it; `openEffect` holds it so demo
+			// mode, which has no session, can reach the same code.
+			openEffect(effect);
 			return;
 		}
 		case "attach": {

@@ -18,13 +18,18 @@ export interface AppProps {
 	readonly dispatch: (action: Action) => void;
 	/** Who is writing in the open thread, or null. Shown in the composer, never stored. */
 	readonly typing?: string | null;
+	/**
+	 * Where `o` is allowed to reach, for the status line's verdict. Passed down rather than read
+	 * from the environment here, so the line and the launch answer the same question.
+	 */
+	readonly openRoot?: string | undefined;
 }
 
 /**
  * The layout, and nothing else: sizes, panes, the composer and the status line. What a key
  * does lives in `keys/`, what the line says in `hints.ts`.
  */
-export function App({ state, dispatch, typing = null }: AppProps) {
+export function App({ state, dispatch, typing = null, openRoot }: AppProps) {
 	const { exit } = useApp();
 	const { columns, rows } = useTerminalSize();
 
@@ -113,10 +118,10 @@ export function App({ state, dispatch, typing = null }: AppProps) {
 				{state.notice ? (
 					<Text color="green">
 						{displayLine(state.notice.text)} ·{" "}
-						<Text dimColor>{hintsFor(state, replyTo !== undefined)}</Text>
+						<Text dimColor>{hintsFor(state, replyTo !== undefined, openRoot)}</Text>
 					</Text>
 				) : (
-					<Text dimColor>{hintsFor(state, replyTo !== undefined)}</Text>
+					<Text dimColor>{hintsFor(state, replyTo !== undefined, openRoot)}</Text>
 				)}
 			</Box>
 		</Box>
