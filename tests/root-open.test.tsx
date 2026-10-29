@@ -206,6 +206,22 @@ describe("opening a received file", () => {
 		unmount();
 	});
 
+	test("demo mode, which has no engine, still opens: a launch is not a message", async () => {
+		const { root, store, launched } = await workspace((dir) => [file(join(dir, "photo.jpg"))]);
+		// No `session` prop at all, which is how `--demo` runs.
+		const { stdin, lastFrame, unmount } = render(
+			<Root store={store} open={context(root, launched)} />,
+		);
+
+		await waitFor(() => text(lastFrame).includes("look"), "the thread to load");
+		await press(stdin, "\t", lastFrame, "j/k select");
+		await press(stdin, "o", lastFrame, "open ›");
+		await press(stdin, "\r", lastFrame, "opened photo.jpg");
+
+		expect(launched).toEqual([join(root, "photo.jpg")]);
+		unmount();
+	});
+
 	test("a launcher that fails is reported, and consent is not granted", async () => {
 		const { root, store } = await workspace((dir) => [file(join(dir, "photo.jpg"))]);
 		const failing: OpenContext = {

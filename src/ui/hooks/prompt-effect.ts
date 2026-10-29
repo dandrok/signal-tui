@@ -10,8 +10,9 @@ import {
 import { deleteFor } from "../../app/usecases/delete";
 import { editFor } from "../../app/usecases/edit";
 import { forwardNotice, forwardPlan } from "../../app/usecases/forward";
-import { type OpenContext, type OpenFile, openNotice, openPlan } from "../../app/usecases/open";
+import type { OpenContext } from "../../app/usecases/open";
 import { emojiInputSummary, reactionFor, targetedMessage } from "../../app/usecases/react";
+import { openEffect } from "./open-effect";
 
 /**
  * What a confirmed prompt *does*: one branch per kind, each resolving its target from the state
@@ -32,27 +33,6 @@ export interface PromptEffect {
 	readonly attachments?: AttachContext | undefined;
 	/** Where an open may reach, and what it launches with. Injected so a test opens nothing. */
 	readonly open: OpenContext;
-}
-
-/**
- * Hands a planned file to the desktop, and says so once it has started.
- *
- * Shared by the confirm prompt and by every later `o` in the run, because the two paths differ
- * only in whether a question was asked first. The notice follows the promise, not the call: a
- * launcher that fails — no `xdg-open` on a bare box, a binary that vanished — is reported
- * instead of announced, and consent is granted only for a launch that actually happened, so a
- * machine that cannot open files keeps saying so rather than remembering a yes.
- */
-export function launchOpen(
-	file: OpenFile,
-	open: OpenContext,
-	apply: (action: Action) => void,
-	failed: (what: string) => (error: unknown) => void,
-): void {
-	void open.launch(file.path).then(() => {
-		apply({ type: "notice", notice: { kind: "info", text: openNotice(file) } });
-		apply({ type: "files-may-open" });
-	}, failed("open"));
 }
 
 export function runPromptEffect(effect: PromptEffect): void {
@@ -102,15 +82,9 @@ export function runPromptEffect(effect: PromptEffect): void {
 			return;
 		}
 		case "open": {
-			// Asked again, even though the key already did: a row can be deleted, expire or lose
-			// its file between the keystroke and the confirm, and a launch is the one action that
-			// must never act on a verdict from an earlier frame.
-			const plan = openPlan(message, conversation.id, effect.open);
-			if (plan.kind === "refused") {
-				refuse(plan.reason);
-				return;
-			}
-			launchOpen(plan.file, effect.open, apply, failed);
+			// The one branch with nothing engine-shaped in it; `openEffect` holds it so demo
+			// mode, which has no session, can reach the same code.
+			openEffect(effect);
 			return;
 		}
 		case "attach": {

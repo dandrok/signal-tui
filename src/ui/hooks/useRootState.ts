@@ -10,7 +10,8 @@ import {
 } from "../../app/state";
 import { type AttachContext, attachListing, defaultAttachContext } from "../../app/usecases/attach";
 import { defaultOpenContext, type OpenContext, openPlan } from "../../app/usecases/open";
-import { launchOpen, runPromptEffect } from "./prompt-effect";
+import { launchOpen, openEffect } from "./open-effect";
+import { runPromptEffect } from "./prompt-effect";
 
 /**
  * The reducer plus the side effects it cannot perform itself: a submitted draft is sent
@@ -100,18 +101,27 @@ export function useRootState(
 				}
 			}
 
-			if (action.type === "prompt-submitted" && session !== undefined) {
+			if (action.type === "prompt-submitted") {
 				// One branch per prompt kind lives in `prompt-effect.ts`: this hook owns the
-				// transitions, and that file owns what a confirmed one does.
-				runPromptEffect({
-					session,
-					state: current,
-					apply,
-					refuse: refused,
-					failed,
-					attachments,
-					open,
-				});
+				// transitions, and that file owns what a confirmed one does. `o` is the one kind
+				// that needs no engine — a launch is a local process — so it is answered even in
+				// demo mode, where a prompt that closed with nothing happening would read as a
+				// dead key.
+				if (session === undefined) {
+					if (current.prompt?.kind === "open") {
+						openEffect({ state: current, open, apply, refuse: refused, failed });
+					}
+				} else {
+					runPromptEffect({
+						session,
+						state: current,
+						apply,
+						refuse: refused,
+						failed,
+						attachments,
+						open,
+					});
+				}
 			}
 
 			if (action.type === "open-requested") {
