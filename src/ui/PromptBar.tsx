@@ -2,6 +2,7 @@ import { Box, Text } from "ink";
 import type { PromptState } from "../app/state";
 import { forwardMatches } from "../app/usecases/forward";
 import { reactionSuggestions } from "../app/usecases/react";
+import { displayLine } from "../domain/display";
 import { displayName, formatBytes, truncate } from "../domain/format";
 import { reactionEmojiOf } from "../domain/reactions";
 import { draftTail } from "../domain/rows";
@@ -28,14 +29,11 @@ const HINTS = {
 	delete: "  ⏎ delete for everyone · esc keep",
 	forward: "  ⇥/↕ pick · ⏎ send · esc cancel",
 	attach: "  ⇥/↕ pick · ⏎ open or send · esc cancel",
-	open: "  ⏎ open · esc keep",
+	open: "  ⇥/↕ pick · ⏎ open · esc cancel",
 } as const;
 
-/** What a question asks, in the place the text fields show what was typed. */
-const CONFIRM_TEXT = {
-	delete: "this message, for everyone?",
-	open: "the file on that row?",
-} as const;
+/** What the one question that takes no input asks, in the place the others show what was typed. */
+const DELETE_QUESTION = "this message, for everyone?";
 
 /** Cells a name may take before it is cut: a picked row, not a list. */
 const NAME_CELLS = 22;
@@ -63,10 +61,12 @@ export function PromptBar({ prompt, width = 80 }: PromptBarProps) {
 	// other people: the red frame stays the delete's alone, because colour is the terminal's
 	// only way to say "this leaves the machine".
 	const confirming = prompt.kind === "delete";
-	const asks = confirming || prompt.kind === "open";
-	const cursorCells = asks ? 0 : 1;
-	const body =
-		prompt.kind === "delete" || prompt.kind === "open" ? CONFIRM_TEXT[prompt.kind] : prompt.draft;
+	// The open prompt is a picker with no field: what it has to show is the file it would launch,
+	// which `choiceLine` draws, so the row spends its cells there instead of on a caret.
+	const choosing = prompt.kind === "open";
+	const noCursor = confirming || choosing;
+	const cursorCells = noCursor ? 0 : 1;
+	const body = confirming ? DELETE_QUESTION : choosing ? "" : prompt.draft;
 
 	// A one-emoji draft needs no picker; anything else (a name, or nothing) shows what it
 	// matches, so the row is doing the work the terminal cannot do itself.
@@ -90,10 +90,10 @@ export function PromptBar({ prompt, width = 80 }: PromptBarProps) {
 		1,
 		inner - label.length - cursorCells - hint.length - chips - destinationCells,
 	);
-	const tail = asks
+	const tail = noCursor
 		? { text: body.slice(0, room), truncated: body.length > room }
 		: draftTail(body, room);
-	const empty = !asks && tail.text.length === 0;
+	const empty = !noCursor && tail.text.length === 0;
 
 	return (
 		<Box borderStyle="round" borderColor={confirming ? "red" : "cyan"} paddingX={1} height={3}>
@@ -101,7 +101,7 @@ export function PromptBar({ prompt, width = 80 }: PromptBarProps) {
 				<Text color={confirming ? "red" : "cyan"}>{label}</Text>
 				{tail.truncated ? <Text dimColor>…</Text> : null}
 				<Text>{tail.text}</Text>
-				{asks ? null : <Text color="cyan">▌</Text>}
+				{noCursor ? null : <Text color="cyan">▌</Text>}
 				{empty && prompt.kind === "edit" ? <Text dimColor> a new body</Text> : null}
 				{picker.emoji.map((emoji, index) => (
 					<Text key={emoji} {...(index === picker.picked ? { inverse: true } : {})}>
@@ -134,6 +134,21 @@ function choiceLine(prompt: PromptState): {
 			? { destination: "no chat matches", picked: false }
 			: {
 					destination: `${truncate(displayName(chosen), NAME_CELLS)} ${picked + 1}/${matches.length}`,
+					picked: true,
+				};
+	}
+	if (prompt.kind === "open") {
+		const files = prompt.files;
+		if (files === undefined || files.length === 0) {
+			// Nothing to offer: the prompt is only opened with a list, so this is the frame before
+			// the list arrives, and saying nothing is truer than naming a file that is not there.
+			return { destination: "", picked: false };
+		}
+		const chosen = files[Math.min(Math.max(0, prompt.pick), files.length - 1)];
+		return chosen === undefined
+			? { destination: "", picked: false }
+			: {
+					destination: `${truncate(displayLine(chosen.name), NAME_CELLS)} ${prompt.pick + 1}/${files.length}`,
 					picked: true,
 				};
 	}

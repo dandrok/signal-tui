@@ -166,7 +166,7 @@ Nothing secret belongs in there — the account is a flag, and the cache path is
 | `e` | edit your own message: the prompt opens with its body, `⏎` saves, `Esc` cancels |
 | `d` | delete your own message for everyone — it asks first, `⏎` or `y` confirms |
 | `D` | hide a message on this device only; nothing is sent and nobody else is affected |
-| `o` | open the file on the selected message with your desktop's viewer (`xdg-open`, `open` on macOS). The first press asks — `⏎` or `y` confirms, and the answer holds for the rest of the run. Only files `signal-cli` itself downloaded are launched; anything outside its attachments directory is refused by name |
+| `o` | open a file on the selected message with your desktop's viewer (`xdg-open`, `open` on macOS). A message with several files opens a picker — `⇥`/`↑↓` to choose, `⏎` opens the highlighted one; a message with one opens it directly, after the first press of the run. Only files `signal-cli` itself downloaded are launched; anything outside its attachments directory is refused by name |
 | `⏎` | send the draft, or send the emoji while reacting |
 | `/` | search cached history — `↑` / `↓` to pick a hit, `⏎` to open it, `Esc` to close |
 | `Esc` | leave the composer, cancel a reply, cancel a reaction, close search |

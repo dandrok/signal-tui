@@ -1,7 +1,5 @@
 import type { Action, AppState } from "../../app/state";
-import { selectedConversation } from "../../app/state";
 import { type OpenContext, type OpenFile, openNotice, openPlan } from "../../app/usecases/open";
-import { targetedMessage } from "../../app/usecases/react";
 
 /**
  * `o`, once it is confirmed: the plan, and the launch.
@@ -24,21 +22,24 @@ export interface OpenEffect {
 
 /** A confirmed `o`: the plan, and the launch. */
 export function openEffect(effect: OpenEffect): void {
-	const { state, open, refuse } = effect;
-	const conversation = selectedConversation(state);
-	if (conversation === undefined || state.prompt === null) {
+	const prompt = effect.state.prompt;
+	if (prompt === null || prompt.kind !== "open") {
 		return;
 	}
-	const message = targetedMessage(
-		state.messagesByConversation[conversation.id] ?? [],
-		state.prompt.targetId,
-	);
-	const plan = openPlan(message, conversation.id, open);
+	const files = prompt.files ?? [];
+	// The list was frozen when the key was pressed, and the highlight is part of what it froze:
+	// `⏎` opens the row the picker is showing, clamped exactly as the line draws it.
+	const chosen = files[Math.min(Math.max(0, prompt.pick), Math.max(0, files.length - 1))];
+	if (chosen === undefined) {
+		effect.refuse("no file to open on that message");
+		return;
+	}
+	const plan = openPlan(chosen, effect.open);
 	if (plan.kind === "refused") {
-		refuse(plan.reason);
+		effect.refuse(plan.reason);
 		return;
 	}
-	launchOpen(plan.file, open, effect.apply, effect.failed);
+	launchOpen(plan.file, effect.open, effect.apply, effect.failed);
 }
 
 /**

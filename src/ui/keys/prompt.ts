@@ -17,9 +17,16 @@ export function promptKey(state: AppState, input: string, key: KeyLike): KeyResu
 	if (key.escape === true) {
 		return action({ type: "prompt-cancelled" });
 	}
-	if (prompt.kind === "reaction" || prompt.kind === "forward" || prompt.kind === "attach") {
-		// Three pickers, one rule: tab and the arrows walk the suggestions, and every other key
-		// is text the draft is being narrowed with — an emoji name, a chat's, a path's.
+	if (
+		prompt.kind === "reaction" ||
+		prompt.kind === "forward" ||
+		prompt.kind === "attach" ||
+		prompt.kind === "open"
+	) {
+		// Four pickers, one rule: tab and the arrows walk the suggestions, and every other key is
+		// text the draft is being narrowed with — an emoji name, a chat's, a path's. The open
+		// picker's list cannot be narrowed (it is the files this message carries), so its keys
+		// are only the two that walk it.
 		if (key.tab === true) {
 			return action({ type: "prompt-moved", delta: key.shift === true ? -1 : 1 });
 		}
@@ -30,10 +37,9 @@ export function promptKey(state: AppState, input: string, key: KeyLike): KeyResu
 			return action({ type: "prompt-moved", delta: 1 });
 		}
 	}
-	if (prompt.kind === "delete" || prompt.kind === "open") {
-		// Two answers, not a text field: a delete changes the message on everyone else's phone
-		// and an open leaves the terminal, so neither may be triggered by a keystroke meant for
-		// the pane. `y` and `⏎` say yes, anything else leaves it alone.
+	if (prompt.kind === "delete") {
+		// Two answers, not a text field: a delete changes the message on everyone else's phone, so
+		// it may not be triggered by a keystroke meant for the pane. `y` and `⏎` say yes.
 		if (key.return === true || input === "y") {
 			return action({ type: "prompt-submitted" });
 		}

@@ -1,5 +1,6 @@
 import type { Conversation, MessageId } from "../../domain/types";
 import type { AttachCandidate } from "../usecases/attach";
+import type { OpenFile } from "../usecases/open";
 
 /**
  * What a prompt is, and what it is pointing at.
@@ -59,4 +60,13 @@ export interface PromptState {
 	 * *before* the one they are looking at.
 	 */
 	readonly paths?: readonly AttachCandidate[];
+	/**
+	 * What an open prompt offers, frozen when the prompt opened — one row per file the message
+	 * carries, in the order the pane draws them.
+	 *
+	 * A snapshot for the same reason a forward freezes its chats: a row can be edited or swept
+	 * while the prompt is up, and `⏎` has to open the file the picker is showing rather than
+	 * whichever one a re-read would now produce.
+	 */
+	readonly files?: readonly OpenFile[];
 }

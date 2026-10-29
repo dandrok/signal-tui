@@ -52,7 +52,7 @@ export function reduce(state: AppState, action: Action): AppState {
 		case "reply-cancelled":
 			return cancelReply(state);
 		case "prompt-opened":
-			return openPrompt(state, action.kind, action.paths);
+			return openPrompt(state, action.kind, action.paths, action.files);
 		case "prompt-changed":
 			return changePrompt(state, action.value, action.paths);
 		case "prompt-moved":

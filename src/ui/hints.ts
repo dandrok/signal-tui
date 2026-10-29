@@ -36,7 +36,7 @@ export function hintsFor(
 			case "attach":
 				return "⇥/↕ pick · ⏎ open or send · esc cancel";
 			case "open":
-				return "⏎ open · esc keep";
+				return "⇥/↕ pick · ⏎ open · esc cancel";
 		}
 	}
 	if (state.focus === "composer") {

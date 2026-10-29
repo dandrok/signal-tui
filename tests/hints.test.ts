@@ -116,8 +116,8 @@ describe("the message pane's hint", () => {
 		expect(hint("forward")).toContain("pick");
 		// Two ways to confirm, because a folder is a step and a file is the message.
 		expect(hint("attach")).toContain("open");
-		// One answer, and the honest one: `o` hands a path to the desktop.
-		expect(hint("open")).toBe("⏎ open · esc keep");
+		// A list to walk, because a row can carry several files.
+		expect(hint("open")).toBe("⇥/↕ pick · ⏎ open · esc cancel");
 	});
 });
 

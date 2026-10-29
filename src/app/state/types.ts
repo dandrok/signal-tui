@@ -1,5 +1,6 @@
 import type { Conversation, ConversationId, Message, MessageId } from "../../domain/types";
 import type { AttachCandidate } from "../usecases/attach";
+import type { OpenFile } from "../usecases/open";
 import type { PromptKind, PromptState } from "./prompt-types";
 
 /**
@@ -128,6 +129,8 @@ export type Action =
 			readonly kind: PromptKind;
 			/** The listing the attach prompt starts with, read from the input, not here. */
 			readonly paths?: readonly AttachCandidate[];
+			/** The files an open prompt offers, read from the disk by the wiring before this. */
+			readonly files?: readonly OpenFile[];
 	  }
 	| { readonly type: "prompt-cancelled" }
 	| {

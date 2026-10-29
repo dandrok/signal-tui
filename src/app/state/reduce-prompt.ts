@@ -1,8 +1,8 @@
 import type { AttachCandidate } from "../usecases/attach";
-import { canDelete } from "../usecases/delete";
-import { canEdit } from "../usecases/edit";
-import { forwardMatches, forwardRefusal, forwardTargets } from "../usecases/forward";
-import { canReactTo, reactionSuggestions } from "../usecases/react";
+import { forwardMatches, forwardTargets } from "../usecases/forward";
+import type { OpenFile } from "../usecases/open";
+import { reactionSuggestions } from "../usecases/react";
+import { refusalFor } from "./prompt-refusals";
 import { pointedMessage, selectedConversation } from "./selectors";
 import type { AppState, PromptKind, PromptState } from "./types";
 
@@ -13,46 +13,6 @@ import type { AppState, PromptKind, PromptState } from "./types";
  * has been typed; the wiring resolves the target again before the send, so a row that was
  * deleted while the prompt was open is refused by the same predicate the key used.
  */
-
-/** Why a prompt did not open, one line each. */
-const REFUSALS = {
-	reaction: "that message is gone: nothing to react to",
-	edit: "only your own message can be edited",
-	delete: "only your own message can be deleted for everyone",
-} as const;
-
-/**
- * Why a message cannot take this prompt, or null when it can.
- *
- * The switch is exhaustive on purpose: a sixth prompt kind has to come here and say what it
- * applies to, instead of inheriting whatever the previous one allowed. Reaction, edit and
- * delete refuse with one fixed sentence; a forward has several different reasons and its use
- * case owns their wording. An attach prompt is about no message at all.
- */
-function refusalFor(
-	kind: PromptKind,
-	message: Parameters<typeof canReactTo>[0],
-	conversationId: string,
-): string | null {
-	switch (kind) {
-		case "reaction":
-			return canReactTo(message, conversationId) ? null : REFUSALS.reaction;
-		case "edit":
-			return canEdit(message, conversationId) ? null : REFUSALS.edit;
-		case "delete":
-			return canDelete(message, conversationId) ? null : REFUSALS.delete;
-		case "forward":
-			return forwardRefusal(message, conversationId);
-		case "attach":
-			return null;
-		case "open":
-			// Nothing to refuse here: whether the row's file may be launched is a question about
-			// the filesystem and the engine's directory, and the wiring has already asked it
-			// before dispatching this. The submit path asks again, because a row can be swept
-			// while the prompt is open.
-			return null;
-	}
-}
 
 /**
  * Opens a prompt.
@@ -68,6 +28,7 @@ export function openPrompt(
 	state: AppState,
 	kind: PromptKind,
 	paths?: readonly AttachCandidate[],
+	files?: readonly OpenFile[],
 ): AppState {
 	const conversation = selectedConversation(state);
 	if (conversation === undefined) {
@@ -100,7 +61,8 @@ export function openPrompt(
 		...state,
 		// An edit starts from the body it replaces; a reaction starts with the picker on its
 		// best suggestion, so `x` then `⏎` is a complete action. A forward freezes the list it
-		// offers, so the row that is highlighted now is the row the confirm sends to.
+		// offers, so the row that is highlighted now is the row the confirm sends to — and an
+		// open freezes the files it was handed for the same reason: `⏎` opens what is on screen.
 		prompt: {
 			kind,
 			targetId: target.id,
@@ -109,6 +71,7 @@ export function openPrompt(
 			...(kind === "forward"
 				? { chats: forwardTargets(state.conversations, conversation.id) }
 				: {}),
+			...(kind === "open" && files !== undefined ? { files } : {}),
 		},
 	};
 }
@@ -149,6 +112,8 @@ function pickableCount(prompt: PromptState): number {
 			return forwardMatches(prompt.chats ?? [], prompt.draft, prompt.pick).matches.length;
 		case "attach":
 			return prompt.paths?.length ?? 0;
+		case "open":
+			return prompt.files?.length ?? 0;
 		default:
 			return 0;
 	}

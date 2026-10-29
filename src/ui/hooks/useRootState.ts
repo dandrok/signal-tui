@@ -9,7 +9,7 @@ import {
 	selectedConversation,
 } from "../../app/state";
 import { type AttachContext, attachListing, defaultAttachContext } from "../../app/usecases/attach";
-import { defaultOpenContext, type OpenContext, openPlan } from "../../app/usecases/open";
+import { defaultOpenContext, type OpenContext, openFiles, openPlan } from "../../app/usecases/open";
 import { launchOpen, openEffect } from "./open-effect";
 import { runPromptEffect } from "./prompt-effect";
 
@@ -126,24 +126,32 @@ export function useRootState(
 
 			if (action.type === "open-requested") {
 				// `o` is decided here rather than in the reducer, because the verdict needs the
-				// filesystem and the reducer has none. A refusal is said out loud: nothing opened
-				// and no prompt appeared, which otherwise reads as a dead key.
-				const message = pointedMessage(current);
-				const plan =
+				// filesystem and the reducer has none. A refusal is said out loud: nothing opened and
+				// no prompt appeared, which otherwise reads as a dead key.
+				const listed =
 					conversation === undefined
 						? ({ kind: "refused", reason: "no conversation is open" } as const)
-						: openPlan(message, conversation.id, open);
-				if (plan.kind === "refused") {
-					refused(plan.reason);
+						: openFiles(pointedMessage(current), conversation.id, open);
+				if (listed.kind === "refused") {
+					refused(listed.reason);
 					return;
 				}
-				// The first file of the run is a question; after that, `o` opens. Consent is state
-				// so the keymap and the prompt agree, and it is not persisted: a new shell asks.
-				if (current.filesMayOpen !== true) {
-					apply({ type: "prompt-opened", kind: "open" });
-					return;
+				// One file and a yes already given: open it. Anything else — several files to choose
+				// between, or the first launch of the run — is a question, and the picker is the
+				// question: choosing a row and pressing ⏎ is the confirmation.
+				if (current.filesMayOpen === true && listed.files.length === 1) {
+					const [only] = listed.files;
+					if (only !== undefined) {
+						const plan = openPlan(only, open);
+						if (plan.kind === "refused") {
+							refused(plan.reason);
+							return;
+						}
+						launchOpen(plan.file, open, apply, failed);
+						return;
+					}
 				}
-				launchOpen(plan.file, open, apply, failed);
+				apply({ type: "prompt-opened", kind: "open", files: listed.files });
 				return;
 			}
 
