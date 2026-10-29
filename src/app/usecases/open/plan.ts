@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 import type { Attachment, ConversationId, Message } from "../../../domain/types";
-import { inAttachmentsDir, type OpenContext } from "./context";
+import type { OpenContext } from "./context";
+import { inAttachmentsDir } from "./root";
 
 /**
  * Opening a file someone sent: which path a row would launch, and the sentence that says why

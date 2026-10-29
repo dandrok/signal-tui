@@ -11,13 +11,11 @@
 
 export {
 	defaultOpenContext,
-	engineAttachmentsRoot,
-	inAttachmentsDir,
-	nodeLaunch,
 	nodeOpenFs,
 	type OpenContext,
 	type OpenFs,
 } from "./context";
+export { nodeLaunch } from "./launch";
 export {
 	canOpen,
 	downloadedPath,
@@ -26,3 +24,4 @@ export {
 	openNotice,
 	openPlan,
 } from "./plan";
+export { engineAttachmentsRoot, inAttachmentsDir } from "./root";

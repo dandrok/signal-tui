@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { resolve } from "node:path";
 import {
 	canOpen,
 	engineAttachmentsRoot,
@@ -93,6 +94,36 @@ describe("the engine's attachments directory", () => {
 			"/home/you/.local/share/signal-cli/attachments",
 		);
 		expect(engineAttachmentsRoot({}, "/home/you")).toBe(
+			"/home/you/.local/share/signal-cli/attachments",
+		);
+	});
+
+	test("follows --config in engineArgs, which moves the whole data directory", () => {
+		// The engine's downloads go where its data directory is, and `--config` is the one
+		// setting that moves it. Reading past it would refuse the files of anyone who moved.
+		expect(engineAttachmentsRoot({}, "/home/you", ["--config", "/mnt/data/signal"])).toBe(
+			"/mnt/data/signal/attachments",
+		);
+		expect(engineAttachmentsRoot({}, "/home/you", ["--config=/mnt/data/signal"])).toBe(
+			"/mnt/data/signal/attachments",
+		);
+		// `--config` wins over XDG_DATA_HOME, because it is what the engine was told.
+		expect(
+			engineAttachmentsRoot({ XDG_DATA_HOME: "/data" }, "/home/you", ["--config", "/mnt/s"]),
+		).toBe("/mnt/s/attachments");
+	});
+
+	test("resolves a relative --config from the working directory, where the engine starts", () => {
+		expect(engineAttachmentsRoot({}, "/home/you", ["--config", "elsewhere"])).toBe(
+			`${resolve("elsewhere")}/attachments`,
+		);
+	});
+
+	test("ignores a --config with nothing after it, and other arguments", () => {
+		expect(engineAttachmentsRoot({}, "/home/you", ["--config"])).toBe(
+			"/home/you/.local/share/signal-cli/attachments",
+		);
+		expect(engineAttachmentsRoot({}, "/home/you", ["--verbose", "--config=-x"])).toBe(
 			"/home/you/.local/share/signal-cli/attachments",
 		);
 	});

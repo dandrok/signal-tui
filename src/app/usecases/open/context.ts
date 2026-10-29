@@ -1,16 +1,17 @@
-import { spawn } from "node:child_process";
 import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve, sep } from "node:path";
+import { nodeLaunch } from "./launch";
+import { engineAttachmentsRoot } from "./root";
 
 /**
- * Opening a received file: the paths a launch may reach, and the two calls it needs.
+ * Opening a received file: the shape of the decision, and the wiring that supplies it.
  *
  * This is the first thing the client does that leaves the terminal, so the rule is fixed
  * before the code: **the engine's own attachments directory is the only place a launch may
  * point at**. Everything else — a path typed into a caption, a filename a sender chose, a
  * path of ours that happens to be absolute — is someone else's text, and a terminal that runs
- * whatever a peer names is a remote code execution with extra steps.
+ * whatever a peer names is a remote code execution with extra steps. The directory itself is
+ * `root.ts`; what a process does with a path is `launch.ts`.
  *
  * The filesystem is injected the same way the attach prompt injects it: the two calls this
  * needs (`realPath`, `isFile`), so a test describes a file without creating one, and a file
@@ -59,70 +60,11 @@ export interface OpenContext {
 	readonly launch: (path: string) => Promise<void>;
 }
 
-/**
- * Where signal-cli keeps what it downloaded: its own data directory, under `attachments`.
- *
- * Read the way the engine reads it rather than guessed from the account, because the engine
- * is what wrote the file. `XDG_DATA_HOME` counts only when it is absolute — the spec says a
- * relative one is ignored, and the engine ignores it, so honouring it here would point the
- * guard at a directory the engine never used.
- */
-export function engineAttachmentsRoot(
-	env: Readonly<Record<string, string | undefined>> = process.env,
-	home: string = homedir(),
-): string {
-	const data = env.XDG_DATA_HOME;
-	const base = data !== undefined && isAbsolute(data) ? data : join(home, ".local", "share");
-	return join(base, "signal-cli", "attachments");
-}
-
-/**
- * Whether `path` is inside `root`, by the components of the path and not by its text.
- *
- * Both sides are resolved first, so `…/attachments/../.bashrc` is refused rather than read as
- * a clever path that starts with the root. The root itself is not a file, so equality does not
- * count: a launch has to name something *below* it.
- */
-export function inAttachmentsDir(path: string, root: string): boolean {
-	if (!isAbsolute(path) || !isAbsolute(root)) {
-		return false;
-	}
-	const target = resolve(path);
-	const base = resolve(root);
-	return target.startsWith(base.endsWith(sep) ? base : `${base}${sep}`);
-}
-
-/** The desktop's handler for a path, per platform; there is no terminal fallback. */
-const systemOpener = (): string => (process.platform === "darwin" ? "open" : "xdg-open");
-
-/**
- * Starts the desktop's viewer, and resolves once it has started.
- *
- * Detached and with its output discarded, because the child outlives the redraw: a viewer
- * that held the pipe open would make the TUI wait on a window it does not own.
- *
- * The promise is the point. A missing opener, a permission problem or a binary that vanished
- * between the look-up and the call all arrive as a rejection on the next tick — after the key
- * was pressed but before anyone was told it worked. Resolving on `spawn` rather than returning
- * at once is what keeps "opened photo.jpg" from being printed by a client that started nothing.
- */
-export function nodeLaunch(path: string): Promise<void> {
-	const opener = systemOpener();
-	if (Bun.which(opener) === null) {
-		return Promise.reject(new Error(`${opener} is not on PATH`));
-	}
-	return new Promise((resolve, reject) => {
-		const child = spawn(opener, [path], { detached: true, stdio: "ignore" });
-		child.once("spawn", () => {
-			// The viewer outlives us: no exit to wait for, no pipe to keep open.
-			child.unref();
-			resolve();
-		});
-		child.once("error", reject);
-	});
-}
-
 /** The real attachments directory, the real filesystem and the real desktop opener. */
-export function defaultOpenContext(): OpenContext {
-	return { root: engineAttachmentsRoot(), fs: nodeOpenFs, launch: nodeLaunch };
+export function defaultOpenContext(engineArgs: readonly string[] = []): OpenContext {
+	return {
+		root: engineAttachmentsRoot(process.env, homedir(), engineArgs),
+		fs: nodeOpenFs,
+		launch: nodeLaunch,
+	};
 }
