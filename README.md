@@ -15,6 +15,12 @@ day changes. What changed, and when, is in [CHANGELOG.md](./CHANGELOG.md).
 > end for [`signal-cli`](https://github.com/AsamK/signal-cli), which does the
 > protocol work.
 
+![signal-tui in --demo mode: conversations on the left, and a thread on the right with a reply, a reaction, read ticks and a date divider](./demo/demo.gif)
+
+That is `--demo`: built-in sample data, no account, no `signal-cli`, and the sample people
+answer you. The recording is generated from [`demo/demo.tape`](./demo/demo.tape) — `vhs
+demo/demo.tape` from the repo root — so it can be re-shot when the interface changes.
+
 ## Contents
 
 - [Changelog](./CHANGELOG.md)
@@ -62,7 +68,9 @@ signal-tui --demo         # built-in sample data: no account, no signal-cli
 ```
 
 `--demo` is the honest first step: it shows the interface without touching your
-account or requiring `signal-cli` at all.
+account or requiring `signal-cli` at all. It is also interactive — the sample
+thread answers you, so sending, replying, reacting and searching run through the
+same write path a live account uses.
 
 ## Link your account
 

@@ -177,7 +177,7 @@ the machine.
 ## 5. First run
 
 ```sh
-signal-tui --demo                       # interface only: no account, no signal-cli
+signal-tui --demo                       # sample data only: no account, no signal-cli
 signal-tui --account +48123456789       # live
 ```
 
