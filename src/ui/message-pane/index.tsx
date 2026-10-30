@@ -4,7 +4,7 @@ import type { Clock } from "../../domain/format";
 import { displayName } from "../../domain/format";
 import type { QuoteLookup } from "../../domain/rows";
 import type { Conversation, Message, MessageId, QuotedMessage } from "../../domain/types";
-import { MessageRow } from "./MessageRow";
+import { GUTTER_WIDTH, MessageRow } from "./MessageRow";
 import { visibleWindow } from "./window";
 
 /**
@@ -48,7 +48,10 @@ export function MessagePane({
 	isFocused = false,
 	clock,
 }: MessagePaneProps) {
-	const innerWidth = Math.max(8, width - 4);
+	// The gutter is spent by every message, so the text area is two columns narrower and both
+	// the window and the rows are measured against that — a bar drawn into width the pane
+	// budgeted would wrap a body one character later than it was measured.
+	const innerWidth = Math.max(8, width - 4 - GUTTER_WIDTH);
 	const contentRows = Math.max(1, height - CHROME_ROWS);
 	const lookup = useMemo<QuoteLookup>(() => {
 		const bySentAt = new Map<number, Message>();
@@ -87,10 +90,14 @@ export function MessagePane({
 			</Text>
 			{window.hiddenAbove > 0 ? <Text dimColor>↑ {window.hiddenAbove} older</Text> : null}
 			{visible.length === 0 ? <Text dimColor>no messages yet</Text> : null}
-			{visible.map((message) => (
+			{visible.map((message, offset) => (
 				<MessageRow
 					key={message.id}
 					message={message}
+					// The row above it in the thread, drawn or not: a message that continues the block
+					// above spends no header, and at the top of the window that is honest — you are
+					// looking at the middle of a burst, and the `↑ N older` line says so.
+					previous={messages[window.start + offset - 1]}
 					rowBudget={rowBudget}
 					innerWidth={innerWidth}
 					clock={clock}

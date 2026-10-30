@@ -41,7 +41,18 @@ export function visibleWindow(
 			break;
 		}
 		const marker = previous.id === cursorId ? CURSOR_MARKER : "";
-		const cost = messageRowCount(previous, innerWidth, clock, rows, lookup, marker);
+		// The message above the candidate decides whether its header is drawn at all, and the pane
+		// draws that same relationship: a row folded into the block above must not be measured as
+		// if it had a header, or the window fits one row fewer than the pane can hold.
+		const cost = messageRowCount(
+			previous,
+			innerWidth,
+			clock,
+			rows,
+			lookup,
+			marker,
+			messages[start - 2],
+		);
 		if (used + cost > rows) {
 			break;
 		}
