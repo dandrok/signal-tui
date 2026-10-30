@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { headerLine, headerSuffix } from "../src/domain/format";
 import { reactionMarker, reactionsOf } from "../src/domain/reactions";
 import type { Message, Reaction } from "../src/domain/types";
+import { stubClock } from "./helpers/clock";
 
 const reaction = (overrides: Partial<Reaction> = {}): Reaction => ({
 	emoji: "👍",
@@ -21,7 +22,7 @@ const message = (reactions: readonly Reaction[] = []): Message => ({
 	...(reactions.length === 0 ? {} : { reactions }),
 });
 
-const clock = (): string => "10:00";
+const clock = stubClock();
 
 describe("reaction markers", () => {
 	test("no reactions means no marker", () => {

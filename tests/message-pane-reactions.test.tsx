@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Conversation, Message, Reaction } from "../src/domain/types";
 import { MessagePane } from "../src/ui/message-pane";
+import { stubClock } from "./helpers/clock";
 import { frameOf as renderFrame } from "./helpers/frame";
 
 const conversation: Conversation = {
@@ -35,7 +36,7 @@ const frameOf = (messages: readonly Message[]): string =>
 			messages={messages}
 			height={20}
 			width={60}
-			clock={() => "10:00"}
+			clock={stubClock()}
 		/>,
 	);
 

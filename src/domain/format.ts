@@ -12,11 +12,21 @@ import type { Attachment, Conversation, Message } from "./types";
  */
 
 /**
- * Renders a timestamp as a clock string. Injected rather than computed here: the
- * host timezone is a UI concern, and a formatter cache is mutable state that has
- * no business in the domain layer.
+ * Time, injected rather than computed here: the host timezone is a UI concern, and a formatter
+ * cache is mutable state that has no business in the domain layer.
+ *
+ * Three questions a thread asks, in one object: what time is it, which calendar day is it, and
+ * what to call that day. Threading one object through measurement and rendering is what keeps a
+ * divider row from being counted in one place and titled in another.
  */
-export type Clock = (timestampMs: number) => string;
+export interface Clock {
+	/** The time a message was sent: `14:03`. */
+	readonly time: (timestampMs: number) => string;
+	/** Identity of the calendar day, for deciding where a divider goes: `2026-10-30`. */
+	readonly dayKey: (timestampMs: number) => string;
+	/** What that day is called on its divider: `Fri 30 Oct`. */
+	readonly dayLabel: (timestampMs: number) => string;
+}
 
 /** Unread badge text: empty for none, capped at 99+. */
 export function formatUnread(count: number): string {
@@ -117,7 +127,7 @@ export function headerSuffix(message: Message): string {
  * the window never budgeted.
  */
 export function headerLine(message: Message, clock: Clock, marker = ""): string {
-	return `${marker}${clock(message.sentAt)} ${describeAuthor(message)}${headerSuffix(message)}`;
+	return `${marker}${clock.time(message.sentAt)} ${describeAuthor(message)}${headerSuffix(message)}`;
 }
 
 /** One attachment exactly as the pane draws it. */

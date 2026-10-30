@@ -4,10 +4,11 @@ import { attachmentsForDisplay, bodyForDisplay, messageRowCount } from "../src/d
 import type { Conversation, Message } from "../src/domain/types";
 import { ConversationList, listWindowStart } from "../src/ui/ConversationList";
 import { visibleWindow } from "../src/ui/message-pane";
+import { stubClock } from "./helpers/clock";
 import { frameOf } from "./helpers/frame";
 
 /** A fixed clock keeps row arithmetic independent of the host timezone. */
-const clock: Clock = () => "10:00";
+const clock: Clock = stubClock();
 
 const conversation = (index: number): Conversation => ({
 	id: `c-${index}`,

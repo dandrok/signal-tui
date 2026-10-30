@@ -4,6 +4,7 @@ import type { ReactElement } from "react";
 import { attachmentLine, describeAuthor, describeBody, displayName } from "../src/domain/format";
 import type { Conversation, Message } from "../src/domain/types";
 import { MessagePane } from "../src/ui/message-pane";
+import { stubClock } from "./helpers/clock";
 
 /**
  * Everything ink writes to the terminal, as one string. `ink-testing-library`
@@ -63,7 +64,7 @@ const hostile: Message = {
 	],
 };
 
-const clock = (): string => "10:00";
+const clock = stubClock();
 
 describe("terminal safety", () => {
 	test("a hostile body reaches the terminal without its directives", () => {

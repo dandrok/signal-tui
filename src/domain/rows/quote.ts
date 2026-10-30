@@ -85,6 +85,6 @@ export function quoteBlockFor(
 				? UNKNOWN_QUOTED_AUTHOR
 				: displayLine(quote.authorId);
 	const body = target === undefined ? QUOTE_NOT_LOADED : describeBody(target);
-	const head = `${QUOTE_PREFIX}${clock(quote.sentAt)} ${author}`;
+	const head = `${QUOTE_PREFIX}${clock.time(quote.sentAt)} ${author}`;
 	return textForDisplay(body.length === 0 ? head : `${head}: ${body}`, 1, innerWidth);
 }

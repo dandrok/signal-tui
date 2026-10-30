@@ -7,6 +7,7 @@ import {
 	strongerReceipt,
 } from "../src/domain/receipts";
 import type { Message } from "../src/domain/types";
+import { stubClock } from "./helpers/clock";
 
 const message = (overrides: Partial<Message> = {}): Message => ({
 	id: "m1",
@@ -19,7 +20,7 @@ const message = (overrides: Partial<Message> = {}): Message => ({
 	...overrides,
 });
 
-const clock = (): string => "10:00";
+const clock = stubClock();
 
 describe("the receipt ladder", () => {
 	test("ranks delivered below read below viewed", () => {

@@ -3,10 +3,11 @@ import type { Clock } from "../src/domain/format";
 import type { Conversation, Message } from "../src/domain/types";
 import { clockFor } from "../src/ui/clock";
 import { MessagePane } from "../src/ui/message-pane";
+import { stubClock } from "./helpers/clock";
 import { frameOf } from "./helpers/frame";
 
 /** A stub clock: layout assertions must not depend on ICU formatting. */
-const fixedClock: Clock = () => "10:00";
+const fixedClock: Clock = stubClock();
 const utc = fixedClock;
 
 const conversation = (index: number): Conversation => ({

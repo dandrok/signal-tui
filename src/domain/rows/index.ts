@@ -13,8 +13,15 @@
 
 export { attachmentsForDisplay, type DisplayAttachments } from "./attachments";
 export { bodyForDisplay } from "./body";
+export { dayDividerLine } from "./divider";
 export { type DraftTail, draftTail } from "./draft";
 export { messageOverheadRows, messageRowCount } from "./message";
 export { QUOTE_NOT_LOADED, type QuoteLookup, quoteBlockFor, quoteForDisplay } from "./quote";
 export { CONTINUED_RUN_MS, continuesAuthorRun, headerTextFor } from "./run";
+export {
+	NO_SEPARATOR,
+	type Separator,
+	separatorFor,
+	separatorRows,
+} from "./separator";
 export { type DisplayBody, textForDisplay, wrapToWidth } from "./text";
