@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Conversation, Message } from "../src/domain/types";
 import { MessagePane } from "../src/ui/message-pane";
+import { stubClock } from "./helpers/clock";
 import { frameOf as renderFrame } from "./helpers/frame";
 
 const conversation: Conversation = {
@@ -30,7 +31,7 @@ const frameOf = (messages: readonly Message[]): string =>
 			width={60}
 			// A stub clock: real ICU renders midnight as 00:00 here and 24:00 on the
 			// owner's machine, which is a layout test failing for the wrong reason.
-			clock={() => "10:00"}
+			clock={stubClock()}
 		/>,
 	);
 

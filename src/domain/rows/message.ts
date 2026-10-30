@@ -4,13 +4,14 @@ import type { Message } from "../types";
 import { bodyForDisplay } from "./body";
 import { type QuoteLookup, quoteForDisplay } from "./quote";
 import { headerTextFor } from "./run";
+import { separatorFor, separatorRows } from "./separator";
 import { wrappedRows } from "./text";
 
 /**
- * Rows a message spends before its body: the header (a long author name wraps, and a message
- * that continues the block above spends none at all), the quoted block, and one line per file
- * (filenames wrap too). The body gets what is left, so an oversized body cannot push its own
- * attachments out of the pane.
+ * Rows a message spends before its body: the separator above it, the header (a long author name
+ * wraps, and a message that continues the block above spends none at all), the quoted block, and
+ * one line per file (filenames wrap too). The body gets what is left, so an oversized body cannot
+ * push its own attachments out of the pane.
  */
 export function messageOverheadRows(
 	message: Message,
@@ -22,6 +23,7 @@ export function messageOverheadRows(
 ): number {
 	const width = Math.max(1, innerWidth);
 	const header = headerTextFor(message, previous, clock, marker);
+	const separator = separatorRows(separatorFor(previous, message, clock));
 	const quoted = quoteForDisplay(message, width, clock, lookup).rows;
 	const files = message.isDeleted
 		? 0
@@ -31,7 +33,7 @@ export function messageOverheadRows(
 			);
 	// A continued message has no header row at all, so an empty string must cost nothing:
 	// wrapping it would count the blank line the pane does not draw.
-	return (header === "" ? 0 : wrappedRows(header, width)) + quoted + files;
+	return separator + (header === "" ? 0 : wrappedRows(header, width)) + quoted + files;
 }
 
 /**

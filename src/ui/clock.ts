@@ -6,26 +6,56 @@ import type { Clock } from "../domain/format";
  * every visible message on every frame, so the cache lives in the UI layer: the
  * domain gets an injected `Clock` and stays free of mutable state.
  */
-const formatters = new Map<string, Intl.DateTimeFormat>();
+interface ZoneFormatters {
+	readonly time: Intl.DateTimeFormat;
+	readonly dayKey: Intl.DateTimeFormat;
+	readonly dayLabel: Intl.DateTimeFormat;
+}
+
+const formatters = new Map<string, ZoneFormatters>();
+
+function formattersFor(timeZone: string): ZoneFormatters {
+	let cached = formatters.get(timeZone);
+	if (cached === undefined) {
+		cached = {
+			time: new Intl.DateTimeFormat("en-GB", {
+				timeZone,
+				hour: "2-digit",
+				minute: "2-digit",
+				hourCycle: "h23",
+			}),
+			// `en-CA` is the locale whose short numeric date is `2026-10-30`: sortable, and free of
+			// the month names two zones might disagree about.
+			dayKey: new Intl.DateTimeFormat("en-CA", {
+				timeZone,
+				year: "numeric",
+				month: "2-digit",
+				day: "2-digit",
+			}),
+			dayLabel: new Intl.DateTimeFormat("en-GB", {
+				timeZone,
+				weekday: "short",
+				day: "numeric",
+				month: "short",
+			}),
+		};
+		formatters.set(timeZone, cached);
+	}
+	return cached;
+}
 
 export function clockFor(timeZone: string): Clock {
-	let formatter = formatters.get(timeZone);
-	if (formatter === undefined) {
-		formatter = new Intl.DateTimeFormat("en-GB", {
-			timeZone,
-			hour: "2-digit",
-			minute: "2-digit",
-			hourCycle: "h23",
-		});
-		formatters.set(timeZone, formatter);
-	}
-	const cached = formatter;
-	return (timestampMs: number): string => {
-		const text = cached.format(timestampMs);
-		// Some ICU builds render midnight as 24:00 even with hourCycle "h23". A chat
-		// timestamp has no 24th hour, and the difference is invisible on the machines
-		// that get it right — so normalise rather than depend on the ICU version.
-		return text.startsWith("24:") ? `00:${text.slice(3)}` : text;
+	const cached = formattersFor(timeZone);
+	return {
+		time: (timestampMs: number): string => {
+			const text = cached.time.format(timestampMs);
+			// Some ICU builds render midnight as 24:00 even with hourCycle "h23". A chat
+			// timestamp has no 24th hour, and the difference is invisible on the machines
+			// that get it right — so normalise rather than depend on the ICU version.
+			return text.startsWith("24:") ? `00:${text.slice(3)}` : text;
+		},
+		dayKey: (timestampMs: number): string => cached.dayKey.format(timestampMs),
+		dayLabel: (timestampMs: number): string => cached.dayLabel.format(timestampMs),
 	};
 }
 

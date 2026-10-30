@@ -3,6 +3,7 @@ import type { Clock } from "../src/domain/format";
 import { continuesAuthorRun, messageRowCount } from "../src/domain/rows";
 import type { Conversation, Message } from "../src/domain/types";
 import { MessagePane } from "../src/ui/message-pane";
+import { stubClock } from "./helpers/clock";
 import { frameOf } from "./helpers/frame";
 
 /**
@@ -13,7 +14,7 @@ import { frameOf } from "./helpers/frame";
  * Neither is a colour assertion — the bar is a glyph, and the counts are rows.
  */
 
-const clock: Clock = () => "10:00";
+const clock: Clock = stubClock();
 const MINUTE = 60_000;
 
 const conversation: Conversation = { id: "c1", name: "Marta", unreadCount: 0, lastActivityAt: 0 };

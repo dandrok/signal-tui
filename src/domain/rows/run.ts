@@ -20,7 +20,7 @@ export const CONTINUED_RUN_MS = 5 * 60_000;
  * fallback for rows cached before it was stored. Outgoing and incoming never mix — your own
  * messages are labelled `You`, and someone may well be called that.
  */
-function sameSender(previous: Message, message: Message): boolean {
+export function sameSender(previous: Message, message: Message): boolean {
 	if (previous.isOutgoing !== message.isOutgoing) {
 		return false;
 	}

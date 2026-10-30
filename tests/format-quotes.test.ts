@@ -3,9 +3,10 @@ import type { Clock } from "../src/domain/format";
 import { VIEW_ONCE_BODY } from "../src/domain/format";
 import { messageRowCount, QUOTE_NOT_LOADED, quoteForDisplay } from "../src/domain/rows";
 import type { Message } from "../src/domain/types";
+import { stubClock } from "./helpers/clock";
 
 /** A stub clock: layout assertions must not depend on ICU formatting. */
-const clock: Clock = () => "10:00";
+const clock: Clock = stubClock();
 
 const message = (overrides: Partial<Message> = {}): Message => ({
 	id: "c1:1000",

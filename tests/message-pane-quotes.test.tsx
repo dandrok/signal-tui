@@ -2,10 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { Clock } from "../src/domain/format";
 import type { Conversation, Message } from "../src/domain/types";
 import { MessagePane } from "../src/ui/message-pane";
+import { stubClock } from "./helpers/clock";
 import { frameOf, frameOf as renderFrame } from "./helpers/frame";
 
 /** A stub clock: layout assertions must not depend on ICU formatting or the host zone. */
-const clock: Clock = () => "10:00";
+const clock: Clock = stubClock();
 
 const conversation: Conversation = {
 	id: "c1",

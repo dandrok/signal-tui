@@ -2,10 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { Clock } from "../src/domain/format";
 import type { Message } from "../src/domain/types";
 import { Composer } from "../src/ui/Composer";
+import { stubClock } from "./helpers/clock";
 import { frameOf as renderFrame } from "./helpers/frame";
 
 /** A stub clock: layout assertions must not depend on ICU formatting or the host zone. */
-const clock: Clock = () => "10:00";
+const clock: Clock = stubClock();
 
 const target = (overrides: Partial<Message> = {}): Message => ({
 	id: "c1:1000",

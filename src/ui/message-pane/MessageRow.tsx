@@ -4,13 +4,17 @@ import { describeAuthor, headerSuffix, showsBody } from "../../domain/format";
 import {
 	attachmentsForDisplay,
 	bodyForDisplay,
+	dayDividerLine,
 	headerTextFor,
 	type QuoteLookup,
 	quoteForDisplay,
+	separatorFor,
+	separatorRows,
 	textForDisplay,
 	wrapToWidth,
 } from "../../domain/rows";
 import type { Message } from "../../domain/types";
+import { authorColour } from "./author-colour";
 import { CURSOR_MARKER } from "./window";
 
 /**
@@ -32,9 +36,10 @@ const linesOf = (text: string): readonly string[] => text.split("\n");
 /**
  * One message, measured against a shared row budget.
  *
- * The order is deliberate: the header is drawn first (unless this message continues the block
- * above), then what it quotes, then the files, and the body gets whatever is left — so neither a
- * long name nor a long body can hide a peer's filenames.
+ * The order is deliberate: the separator above it (a date divider or a blank line), then the
+ * header — unless this message continues the block above — then what it quotes, then the files,
+ * and the body gets whatever is left. So neither a long name nor a long body can hide a peer's
+ * filenames, and the rows this draws are the rows `messageOverheadRows` counted.
  */
 export function MessageRow({
 	message,
@@ -46,7 +51,8 @@ export function MessageRow({
 	isCursor,
 }: {
 	readonly message: Message;
-	/** The message above it, which decides whether this row repeats the author. */
+	/** The message above it, which decides whether this row repeats the author, and whether a
+	 *  day divider or a blank line belongs above it. */
 	readonly previous: Message | undefined;
 	readonly rowBudget: number;
 	readonly innerWidth: number;
@@ -64,21 +70,17 @@ export function MessageRow({
 	const suffix = headerSuffix(message);
 	const header =
 		fullHeader === "" ? { text: "", rows: 0 } : textForDisplay(fullHeader, rowBudget, innerWidth);
+	const separator = separatorFor(previous, message, clock);
+	const separatorRowsAbove = separatorRows(separator);
 	// Same budget arithmetic as `messageOverheadRows`, which is what fitted the window:
-	// header, then the quote, then the files, and the body takes the rest. `quoteForDisplay`
-	// has already bounded itself to one row at this width, so the budget can only drop it.
+	// separator, header, then the quote, then the files, and the body takes the rest.
+	// `quoteForDisplay` has already bounded itself to one row at this width, so the budget can
+	// only drop it.
+	const remaining = Math.max(0, rowBudget - separatorRowsAbove - header.rows);
 	const quote = quoteForDisplay(message, innerWidth, clock, lookup);
-	const quoteRows = Math.min(quote.rows, Math.max(0, rowBudget - header.rows));
-	const files = attachmentsForDisplay(
-		message,
-		Math.max(0, rowBudget - header.rows - quoteRows),
-		innerWidth,
-	);
-	const body = bodyForDisplay(
-		message,
-		Math.max(0, rowBudget - header.rows - quoteRows - files.rows),
-		innerWidth,
-	);
+	const quoteRows = Math.min(quote.rows, remaining);
+	const files = attachmentsForDisplay(message, Math.max(0, remaining - quoteRows), innerWidth);
+	const body = bodyForDisplay(message, Math.max(0, remaining - quoteRows - files.rows), innerWidth);
 
 	// The bar is one element reused on every line of this message. A run of messages you sent is
 	// then a solid line down the pane, which is the whole point of drawing it.
@@ -88,24 +90,28 @@ export function MessageRow({
 		<Text color="gray">{PEER_GUTTER}</Text>
 	);
 	// `exactOptionalPropertyTypes` refuses `color={undefined}`, and "no colour" is not "white": the
-	// default foreground is what a peer's name should keep, whichever theme the terminal has.
+	// default foreground is what a peer's name used to keep. It is now the one thing that says
+	// *which* person this is, so it is derived from the sender rather than left to the theme.
 	const author = message.isOutgoing ? (
 		<Text bold color="green">
 			{describeAuthor(message)}
 		</Text>
 	) : (
-		<Text bold color="cyan">
+		<Text bold color={authorColour(message.authorId, describeAuthor(message))}>
 			{describeAuthor(message)}
 		</Text>
 	);
 
 	return (
 		<Box flexDirection="column">
+			{separator.kind === "day" ? (
+				<Text dimColor>{dayDividerLine(separator.label, innerWidth)}</Text>
+			) : null}
 			{header.rows === 0 ? null : header.text === fullHeader ? (
 				<Text>
 					{bar}
 					{marker === "" ? null : <Text color="cyan">{marker}</Text>}
-					<Text dimColor>{clock(message.sentAt)} </Text>
+					<Text dimColor>{clock.time(message.sentAt)} </Text>
 					{author}
 					{suffix === "" ? null : <Text dimColor>{suffix}</Text>}
 				</Text>
