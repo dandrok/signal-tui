@@ -22,6 +22,7 @@ export function promptKey(state: AppState, input: string, key: KeyLike): KeyResu
 		prompt.kind === "reaction" ||
 		prompt.kind === "forward" ||
 		prompt.kind === "attach" ||
+		prompt.kind === "new" ||
 		prompt.kind === "open"
 	) {
 		// Four pickers, one rule: tab and the arrows walk the suggestions, and every other key is

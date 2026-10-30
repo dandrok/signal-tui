@@ -1,5 +1,5 @@
 import type { MessageRef } from "../../domain/message-ref";
-import type { ConversationId, Message, MessageId } from "../../domain/types";
+import type { Contact, ConversationId, Message, MessageId } from "../../domain/types";
 import type { ReplyTarget, SignalBackend } from "../../ports/backend";
 import type { MessageStore } from "../../ports/store";
 
@@ -61,6 +61,15 @@ export interface Session {
 	hide(conversationId: ConversationId, messageId: MessageId): Promise<void>;
 	/** Clears the unread count for a conversation the user is looking at. */
 	markRead(conversationId: ConversationId): Promise<void>;
+	/**
+	 * Creates the empty conversation a first message will be sent from.
+	 *
+	 * A local row only: nothing is sent and nothing is created on the other side, because Signal
+	 * has no "start a chat" — the first message is what makes the thread exist.
+	 */
+	startDirect(conversationId: ConversationId, name: string): Promise<void>;
+	/** Everyone the account knows, for the picker that starts a conversation. */
+	listContacts(): Promise<readonly Contact[]>;
 	/**
 	 * Who is writing in that conversation right now, or null.
 	 *

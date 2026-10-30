@@ -1,5 +1,6 @@
 import type { MessageRef } from "../domain/message-ref";
 import type {
+	Contact,
 	Conversation,
 	ConversationId,
 	EditAuthor,
@@ -138,5 +139,13 @@ export interface SignalBackend {
 		replyTo?: ReplyTarget,
 		filePath?: string,
 	): Promise<SendResult>;
+	/**
+	 * Everyone this account knows, for the picker that starts a new conversation.
+	 *
+	 * Read-only and internet-light: the engine answers from what it already synced, so this is
+	 * not a directory search — Signal has none — and a name that is not here cannot be found by
+	 * asking again.
+	 */
+	listContacts(): Promise<readonly Contact[]>;
 	subscribe(listener: (event: BackendEvent) => void): () => void;
 }

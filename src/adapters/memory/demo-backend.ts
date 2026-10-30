@@ -1,6 +1,20 @@
-import type { ConversationId, Message } from "../../domain/types";
+import type { Contact, ConversationId, Message } from "../../domain/types";
 import type { BackendEvent, ReplyTarget, SendResult, SignalBackend } from "../../ports/backend";
 import { demoConversations } from "./demo-data";
+
+/**
+ * The people `--demo` knows, so "start a conversation" is demonstrable without an account.
+ *
+ * Fake numbers on purpose — the demo must never look like it could reach a phone. They are also
+ * the four names the sample threads use, so picking Marta here opens the thread that already has
+ * her messages in it.
+ */
+const DEMO_CONTACTS: readonly Contact[] = [
+	{ id: "+48600111222", name: "Adam", number: "+48600111222", uuid: "uuid-adam" },
+	{ id: "+48600222333", name: "Marta", number: "+48600222333", uuid: "uuid-marta" },
+	{ id: "+48600333444", name: "Alice", number: "+48600333444", uuid: "uuid-alice" },
+	{ id: "+48600444555", name: "Mum", number: "+48600444555", uuid: "uuid-mum" },
+];
 
 /**
  * The transport `--demo` runs on: nothing leaves the process, and the sample thread answers you.
@@ -164,6 +178,7 @@ export function createDemoBackend(options: DemoBackendOptions = {}): SignalBacke
 			answer(conversationId);
 			return { timestamp };
 		},
+		listContacts: async () => DEMO_CONTACTS,
 		subscribe: (listener) => {
 			listeners.add(listener);
 			return () => {

@@ -1,4 +1,4 @@
-import type { Conversation, MessageId } from "../../domain/types";
+import type { Contact, Conversation, MessageId } from "../../domain/types";
 import type { AttachCandidate } from "../usecases/attach";
 import type { OpenFile } from "../usecases/open";
 
@@ -19,7 +19,7 @@ import type { OpenFile } from "../usecases/open";
  * client does that leaves the terminal, so the first `o` of a session asks and the rest do not
  * (see `filesMayOpen`).
  */
-export type PromptKind = "reaction" | "edit" | "delete" | "forward" | "attach" | "open";
+export type PromptKind = "reaction" | "edit" | "delete" | "forward" | "attach" | "open" | "new";
 
 /**
  * An open prompt: which message it names, and what has been typed into it.
@@ -69,4 +69,12 @@ export interface PromptState {
 	 * whichever one a re-read would now produce.
 	 */
 	readonly files?: readonly OpenFile[];
+	/**
+	 * What a `new` prompt can offer, read from the engine when the prompt opened.
+	 *
+	 * Absent is "not asked yet" — the read is a round-trip, so the first frame of the prompt has
+	 * no list — and an empty array is the honest answer for an account with no contacts, which the
+	 * plan refuses in its own words rather than as "nothing matches".
+	 */
+	readonly contacts?: readonly Contact[];
 }

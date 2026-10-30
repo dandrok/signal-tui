@@ -23,6 +23,11 @@ export function paneKey(state: AppState, input: string, key: KeyLike): KeyResult
 	}
 
 	const inMessages = state.focus === "messages";
+	// Starting a conversation belongs to the list, not to a thread: it is what you press when the
+	// thread you want is not there. In the message pane `n` stays free for now (nothing to name).
+	if (!inMessages && input === "n") {
+		return action({ type: "prompt-opened", kind: "new" });
+	}
 	if (inMessages && input === "r") {
 		return action({ type: "reply-started" });
 	}

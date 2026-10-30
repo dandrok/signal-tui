@@ -1,6 +1,7 @@
 import { Box, Text } from "ink";
 import type { PromptState } from "../app/state";
 import { forwardMatches } from "../app/usecases/forward";
+import { newChatMatches } from "../app/usecases/new-chat";
 import { reactionSuggestions } from "../app/usecases/react";
 import { displayLine } from "../domain/display";
 import { displayName, formatBytes, truncate } from "../domain/format";
@@ -22,6 +23,7 @@ const LABELS = {
 	forward: "forward › ",
 	attach: "attach › ",
 	open: "open › ",
+	new: "new › ",
 } as const;
 const HINTS = {
 	reaction: "  ⏎ send · esc cancel",
@@ -30,6 +32,7 @@ const HINTS = {
 	forward: "  ⇥/↕ pick · ⏎ send · esc cancel",
 	attach: "  ⇥/↕ pick · ⏎ open or send · esc cancel",
 	open: "  ⇥/↕ pick · ⏎ open · esc cancel",
+	new: "  ⇥/↕ pick · ⏎ open · esc cancel",
 } as const;
 
 /** What the one question that takes no input asks, in the place the others show what was typed. */
@@ -37,6 +40,8 @@ const DELETE_QUESTION = "this message, for everyone?";
 
 /** Cells a name may take before it is cut: a picked row, not a list. */
 const NAME_CELLS = 22;
+/** Cells the number under it may take: `+48600222333` fits, a long uuid is cut. */
+const NUMBER_CELLS = 16;
 
 const NO_EMOJI = { emoji: [] as readonly string[], picked: 0 };
 const NO_CHATS: readonly Conversation[] = [];
@@ -149,6 +154,27 @@ function choiceLine(prompt: PromptState): {
 			? { destination: "", picked: false }
 			: {
 					destination: `${truncate(displayLine(chosen.name), NAME_CELLS)} ${prompt.pick + 1}/${files.length}`,
+					picked: true,
+				};
+	}
+	if (prompt.kind === "new") {
+		const contacts = prompt.contacts;
+		if (contacts === undefined) {
+			// The picker asked the engine and has not been answered yet: saying nothing would look
+			// like an account with no contacts, which is a different and much worse fact.
+			return { destination: "reading contacts…", picked: false };
+		}
+		const { rows, picked } = newChatMatches(contacts, prompt.draft, prompt.pick);
+		const chosen = rows[picked];
+		return chosen === undefined
+			? {
+					destination: contacts.length === 0 ? "no contacts yet" : "nothing matches",
+					picked: false,
+				}
+			: {
+					// The number rides along with the name: two people can share a first name, and the
+					// row this picker is choosing between is addressed by the number, not by the word.
+					destination: `${truncate(chosen.name, NAME_CELLS)} ${truncate(chosen.detail, NUMBER_CELLS)} ${picked + 1}/${rows.length}`,
 					picked: true,
 				};
 	}

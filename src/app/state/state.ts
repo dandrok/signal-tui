@@ -7,6 +7,7 @@ import {
 } from "./reduce-history";
 import {
 	allowFiles,
+	attachContacts,
 	cancelPrompt,
 	changePrompt,
 	movePrompt,
@@ -35,6 +36,7 @@ export function reduce(state: AppState, action: Action): AppState {
 		case "draft-submitted":
 		case "composer-cleared":
 		case "composer-restored":
+		case "conversation-selected":
 		case "notice":
 			return reduceSelection(state, action);
 		case "messages-loaded":
@@ -57,6 +59,8 @@ export function reduce(state: AppState, action: Action): AppState {
 			return changePrompt(state, action.value, action.paths);
 		case "prompt-moved":
 			return movePrompt(state, action.delta);
+		case "prompt-contacts":
+			return attachContacts(state, action.contacts);
 		case "prompt-cancelled":
 			return cancelPrompt(state);
 		case "prompt-submitted":

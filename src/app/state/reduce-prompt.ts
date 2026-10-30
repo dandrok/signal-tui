@@ -1,5 +1,7 @@
+import type { Contact } from "../../domain/types";
 import type { AttachCandidate } from "../usecases/attach";
 import { forwardMatches, forwardTargets } from "../usecases/forward";
+import { newChatRows } from "../usecases/new-chat";
 import type { OpenFile } from "../usecases/open";
 import { reactionSuggestions } from "../usecases/react";
 import { refusalFor } from "./prompt-refusals";
@@ -30,6 +32,11 @@ export function openPrompt(
 	paths?: readonly AttachCandidate[],
 	files?: readonly OpenFile[],
 ): AppState {
+	// The one prompt that is not about the thread on screen: starting a conversation is what you do
+	// when the thread you want does not exist yet, and the list may be empty on a fresh account.
+	if (kind === "new") {
+		return { ...state, prompt: { kind, targetId: null, draft: "", pick: 0 } };
+	}
 	const conversation = selectedConversation(state);
 	if (conversation === undefined) {
 		return state;
@@ -114,6 +121,8 @@ function pickableCount(prompt: PromptState): number {
 			return prompt.paths?.length ?? 0;
 		case "open":
 			return prompt.files?.length ?? 0;
+		case "new":
+			return newChatRows(prompt.contacts ?? [], prompt.draft).length;
 		default:
 			return 0;
 	}
@@ -132,6 +141,21 @@ export function movePrompt(state: AppState, delta: number): AppState {
 	// Wrapping, because a five-item list is shorter than anyone's patience for clamping.
 	const pick = (prompt.pick + delta + count) % count;
 	return { ...state, prompt: { ...prompt, pick } };
+}
+
+/**
+ * The contacts a `new` prompt asked for, arriving after the prompt opened.
+ *
+ * The draft is kept as it is: a keystroke typed while the read was in flight is the user narrowing
+ * a list they expected to be there, and dropping it would make the picker ignore the first letters
+ * typed. A prompt that closed in the meantime is not reopened by a late answer.
+ */
+export function attachContacts(state: AppState, contacts: readonly Contact[]): AppState {
+	const prompt = state.prompt;
+	if (prompt === null || prompt.kind !== "new") {
+		return state;
+	}
+	return { ...state, prompt: { ...prompt, contacts } };
 }
 
 export function cancelPrompt(state: AppState): AppState {

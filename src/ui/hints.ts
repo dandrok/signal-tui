@@ -37,6 +37,8 @@ export function hintsFor(
 				return "⇥/↕ pick · ⏎ open or send · esc cancel";
 			case "open":
 				return "⇥/↕ pick · ⏎ open · esc cancel";
+			case "new":
+				return "⇥/↕ pick · ⏎ open · esc cancel";
 		}
 	}
 	if (state.focus === "composer") {
@@ -45,7 +47,7 @@ export function hintsFor(
 	const panes = "tab panes · i compose · / search · q quit";
 	return state.focus === "messages"
 		? messageHints(state, openRoot)
-		: `j/k move · a attach · ${panes}`;
+		: `j/k move · n new · a attach · ${panes}`;
 }
 
 /**

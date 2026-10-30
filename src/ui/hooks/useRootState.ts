@@ -10,6 +10,7 @@ import {
 } from "../../app/state";
 import { type AttachContext, attachListing, defaultAttachContext } from "../../app/usecases/attach";
 import { defaultOpenContext, type OpenContext, openFiles, openPlan } from "../../app/usecases/open";
+import { newChatOpened, newChatSubmitted } from "./new-chat-effect";
 import { launchOpen, openEffect } from "./open-effect";
 import { runPromptEffect } from "./prompt-effect";
 
@@ -72,6 +73,12 @@ export function useRootState(
 			// The filesystem answers for an attach prompt, and it has to answer *inside* the
 			// keystroke: a listing read a frame later would send the file the user typed before
 			// the one they are looking at.
+			// Starting a conversation asks the engine who it knows, then writes a local row — no
+			// send, no round-trip beyond the contacts. Both halves live in `new-chat-effect.ts`.
+			if (action.type === "prompt-opened" && action.kind === "new") {
+				newChatOpened(apply, session, action, refused);
+				return;
+			}
 			if (action.type === "prompt-opened" && action.kind === "attach") {
 				apply({ ...action, paths: attachListing("", 0, attachments).candidates });
 				return;
@@ -99,6 +106,11 @@ export function useRootState(
 						);
 					});
 				}
+			}
+
+			if (action.type === "prompt-submitted" && current.prompt?.kind === "new") {
+				newChatSubmitted(apply, session, current.prompt, action, refused, failed);
+				return;
 			}
 
 			if (action.type === "prompt-submitted") {

@@ -1,6 +1,7 @@
 import type { MessageRef } from "../../src/domain/message-ref";
 import { strongerReceipt } from "../../src/domain/receipts";
 import type {
+	Contact,
 	Conversation,
 	EditAuthor,
 	Message,
@@ -255,6 +256,12 @@ export class FakeBackend implements SignalBackend {
 
 	async stop(): Promise<void> {
 		this.stopped++;
+	}
+
+	/** What `n` will offer. Set directly: the picker's list is an input, not a fixture of the backend. */
+	contacts: readonly Contact[] = [];
+	async listContacts(): Promise<readonly Contact[]> {
+		return this.contacts;
 	}
 
 	readonly receipts: Array<{ recipient: string; timestamps: readonly number[]; type: string }> = [];

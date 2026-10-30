@@ -24,6 +24,7 @@
  * message far more often than it changes the envelope around it. This file is the module's
  * public surface — import schemas and types from `./schemas`, never from a file below it.
  */
+export * from "./contacts";
 export * from "./envelope";
 export * from "./payload";
 export type {

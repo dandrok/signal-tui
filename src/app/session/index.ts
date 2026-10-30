@@ -2,6 +2,7 @@ import type { MessageRef } from "../../domain/message-ref";
 import type { ConversationId, Message, MessageId } from "../../domain/types";
 import type { ReplyTarget } from "../../ports/backend";
 import { applyEvent } from "./apply";
+import { listContacts, startDirect } from "./direct";
 import { sendEdit } from "./edit";
 import { hideMessage } from "./hide";
 import { markReadConversation } from "./mark-read";
@@ -106,6 +107,9 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 		},
 		markRead: (conversationId: ConversationId): Promise<void> =>
 			markReadConversation(context, conversationId),
+		startDirect: (conversationId: ConversationId, name: string): Promise<void> =>
+			startDirect(context, conversationId, name),
+		listContacts: () => listContacts(context),
 		typingIn: (conversationId: ConversationId): string | null => typing.authorIn(conversationId),
 		send: (
 			conversationId: ConversationId,

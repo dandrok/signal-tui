@@ -35,6 +35,8 @@ const DISPLAY = "signal-2026-10-24-203528.jpeg";
 
 const fakeSession = (): Session => ({
 	start: async () => undefined,
+	startDirect: async () => undefined,
+	listContacts: async () => [],
 	stop: async () => undefined,
 	send: async (
 		_id: string,

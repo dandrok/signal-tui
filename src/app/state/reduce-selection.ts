@@ -22,6 +22,7 @@ type SelectionAction = Extract<
 			| "draft-submitted"
 			| "composer-cleared"
 			| "composer-restored"
+			| "conversation-selected"
 			| "notice";
 	}
 >;
@@ -71,6 +72,21 @@ export function reduceSelection(state: AppState, action: SelectionAction): AppSt
 						prompt: null,
 						olderRequested: false,
 					};
+		}
+		case "conversation-selected": {
+			// Already there is a no-op that keeps its identity: a reload follows every write, and a
+			// state that changes for nothing re-renders the panes and re-runs their effects.
+			if (state.selectedId === action.id) {
+				return state;
+			}
+			return {
+				...state,
+				selectedId: action.id,
+				scroll: 0,
+				replyToId: null,
+				prompt: null,
+				olderRequested: false,
+			};
 		}
 		case "focus":
 			return state.focus === action.focus ? state : { ...state, focus: action.focus };
