@@ -18,7 +18,9 @@ import {
 } from "./app/settings";
 import { defaultOpenContext } from "./app/usecases/open";
 import { VERSION } from "./app/version";
+import { takeOverScreen } from "./cli/alternate-screen";
 import { ensurePrivateDirectory } from "./cli/paths";
+import { runWithScreen } from "./cli/run-app";
 import type { MessageStore } from "./ports/store";
 import { Root } from "./ui/Root";
 
@@ -116,19 +118,39 @@ const running =
 		? await startLive(config.account, config.dbPath, settings)
 		: await startDemo();
 
-const instance = render(
-	<Root
-		store={running.store}
-		session={running.session}
-		notify={settings.notify}
-		// The engine's own data directory, which `--config` in `engineArgs` may have moved: `o`
-		// may only launch files the engine downloaded, so it has to look where the engine writes.
-		open={defaultOpenContext(settings.engineArgs)}
-	/>,
-);
+// The screen is taken over before the first frame, so the app never draws into the buffer the
+// shell's history lives in: on exit the terminal comes back exactly as it was, instead of with a
+// dead frame above the prompt and a wheel that scrolls the shell out from under a live UI.
+let instance: ReturnType<typeof render> | undefined;
+
+// A terminal closed on us (`SIGTERM`, `SIGHUP`) must not stay in the second buffer. Unmount rather
+// than exit, so the normal path below runs and the engine is stopped with it.
+const stop = (): void => {
+	instance?.unmount();
+};
+process.on("SIGTERM", stop);
+process.on("SIGHUP", stop);
 
 try {
-	await instance.waitUntilExit();
+	await runWithScreen({
+		takeOver: () => takeOverScreen(process.stdout),
+		mount: () => {
+			instance = render(
+				<Root
+					store={running.store}
+					session={running.session}
+					notify={settings.notify}
+					// The engine's own data directory, which `--config` in `engineArgs` may have moved:
+					// `o` may only launch files the engine downloaded, so it has to look where the
+					// engine writes.
+					open={defaultOpenContext(settings.engineArgs)}
+				/>,
+			);
+			return instance;
+		},
+		dispose: () => running.dispose(),
+	});
 } finally {
-	await running.dispose();
+	process.off("SIGTERM", stop);
+	process.off("SIGHUP", stop);
 }
