@@ -6,102 +6,107 @@ import type { Message } from "../src/domain/types";
 
 /**
  * The demo's answer is scheduled, so the tests drive the clock instead of sleeping: `schedule`
- * queues the work and `drain` runs it in the order it was queued, which is the order the delays
- * ask for.
+ * queues the work, `drain` runs it in the order it was queued, and a cancelled entry is skipped
+ * the way a cleared timer would be — otherwise "stop cancels" would pass on a no-op.
  */
 function manualSchedule() {
-	const queued: Array<{ work: () => void; delayMs: number }> = [];
-	const cancelled: number[] = [];
+	const queued: Array<{ work: () => void; delayMs: number; cancelled: boolean }> = [];
 	const schedule = (work: () => void, delayMs: number): (() => void) => {
-		const entry = { work, delayMs };
+		const entry = { work, delayMs, cancelled: false };
 		queued.push(entry);
 		return () => {
-			cancelled.push(queued.indexOf(entry));
+			entry.cancelled = true;
 		};
 	};
-	const drain = (): number[] => {
+	/** Runs up to `count` pending entries and answers the delays it actually ran. */
+	const drain = (count = Number.MAX_SAFE_INTEGER): number[] => {
 		const delays: number[] = [];
-		for (let entry = queued.shift(); entry !== undefined; entry = queued.shift()) {
+		while (delays.length < count) {
+			const entry = queued.shift();
+			if (entry === undefined) {
+				break;
+			}
+			if (entry.cancelled) {
+				continue;
+			}
 			delays.push(entry.delayMs);
 			entry.work();
 		}
 		return delays;
 	};
-	return { schedule, drain, cancelled, queued };
+	return { schedule, drain };
 }
 
-async function bodies(store: InMemoryStore, conversationId: string): Promise<string[]> {
-	const rows = await store.listAllMessages(conversationId);
-	return rows.map((message: Message) => message.body);
+/** Through a real session and a real store: the demo path, not the backend alone. */
+async function demoSession() {
+	const clock = manualSchedule();
+	const store = new InMemoryStore();
+	const session = createSession({
+		store,
+		backend: createDemoBackend({ schedule: clock.schedule }),
+	});
+	await session.start();
+	const bodies = async (conversationId: string): Promise<string[]> => {
+		const rows = await store.listAllMessages(conversationId);
+		return rows.map((message: Message) => message.body);
+	};
+	return { clock, store, session, bodies };
 }
 
 describe("the demo backend", () => {
-	test("a send is echoed into the cache and the thread answers it", async () => {
-		const clock = manualSchedule();
-		const store = new InMemoryStore();
-		const session = createSession({
-			store,
-			backend: createDemoBackend({ schedule: clock.schedule }),
-		});
-		await session.start();
+	test("a send is echoed into the cache before anything is answered", async () => {
+		const { session, bodies } = await demoSession();
 
 		await session.send("c-alice", "shipping the fix now");
 		await session.flush();
 
-		// The echo is the session's write, not the backend's: it is on screen before anything
-		// has been answered, which is what a live send looks like.
-		expect(await bodies(store, "c-alice")).toContain("shipping the fix now");
+		// The echo is the session's write, not the answer's: it is on screen first, which is
+		// what a live send looks like.
+		expect(await bodies("c-alice")).toContain("shipping the fix now");
 		expect(session.typingIn("c-alice")).toBeNull();
-
-		// Typing first, then the line: the notice is the only part that never reaches the cache.
-		clock.drain();
-		expect(session.typingIn("c-alice")).toBe("Alice");
-		await session.flush();
-		expect(await bodies(store, "c-alice")).toContain(
-			"yep, the audio routing test passed this morning",
-		);
-
-		// The answer is a stored incoming row, so it survives the read the pane does.
-		const incoming = (await store.listAllMessages("c-alice")).filter(
-			(message) => message.author === "Alice" && !message.isOutgoing,
-		);
-		expect(incoming.length).toBe(2);
 		await session.stop();
 	});
 
-	test("the scripted answer is a real incoming message, so it notifies", async () => {
-		const clock = manualSchedule();
-		const store = new InMemoryStore();
-		const session = createSession({
-			store,
-			backend: createDemoBackend({ schedule: clock.schedule }),
-		});
-		const seen: string[] = [];
-		const stop = session.onIncoming((notice) => seen.push(notice.message.body));
-		await session.start();
+	test("the thread types, then answers, and stops typing when it does", async () => {
+		const { clock, session, bodies } = await demoSession();
+
+		await session.send("c-alice", "shipping the fix now");
+		// One entry at a time: the notice has to be visible before the answer lands, and gone
+		// once it has.
+		expect(clock.drain(1)).toEqual([600]);
+		expect(session.typingIn("c-alice")).toBe("Alice");
+
+		clock.drain();
+		await session.flush();
+		expect(await bodies("c-alice")).toContain("yep, the audio routing test passed this morning");
+		expect(session.typingIn("c-alice")).toBeNull();
+		await session.stop();
+	});
+
+	test("the answer arrives as a named incoming thread, so a toast can name it", async () => {
+		const { clock, session } = await demoSession();
+		const seen: Array<{ body: string; name: string }> = [];
+		const stop = session.onIncoming((notice) =>
+			seen.push({ body: notice.message.body, name: notice.conversationName }),
+		);
 
 		await session.send("c-family", "on my way");
 		clock.drain();
 		await session.flush();
 
-		expect(seen).toEqual(["perfect, see you at 7"]);
+		// The name is the group's, not the sender's: `Mum` without `Family` names nobody.
+		expect(seen).toEqual([{ body: "perfect, see you at 7", name: "Family" }]);
 		stop();
 		await session.stop();
 	});
 
 	test("nobody answers a note to yourself", async () => {
-		const clock = manualSchedule();
-		const store = new InMemoryStore();
-		const session = createSession({
-			store,
-			backend: createDemoBackend({ schedule: clock.schedule }),
-		});
-		await session.start();
+		const { clock, session, bodies } = await demoSession();
 
 		await session.send("c-note-to-self", "remember the FTS index");
 		await session.flush();
 		expect(clock.drain()).toEqual([]);
-		expect(await bodies(store, "c-note-to-self")).toContain("remember the FTS index");
+		expect(await bodies("c-note-to-self")).toContain("remember the FTS index");
 		await session.stop();
 	});
 
@@ -127,17 +132,18 @@ describe("the demo backend", () => {
 		await session.stop();
 	});
 
-	test("stop cancels an answer that has not been written yet", async () => {
+	test("stop drops the answer instead of leaving it to fire later", async () => {
 		const clock = manualSchedule();
-		const session = createSession({
-			store: new InMemoryStore(),
-			backend: createDemoBackend({ schedule: clock.schedule }),
-		});
-		await session.start();
+		const backend = createDemoBackend({ schedule: clock.schedule });
+		const emitted: string[] = [];
+		const unsubscribe = backend.subscribe((event) => emitted.push(event.kind));
 
-		await session.send("c-alice", "hello");
-		await session.stop();
+		await backend.sendMessage("c-alice", "hello");
+		await backend.stop();
+		clock.drain();
 
-		expect(clock.cancelled.length).toBe(2);
+		// Nothing ran and nothing was said: quitting mid-reply leaves no timer behind.
+		expect(emitted).toEqual([]);
+		unsubscribe();
 	});
 });

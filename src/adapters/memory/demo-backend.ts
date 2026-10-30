@@ -1,5 +1,6 @@
 import type { ConversationId, Message } from "../../domain/types";
 import type { BackendEvent, ReplyTarget, SendResult, SignalBackend } from "../../ports/backend";
+import { demoConversations } from "./demo-data";
 
 /**
  * The transport `--demo` runs on: nothing leaves the process, and the sample thread answers you.
@@ -110,6 +111,15 @@ export function createDemoBackend(options: DemoBackendOptions = {}): SignalBacke
 		});
 		later(options.replyDelayMs ?? REPLY_DELAY_MS, () => {
 			const sentAt = stamp();
+			// Saying nothing would leave `Marta is typing…` under her own message until the
+			// eight-second expiry: the notice is a deadline, and only the answer meets it.
+			emit({ kind: "typing", conversationId, author: responder.author, isTyping: false });
+			// The name first, the way the engine sends it: a notification for a thread you are
+			// not looking at has nothing else to call it.
+			const seeded = demoConversations.find((entry) => entry.id === conversationId);
+			if (seeded !== undefined) {
+				emit({ kind: "conversation-updated", conversation: seeded });
+			}
 			const message: Message = {
 				id: `${conversationId}:${sentAt}`,
 				conversationId,
