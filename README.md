@@ -4,12 +4,13 @@ A terminal Signal client. Ink + Bun, local-first: messages live in SQLite on you
 machine, and the TUI never touches the network itself — it drives
 [`signal-cli`](https://github.com/AsamK/signal-cli) over JSON-RPC on stdio.
 
-**Status: `0.6.0` — a full-screen client that moves files both ways.** Read, send, groups,
-replies, reactions, edits, delete-for-everyone, local hiding, forwarding, typing indicators,
-unread counts, read receipts, sending a file with a caption, and opening a file someone sent all
-work against a real account. It takes the terminal over the way lazygit does, and the thread marks
-who spoke: a bar down the gutter, one header per burst, a colour per person and a divider when the
-day changes. What changed, and when, is in [CHANGELOG.md](./CHANGELOG.md).
+**Status: `0.6.1` — a full-screen client that moves files both ways, and a demo you can
+talk to.** Read, send, groups, replies, reactions, edits, delete-for-everyone, local hiding,
+forwarding, typing indicators, unread counts, read receipts, sending a file with a caption, and
+opening a file someone sent all work against a real account. It takes the terminal over the way
+lazygit does, and the thread marks who spoke: a bar down the gutter, one header per burst, a colour
+per person and a divider when the day changes. What changed, and when, is in
+[CHANGELOG.md](./CHANGELOG.md).
 
 > **Unofficial.** Not affiliated with Signal Messenger LLC. It is a terminal front
 > end for [`signal-cli`](https://github.com/AsamK/signal-cli), which does the
