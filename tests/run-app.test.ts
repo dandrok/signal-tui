@@ -50,6 +50,32 @@ describe("running the app", () => {
 		expect(events).toEqual(["take-over", "mount", "wait", "release-screen", "dispose"]);
 	});
 
+	test("keeps the screen until the app has actually exited", async () => {
+		// A `waitUntilExit` that is not awaited would release the screen while the UI is still
+		// drawing into it, and every other case here resolves immediately, so none of them notice.
+		const { events, app } = recorder();
+		let finish: () => void = () => undefined;
+		const run = runWithScreen({
+			...app,
+			mount: () => {
+				events.push("mount");
+				return {
+					waitUntilExit: () =>
+						new Promise<unknown>((resolve) => {
+							finish = () => resolve(undefined);
+						}),
+				};
+			},
+		});
+
+		expect(events).toEqual(["take-over", "mount"]);
+
+		finish();
+		await run;
+
+		expect(events).toEqual(["take-over", "mount", "release-screen", "dispose"]);
+	});
+
 	test("gives the screen back and stops the engine when mounting throws", async () => {
 		// The bug this exists for: `render()` throwing is enough to skip a `finally` that begins one
 		// line later, and the user is left with a terminal showing nothing and an orphaned engine.
