@@ -14,16 +14,17 @@ import type { Message } from "../../domain/types";
 import { CURSOR_MARKER } from "./window";
 
 /**
- * Two columns to the left of every message: the bar, and the space after it.
+ * Two columns to the left of every message: a bar, and the space after it.
  *
- * It is spent by messages you did not send too — as blanks — because the bar is worth a
- * vertical line you can follow down the thread, and that only works if every message's text
- * starts in the same column.
+ * Both sides get one, in different weights — a half block for yours, a quarter block for theirs.
+ * Marking only your own messages left the other side looking like unformatted text: the reader
+ * could see which rows were theirs but not that the rest were somebody's. The weights also
+ * survive a monochrome terminal, where colour is not available to tell them apart.
  */
 export const GUTTER_WIDTH = 2;
 
 const OWN_GUTTER = "▌ ";
-const PEER_GUTTER = "  ";
+const PEER_GUTTER = "▎ ";
 
 /** One entry per drawn row, so a body that wrapped still gets a bar on every line. */
 const linesOf = (text: string): readonly string[] => text.split("\n");
@@ -84,7 +85,7 @@ export function MessageRow({
 	const bar = message.isOutgoing ? (
 		<Text color="green">{OWN_GUTTER}</Text>
 	) : (
-		<Text>{PEER_GUTTER}</Text>
+		<Text color="gray">{PEER_GUTTER}</Text>
 	);
 	// `exactOptionalPropertyTypes` refuses `color={undefined}`, and "no colour" is not "white": the
 	// default foreground is what a peer's name should keep, whichever theme the terminal has.
@@ -93,7 +94,9 @@ export function MessageRow({
 			{describeAuthor(message)}
 		</Text>
 	) : (
-		<Text bold>{describeAuthor(message)}</Text>
+		<Text bold color="cyan">
+			{describeAuthor(message)}
+		</Text>
 	);
 
 	return (
