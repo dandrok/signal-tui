@@ -1,4 +1,5 @@
 import { type Clock, describeAuthor, headerLine } from "../format";
+import { reactionMarker } from "../reactions";
 import type { Message } from "../types";
 
 /**
@@ -11,20 +12,42 @@ import type { Message } from "../types";
 export const CONTINUED_RUN_MS = 5 * 60_000;
 
 /**
+ * Whether two messages come from the same sender.
+ *
+ * The display label is not an identity: two members of a group can both be called "Marta", and
+ * folding their messages together would credit one of them with the other's words. `authorId` is
+ * what Signal keys a sender by, so it decides whenever both rows carry one; the label is only the
+ * fallback for rows cached before it was stored. Outgoing and incoming never mix — your own
+ * messages are labelled `You`, and someone may well be called that.
+ */
+function sameSender(previous: Message, message: Message): boolean {
+	if (previous.isOutgoing !== message.isOutgoing) {
+		return false;
+	}
+	if (previous.authorId !== undefined && message.authorId !== undefined) {
+		return previous.authorId === message.authorId;
+	}
+	return describeAuthor(previous) === describeAuthor(message);
+}
+
+/**
  * Whether `message` continues the block `previous` started.
  *
- * A deleted row never continues anything, in either direction: its label is the word `deleted`,
- * which names no author, and folding it into the row above would hide the only sign that
- * something used to be there.
+ * Three rows never continue a block: a deleted one (its label is the word `deleted`, which names
+ * no author, and folding it in would hide the only sign that something used to be there), one
+ * carrying a reaction, and one with an author of its own. A reaction is why the marker has to
+ * break a run rather than ride on a hidden header: it is somebody's answer to *that* message, and
+ * the one place it is drawn is the header row.
  */
 export function continuesAuthorRun(previous: Message | undefined, message: Message): boolean {
 	if (previous === undefined || previous.isDeleted || message.isDeleted) {
 		return false;
 	}
+	if (reactionMarker(message) !== "") {
+		return false;
+	}
 	const gap = message.sentAt - previous.sentAt;
-	return (
-		gap >= 0 && gap <= CONTINUED_RUN_MS && describeAuthor(previous) === describeAuthor(message)
-	);
+	return gap >= 0 && gap <= CONTINUED_RUN_MS && sameSender(previous, message);
 }
 
 /**

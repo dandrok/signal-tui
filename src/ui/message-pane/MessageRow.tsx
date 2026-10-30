@@ -8,6 +8,7 @@ import {
 	type QuoteLookup,
 	quoteForDisplay,
 	textForDisplay,
+	wrapToWidth,
 } from "../../domain/rows";
 import type { Message } from "../../domain/types";
 import { CURSOR_MARKER } from "./window";
@@ -106,10 +107,16 @@ export function MessageRow({
 					{suffix === "" ? null : <Text dimColor>{suffix}</Text>}
 				</Text>
 			) : (
-				<Text>
-					{bar}
-					{header.text}
-				</Text>
+				// A header long enough to be cut can still come back as more than one row — six
+				// reaction markers at the narrowest pane will do it — and a bar before only the first
+				// of them leaves the rest looking like the other side's.
+				linesOf(header.text).map((line, index) => (
+					// biome-ignore lint/suspicious/noArrayIndexKey: header rows are replaced as a set on every render, so a position is a stable key here
+					<Text key={`${message.id}:header:${index}`}>
+						{bar}
+						{line}
+					</Text>
+				))
 			)}
 			{quoteRows > 0 ? (
 				<Text dimColor>
@@ -126,13 +133,18 @@ export function MessageRow({
 						</Text>
 					))
 				: null}
-			{files.lines.map((line, index) => (
-				// biome-ignore lint/suspicious/noArrayIndexKey: files render in the order signal-cli listed them and are replaced as a set, so a position is a stable key here
-				<Text key={`${message.id}:${index}`} dimColor>
-					{bar}
-					{line}
-				</Text>
-			))}
+			{files.lines.flatMap((line, index) =>
+				// A filename long enough to wrap is drawn as the rows it occupies, not as one string
+				// ink wraps behind our back: `messageOverheadRows` counted those rows already, and a
+				// bar on the first of them only is how a wrapped file looks unmarked.
+				wrapToWidth(line, innerWidth).map((row, rowIndex) => (
+					// biome-ignore lint/suspicious/noArrayIndexKey: files render in the order signal-cli listed them and are replaced as a set, so a position is a stable key here
+					<Text key={`${message.id}:${index}:${rowIndex}`} dimColor>
+						{bar}
+						{row}
+					</Text>
+				)),
+			)}
 			{/* Only when a row was actually reserved: with no budget left the marker would push
 			    the title or the "older" label out of the pane. */}
 			{files.omitted > 0 && files.rows > 0 ? (

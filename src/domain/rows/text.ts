@@ -17,6 +17,17 @@ export function wrappedRows(text: string, width: number): number {
 	return wrapAnsi(text, width, WRAP).split("\n").length;
 }
 
+/**
+ * `text` split into the lines it actually occupies at `width`.
+ *
+ * For a renderer that has to put something — a gutter, a bar — in front of every row: a string
+ * whose later rows are produced by ink's own wrapping cannot be prefixed, because the prefix only
+ * reaches the first one.
+ */
+export function wrapToWidth(text: string, width: number): readonly string[] {
+	return wrapAnsi(text, Math.max(1, width), WRAP).split("\n");
+}
+
 /** What the pane draws for a body, and where it stops. */
 export interface DisplayBody {
 	readonly text: string;

@@ -55,7 +55,49 @@ describe("a run of messages from one author", () => {
 	});
 
 	test("starts a new block once the gap passes five minutes", () => {
-		const frame = pane([message(0), message(1, { sentAt: 6 * MINUTE, body: "later" })]);
+		// Two messages that must fold, then one six minutes after the second: two headers, not
+		// three. Without the eligible pair this case passes with the folding deleted.
+		const frame = pane([
+			message(0),
+			message(1, { body: "still the same burst" }),
+			message(7, { body: "later" }),
+		]);
+
+		expect(occurrences(frame, "10:00 Marta")).toBe(2);
+		expect(frame).toContain("still the same burst");
+		expect(frame).toContain("later");
+	});
+
+	test("tells two people with the same display name apart by their sender id", () => {
+		// Folding on the label alone would credit one group member with the other's words.
+		const frame = pane([
+			message(0, { author: "Marta", authorId: "uuid-marta-a" }),
+			message(1, { author: "Marta", authorId: "uuid-marta-b", body: "different person" }),
+		]);
+
+		expect(occurrences(frame, "10:00 Marta")).toBe(2);
+	});
+
+	test("folds rows that carry the same sender id, whatever the label", () => {
+		// A transcript names the same person differently over time; the id is what matters.
+		const frame = pane([
+			message(0, { author: "Marta", authorId: "uuid-marta" }),
+			message(1, { author: "Marta K.", authorId: "uuid-marta", body: "same person" }),
+		]);
+
+		expect(occurrences(frame, "10:00 ")).toBe(1);
+	});
+
+	test("never folds a message somebody reacted to", () => {
+		// The reaction marker is drawn on the header row and nowhere else, so folding that row
+		// away would hide the answer from the thread entirely.
+		const frame = pane([
+			message(0),
+			message(1, {
+				body: "reacted to",
+				reactions: [{ emoji: "❤️", author: "Alice", authorId: "uuid-alice" }],
+			}),
+		]);
 
 		expect(occurrences(frame, "10:00 Marta")).toBe(2);
 	});
@@ -121,6 +163,70 @@ describe("the gutter", () => {
 		expect(barred.length).toBeGreaterThan(2);
 		expect(barred[0]).toContain("You");
 		expect(barred.slice(1).every((line) => line.includes("w"))).toBe(true);
+	});
+
+	test("keeps the bar on every row of an attachment name that wrapped", () => {
+		const frame = frameOf(
+			<MessagePane
+				conversation={conversation}
+				messages={[
+					message(0, {
+						isOutgoing: true,
+						author: "You",
+						body: "",
+						attachments: [
+							{
+								id: null,
+								contentType: "application/pdf",
+								filename: `/tmp/${"quarterly-report-".repeat(3)}final.pdf`,
+								size: 2048,
+								caption: null,
+								isVoiceNote: false,
+							},
+						],
+					}),
+				]}
+				height={20}
+				width={46}
+				clock={clock}
+			/>,
+		);
+		const barred = frame.split("\n").filter((line) => line.includes("▌"));
+
+		expect(barred.length).toBeGreaterThan(2);
+		expect(barred.slice(1).every((line) => line.includes("📎") || line.includes("-"))).toBe(true);
+	});
+
+	test("keeps the bar on a header that wrapped into several rows", () => {
+		// Six reaction markers at the narrowest pane push the header past the width, and the row is
+		// then drawn from the cut text — which is several rows, each of which needs its bar.
+		const reactions = ["❤️", "👍", "🎉", "😄", "🙏", "👀"].map((emoji, index) => ({
+			emoji,
+			author: `Person ${index}`,
+			authorId: `uuid-${index}`,
+		}));
+		const frame = frameOf(
+			<MessagePane
+				conversation={conversation}
+				messages={[message(0, { isOutgoing: true, author: "You", body: "one", reactions })]}
+				height={20}
+				width={30}
+				clock={clock}
+			/>,
+		);
+		// Every row inside the pane that draws something, title excluded: blank rows are the pane's
+		// own padding and belong to no message.
+		const content = frame
+			.split("\n")
+			.filter(
+				(line) =>
+					line.startsWith("│ ") && line.slice(1, -1).trim() !== "" && !line.includes("Marta (1)"),
+			);
+
+		expect(content.length).toBeGreaterThan(2);
+		expect(content.every((line) => line.includes("▌"))).toBe(true);
+		// One header, wrapped: the clock is printed once even though it occupies two rows.
+		expect(occurrences(frame, "10:00")).toBe(1);
 	});
 
 	test("marks a folded own message even though it draws no header", () => {
