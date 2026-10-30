@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { render } from "ink";
+import { createDemoBackend } from "./adapters/memory/demo-backend";
 import { InMemoryStore } from "./adapters/memory/store";
 import { spawnSignalCliBackend } from "./adapters/signal/spawn";
 import { SqliteMessageStore } from "./adapters/sqlite/store";
@@ -74,7 +75,13 @@ interface Running {
 }
 
 async function startDemo(): Promise<Running> {
-	return { store: new InMemoryStore(), session: undefined, dispose: async () => undefined };
+	// A real session over a backend that never speaks to anything: every write the demo makes —
+	// the local echo, a reply marker, a read receipt — is produced by the code a live account
+	// runs, so `--demo` shows the client instead of an impression of it.
+	const store = new InMemoryStore();
+	const session = createSession({ store, backend: createDemoBackend() });
+	await session.start();
+	return { store, session, dispose: () => session.stop() };
 }
 
 async function startLive(account: string, dbPath: string, settings: Settings): Promise<Running> {

@@ -142,7 +142,7 @@ export function defaultDbPath(
 export const USAGE = `signal-tui — a terminal Signal client
 
 Usage:
-  signal-tui --demo                        run on built-in sample data, no account
+  signal-tui --demo                        sample data, no account — the thread answers you
   signal-tui --account +48123456789        run against a linked signal-cli account
   signal-tui --version                     print the version
   signal-tui --help                        show this text
