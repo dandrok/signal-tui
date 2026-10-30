@@ -3,6 +3,57 @@
 Notable changes, newest first. This file starts at 0.1.0 — earlier versions are in the
 [releases](https://github.com/dandrok/signal-tui/releases).
 
+`0.6.0` is the release where the terminal becomes the app's: it takes the screen over the way
+lazygit does, and the thread starts looking like a conversation rather than a log.
+
+## [0.6.0] — 2026-10-30
+
+### Added
+
+- **The whole screen.** The client enters the terminal's second screen buffer before its first
+  frame and leaves it on the way out, so quitting returns the terminal exactly as it was — no dead
+  frame above the prompt, and no wheel scrolling the shell history out from under a live UI. A
+  terminal closed on us (`SIGTERM`, `SIGHUP`) unmounts rather than exits, so the engine is still
+  stopped; a stream that is not a TTY (`--demo | cat`) gets none of it.
+- **A gutter bar on both sides.** `▌` in green down every row you sent, `▎` in grey down every
+  row you did not. Different weights rather than only different colours: thickness survives a
+  monochrome terminal. The bar is drawn into each line, so a body or a filename that wraps keeps
+  its bar on every row.
+- **One header per burst.** A message from the same person within five minutes of the one above it
+  spends no header: the block above has already named the speaker. Two rows never fold into a run
+  — one that was deleted (its label names no author) and one somebody reacted to (the marker is
+  drawn on the header and nowhere else) — and a row carrying the reply cursor `▸` always keeps its
+  header, because the marker is the only thing pointing at what `r` answers.
+- **A date divider** where the day changes: `──── Fri 30 Oct ────`, sized to the text area and one
+  budgeted row, because a thread that prints `14:03` and nothing else reads a conversation that ran
+  past midnight as one unbroken afternoon.
+- **A colour per person.** A peer's name is coloured from their sender id, so a group stops being
+  a wall of identical rows and the same person keeps their colour across restarts.
+
+### Fixed
+
+- **A failed mount still gives the screen back.** The cleanup began one line after `render()`, so a
+  throwing prop expression could leave the terminal in the second buffer with the engine running
+  behind it. The lifecycle now starts its cleanup before mounting, and a test proves the screen is
+  not released until the app has actually exited.
+- **Folding compares sender ids, not display labels.** Two members of a group both called "Marta"
+  were folded into one block, which credited one with the other's words; outgoing and incoming
+  never mix either.
+
+### Internal
+
+- **`Clock` answers three questions** — `time`, `dayKey`, `dayLabel` — instead of being a bare
+  formatter, because a divider needs the calendar and the calendar is a zone the domain must not
+  read for itself. One object through measurement and rendering is what keeps a divider from being
+  counted in one place and titled in another.
+- **`runWithScreen`** (`cli/run-app.ts`) owns take-screen → mount → wait → release → dispose, which
+  is the first part of the entrypoint a test can call.
+- **The row builders own their spacing**: `separatorFor` decides the divider, `headerTextFor` the
+  fold, and `messageOverheadRows` adds up both, so `visibleWindow` fits what the pane draws.
+- A blank row between speakers was rejected: decoration, one row that a quote or a body needs, and
+  at three rows of pane it is the row that pushes the message out.
+- No schema change: an existing cache opens as it is. 919 tests across 107 files.
+
 `0.5.0` is the release where a received file opens: `o` hands it to your desktop, and `doctor`
 starts saying when the engine is drifting rather than only when it is ancient.
 
