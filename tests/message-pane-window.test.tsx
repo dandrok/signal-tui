@@ -21,7 +21,9 @@ const message = (index: number, overrides: Partial<Message> = {}): Message => ({
 	conversationId: "c-0",
 	author: "Marta",
 	body: `body-${index}`,
-	sentAt: index,
+	// Ten minutes apart: these cases are about fitting rows, and a burst from one author is
+	// deliberately cheaper per message now, which would make every count here a moving target.
+	sentAt: index * 600_000,
 	isOutgoing: false,
 	isDeleted: false,
 	...overrides,

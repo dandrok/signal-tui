@@ -16,4 +16,5 @@ export { bodyForDisplay } from "./body";
 export { type DraftTail, draftTail } from "./draft";
 export { messageOverheadRows, messageRowCount } from "./message";
 export { QUOTE_NOT_LOADED, type QuoteLookup, quoteBlockFor, quoteForDisplay } from "./quote";
-export { type DisplayBody, textForDisplay } from "./text";
+export { CONTINUED_RUN_MS, continuesAuthorRun, headerTextFor } from "./run";
+export { type DisplayBody, textForDisplay, wrapToWidth } from "./text";
