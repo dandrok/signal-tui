@@ -154,6 +154,18 @@ describe("the gutter", () => {
 		expect(frame).toContain("body-0");
 	});
 
+	test("marks the other side's messages too, in a lighter weight", () => {
+		// Marking only your own rows left theirs looking like unformatted text: the reader could see
+		// which messages were theirs but not that the rest were somebody's.
+		const frame = pane([message(0), message(1, { isOutgoing: true, author: "You", body: "mine" })]);
+		const peer = frame.split("\n").filter((line) => line.includes("▎"));
+		const own = frame.split("\n").filter((line) => line.includes("▌"));
+
+		expect(peer).toHaveLength(2);
+		expect(own).toHaveLength(2);
+		expect(peer.every((line) => !line.includes("▌"))).toBe(true);
+	});
+
 	test("keeps the bar on every line of a body that wrapped", () => {
 		const long = "w".repeat(200);
 		const frame = pane([message(0, { isOutgoing: true, author: "You", body: long })]);
