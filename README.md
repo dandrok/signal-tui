@@ -4,11 +4,12 @@ A terminal Signal client. Ink + Bun, local-first: messages live in SQLite on you
 machine, and the TUI never touches the network itself — it drives
 [`signal-cli`](https://github.com/AsamK/signal-cli) over JSON-RPC on stdio.
 
-**Status: `0.5.0` — usable for text conversations, and it moves files both ways.** Read, send,
-groups, replies, reactions, edits, delete-for-everyone, local hiding, forwarding, typing
-indicators, unread counts, read receipts, sending a file with a caption, and opening a file
-someone sent work against a real account. What changed, and when, is in
-[CHANGELOG.md](./CHANGELOG.md).
+**Status: `0.6.0` — a full-screen client that moves files both ways.** Read, send, groups,
+replies, reactions, edits, delete-for-everyone, local hiding, forwarding, typing indicators,
+unread counts, read receipts, sending a file with a caption, and opening a file someone sent all
+work against a real account. It takes the terminal over the way lazygit does, and the thread marks
+who spoke: a bar down the gutter, one header per burst, a colour per person and a divider when the
+day changes. What changed, and when, is in [CHANGELOG.md](./CHANGELOG.md).
 
 > **Unofficial.** Not affiliated with Signal Messenger LLC. It is a terminal front
 > end for [`signal-cli`](https://github.com/AsamK/signal-cli), which does the
@@ -228,6 +229,9 @@ the last second of typing.
   every incoming envelope, so a timer is honoured while you are not looking at the
   conversation. Your own sent messages inherit the conversation's timer, because
   Signal never echoes them back to the device that wrote them.
+- **a thread you can read**: your messages carry a green bar in the gutter and the other side a
+  grey one, a burst from one person draws a single header, each person's name keeps its own colour,
+  and a divider says which day you are looking at
 - local full-text search over cached bodies (`/`)
 - **history in pages**: the newest 50 messages load first, and `k` at the top of what is
   loaded asks for the page behind it (keyset, so messages arriving mid-scroll cannot shift a
