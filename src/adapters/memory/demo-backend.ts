@@ -115,10 +115,16 @@ export function createDemoBackend(options: DemoBackendOptions = {}): SignalBacke
 			// eight-second expiry: the notice is a deadline, and only the answer meets it.
 			emit({ kind: "typing", conversationId, author: responder.author, isTyping: false });
 			// The name first, the way the engine sends it: a notification for a thread you are
-			// not looking at has nothing else to call it.
+			// not looking at has nothing else to call it. The activity time is the message's
+			// own — the seed's is fixed in the past, and `mergeConversation` keeps the later
+			// of the two, so a stale one would let a reply arrive without moving its thread
+			// back to the top of the list when you had written in another thread meanwhile.
 			const seeded = demoConversations.find((entry) => entry.id === conversationId);
 			if (seeded !== undefined) {
-				emit({ kind: "conversation-updated", conversation: seeded });
+				emit({
+					kind: "conversation-updated",
+					conversation: { ...seeded, lastActivityAt: sentAt },
+				});
 			}
 			const message: Message = {
 				id: `${conversationId}:${sentAt}`,

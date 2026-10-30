@@ -132,6 +132,37 @@ describe("the demo backend", () => {
 		await session.stop();
 	});
 
+	test("an answer moves its thread back to the top of the list", async () => {
+		const clock = manualSchedule();
+		// An hour after the seed's last row, so the two sends really are the newest activity —
+		// a small synthetic clock would sit in the past and lose to every seeded thread.
+		const base = Date.parse("2026-10-22T11:00:00Z");
+		let now = base;
+		const store = new InMemoryStore();
+		const session = createSession({
+			store,
+			backend: createDemoBackend({ schedule: clock.schedule, now: () => now }),
+		});
+		await session.start();
+
+		// Two threads written in a row: the second is on top, and the first is owed an answer.
+		await session.send("c-alice", "shipping the fix now");
+		now = base + 1_000;
+		await session.send("c-family", "on my way");
+		await session.flush();
+		expect((await store.listConversations())[0]?.id).toBe("c-family");
+
+		now = base + 2_000;
+		// Alice's typing notice and her answer, and nothing from the family thread yet.
+		clock.drain(2);
+		await session.flush();
+
+		// The answer is the newest thing in the cache, so its thread belongs above the one that
+		// only looks newer: the seed's own activity time is in the past and cannot say that.
+		expect((await store.listConversations())[0]?.id).toBe("c-alice");
+		await session.stop();
+	});
+
 	test("stop drops the answer instead of leaving it to fire later", async () => {
 		const clock = manualSchedule();
 		const backend = createDemoBackend({ schedule: clock.schedule });
