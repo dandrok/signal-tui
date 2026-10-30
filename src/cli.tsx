@@ -18,6 +18,7 @@ import {
 } from "./app/settings";
 import { defaultOpenContext } from "./app/usecases/open";
 import { VERSION } from "./app/version";
+import { takeOverScreen } from "./cli/alternate-screen";
 import { ensurePrivateDirectory } from "./cli/paths";
 import type { MessageStore } from "./ports/store";
 import { Root } from "./ui/Root";
@@ -116,6 +117,11 @@ const running =
 		? await startLive(config.account, config.dbPath, settings)
 		: await startDemo();
 
+// The screen is taken over before the first frame, so the app never draws into the buffer the
+// shell's history lives in: on exit the terminal comes back exactly as it was, instead of with a
+// dead frame above the prompt and a wheel that scrolls the shell out from under a live UI.
+const releaseScreen = takeOverScreen(process.stdout);
+
 const instance = render(
 	<Root
 		store={running.store}
@@ -127,8 +133,21 @@ const instance = render(
 	/>,
 );
 
+// A terminal closed on us (`SIGTERM`, `SIGHUP`) must not stay in the second buffer. Unmount rather
+// than exit, so the normal path below runs and the engine is stopped with it.
+const stop = (): void => {
+	instance.unmount();
+};
+process.on("SIGTERM", stop);
+process.on("SIGHUP", stop);
+
 try {
 	await instance.waitUntilExit();
 } finally {
+	process.off("SIGTERM", stop);
+	process.off("SIGHUP", stop);
+	// Before the shutdown below writes anything: it reports failures, and a report printed into a
+	// buffer nobody will look at again is a lost error.
+	releaseScreen();
 	await running.dispose();
 }
