@@ -24,7 +24,6 @@ demo/demo.tape` from the repo root — so it can be re-shot when the interface c
 ## Contents
 
 - [Changelog](./CHANGELOG.md)
-- [Before you start](#before-you-start)
 - [Install](#install)
 - [Link your account](#link-your-account)
 - [First run](#first-run)
@@ -39,7 +38,23 @@ demo/demo.tape` from the repo root — so it can be re-shot when the interface c
 - [Architecture](#architecture)
 - [License](#license)
 
-## Before you start
+## Install
+
+```sh
+npm i -g signal-tui       # the bin is run by bun, so Bun must be on PATH
+signal-tui --version
+signal-tui --demo         # built-in sample data: no account, no signal-cli
+```
+
+`--demo` is the honest first step: it shows the interface without touching your
+account or requiring `signal-cli` at all. It is also interactive — the sample
+thread answers you, so sending, replying, reacting and searching run through the
+same write path a live account uses.
+
+Bun 1.4.3+ is the only thing this needs (`curl -fsSL https://bun.sh/install | bash`).
+Everything below is about using it with **your** account.
+
+## Link your account
 
 `signal-tui` is a **front end**. It cannot talk to Signal's servers and it cannot
 link a device by itself — [`signal-cli`](https://github.com/AsamK/signal-cli) does
@@ -58,21 +73,6 @@ download before you run it: **[SETUP.md](./SETUP.md)**.
 ```sh
 signal-cli --version     # must print 0.14.x or newer
 ```
-
-## Install
-
-```sh
-npm i -g signal-tui       # the bin is run by bun, so Bun must be on PATH
-signal-tui --version
-signal-tui --demo         # built-in sample data: no account, no signal-cli
-```
-
-`--demo` is the honest first step: it shows the interface without touching your
-account or requiring `signal-cli` at all. It is also interactive — the sample
-thread answers you, so sending, replying, reacting and searching run through the
-same write path a live account uses.
-
-## Link your account
 
 Linking is a one-time step, and it always needs your phone: Signal shows a QR code
 that the phone scans. **Nothing can automate that part.**
@@ -118,7 +118,7 @@ signal-tui --account +48123456789
 | `--db <path>` | cache location (default `$XDG_DATA_HOME/signal-tui/cache.db`, else `~/.local/share/signal-tui/cache.db`) |
 | `--notify` / `--no-notify` | desktop toast and bell for a message in another thread (on by default) |
 | `--ignore-attachments` | do not download the files that arrive with messages |
-| `--demo` | sample data, no account |
+| `--demo` | sample data, no account — the thread answers you |
 | `--version`, `--help` | what they say |
 
 The first sync fills the cache with what your account can see. History from before
@@ -217,80 +217,64 @@ the last second of typing.
 
 ## What works
 
-- conversations from your account, keyed per group rather than per sender
-- sending, with the message appearing immediately (Signal never echoes a transcript
-  back to the device that wrote it)
-- messages you send elsewhere show up here, with the server timestamp as identity
-- **edits**: a correction from the other side replaces the body and marks the
-  message `· edited` — including one you made on your phone, which arrives on a
-  second path (`syncMessage.sentMessage`) and is applied the same way
-- unread counts that clear when you open a conversation, and while you watch it
-- **read receipts**: the other side sees "read" when you open the chat, not when the
-  message arrives
-- **delivery ticks**: your own messages show `✓` once the other side's device has one
-  and `✓✓` once they read it. The strongest receipt wins, so a delivery that arrives
-  after a read (a device that was offline) cannot take the second tick away.
-- delete-for-everyone, reflected in the cache
-- **disappearing messages**: a message whose timer runs out keeps its row so the
-  thread keeps its shape, but its text and file references are deleted from the
-  cache — and from the search index with them. The sweep runs at startup and after
-  every incoming envelope, so a timer is honoured while you are not looking at the
-  conversation. Your own sent messages inherit the conversation's timer, because
-  Signal never echoes them back to the device that wrote them.
+**Reading.**
+
+- conversations from your account, keyed per group rather than per sender, with unread counts that
+  clear when you open a thread and stay clear while you watch it
 - **a thread you can read**: your messages carry a green bar in the gutter and the other side a
-  grey one, a burst from one person draws a single header, each person's name keeps its own colour,
-  and a divider says which day you are looking at
-- local full-text search over cached bodies (`/`)
-- **history in pages**: the newest 50 messages load first, and `k` at the top of what is
-  loaded asks for the page behind it (keyset, so messages arriving mid-scroll cannot shift a
-  page into a duplicate or a hole). Pages already walked back to survive an incoming message
-  instead of being thrown away.
-- files shown by name and size, with the caption when the sender wrote one
-- **reactions**: an emoji a peer adds is shown on the message's author row (`👍 2`), a
-  second emoji from the same person replaces the first, and a removal takes it away. `x` in
-  the message pane adds your own, and it appears immediately without waiting for a transcript
-  Signal never sends back. The prompt is a **picker**, because a terminal cannot insert an
-  emoji: five suggestions are on screen the moment it opens, `⇥`/`↑↓` walk them, typing a name
-  narrows the list (`heart`, `redheart`, `:tada:`, `laugh`), and the emoji you already added is
-  one keystroke away from being taken back
-- **editing your own message** (`e`): the prompt starts from the body, `⏎` saves, and the row
-  reads `· edited` at once — the local echo goes through the same rule the other side's
-  correction does, because Signal never echoes a send back to the device that wrote it
-- **deleting for everyone** (`d`, then `⏎` or `y`): the message is blanked here at once and
-  removed on every other device. It asks first, and only offers itself on your own message
-- **hiding locally** (`D`): the row stays in the cache but no read returns it — not the thread,
-  not an older page, not search — so a replayed envelope cannot bring it back as new. Nothing
-  goes on the wire, which is why there is nothing to confirm
-- **replies**: a message that answers another one shows what it answers, above its own
-  text (`┃ 12:34 Marta: the original`). The quoted message is looked up in the thread, so a
-  quote of something deleted or expired reads `message deleted` / `message expired` rather
-  than reviving text that is gone — the cache keeps only *which* message is quoted, never a
-  second copy of its words.
-- **composing a reply**: `Tab` to the message pane, `j`/`k` to pick the message (it carries
-  a `▸`), `r`, type, `⏎`. The quoted text travels with the message; the cache still keeps
-  only its identity. The selection is the bottom-most message in the window, so reaching an
-  older one scrolls the thread down to it.
-- **sending a file** (`a`): the path prompt opens on the directory you started in, typing
-  narrows it, `⏎` descends into a folder or sends a file — one file per message, up to Signal's
-  100 MB. The words already in the composer are the message the file belongs to, and a reply in
-  progress is answered, quote and all: "here's the CV" then `a` is one message, not two. The
-  echo keeps the path, so the row shows the name and size without waiting for a transcript that
-  never arrives
-- **notifications**: a message in a thread you are not reading rings the terminal bell and
-  sends a desktop notification (`OSC 9` — kitty, Ghostty, WezTerm, iTerm2 and Windows
-  Terminal show it; a terminal without it just rings), and the window title carries the
-  unread count. The text is sanitised and length-capped before it enters the sequence: a
-  notification is the one place a peer's words leave the pane.
-- **typing indicators**: a peer composing in the thread you have open fills the composer's
-  empty row with `Marta is typing…`, and the line goes away on its own even if they stop
-  without saying so. Nothing of it is stored — a notice about the present, in memory, with a
-  deadline — so opening the client tomorrow never shows someone mid-sentence from last night
-- **view-once messages** are recorded but never kept: their text and file references
-  are not written to the cache or the search index, so the row says
-  `view-once message · not stored` and there is nothing to recover later
-- keyboard-first panes: the message window is measured in terminal rows, so a short
-  terminal still shows the newest message rather than clipping it
-- history persisted across restarts
+  grey one, a burst from one person draws a single header, each person's name keeps its own
+  colour, and a divider says which day you are looking at
+- **history in pages**: the newest 50 messages load first, and `k` at the top of what is loaded
+  asks for the page behind it (keyset, so messages arriving mid-scroll cannot shift a page into a
+  duplicate or a hole). Pages already walked back to survive an incoming message instead of being
+  thrown away
+- **replies** draw what they answer above their own text (`┃ 12:34 Marta: the original`), looked up
+  in the thread — so a quote of something deleted or expired reads `message deleted` /
+  `message expired` rather than reviving text that is gone. The cache keeps only *which* message is
+  quoted, never a second copy of its words
+- **read receipts and delivery ticks**: the other side sees "read" when you open the chat, not when
+  the message arrives; your own rows show `✓` once their device has one and `✓✓` once they read
+  it, and the strongest receipt wins, so a delivery that arrives after a read cannot take the
+  second tick away
+- **typing indicators**: a peer composing in the thread you have open fills the composer's empty row
+  with `Marta is typing…`, and the line goes away on its own even if they stop without saying so.
+  Nothing of it is stored — a notice about the present, in memory, with a deadline — so opening the
+  client tomorrow never shows someone mid-sentence from last night
+- **notifications**: a message in a thread you are not reading rings the terminal bell and sends a
+  desktop notification (`OSC 9` — kitty, Ghostty, WezTerm, iTerm2 and Windows Terminal show it; a
+  terminal without it just rings), and the window title carries the unread count. The text is
+  sanitised and length-capped before it enters the sequence: a notification is the one place a
+  peer's words leave the pane
+- files shown by name and size, with the caption when the sender wrote one; **view-once messages**
+  are recorded but never kept, so the row says `view-once message · not stored` and there is
+  nothing to recover later
+- local full-text search over cached bodies (`/`), and history persisted across restarts
+
+**Writing.** The keys and their prompts are in [Keys](#keys); this is what they buy.
+
+- sending, with the message appearing immediately (Signal never echoes a transcript back to the
+  device that wrote it), and messages you sent elsewhere showing up here with the server timestamp
+  as identity
+- **edits**: a correction replaces the body and marks the row `· edited` — one made on your phone
+  arrives on a second path (`syncMessage.sentMessage`) and is applied the same way, and your own
+  goes through the same rule
+- delete-for-everyone, reflected in the cache; **hiding** is the local half of it — the row stays,
+  no read returns it, and nothing goes on the wire
+- **reactions**: an emoji a peer adds is shown on the message's author row (`👍 2`), a second emoji
+  from the same person replaces the first, and a removal takes it away. Yours appears immediately,
+  without waiting for a transcript Signal never sends back
+- **replies** send the quoted text with them and keep a `▸` on the message being answered; picking
+  an older one scrolls the thread down to it
+- **sending a file** keeps whatever is already in the composer as its message — "here's the CV"
+  then `a` is one message, not two — one file per message, up to Signal's 100 MB. The echo keeps
+  the path, so the row shows the name and size without waiting for a transcript that never arrives
+- **disappearing messages**: a message whose timer runs out keeps its row so the thread keeps its
+  shape, but its text and file references are deleted from the cache — and from the search index
+  with them. The sweep runs at startup and after every incoming envelope, so a timer is honoured
+  while you are not looking at the conversation; your own sent messages inherit the conversation's
+  timer, because Signal never echoes them back
+- keyboard-first panes: the message window is measured in terminal rows, so a short terminal still
+  shows the newest message rather than clipping it
 
 ## Not there yet
 
@@ -389,6 +373,7 @@ src/
   ports/         MessageStore, SignalBackend interfaces
   adapters/
     memory/      demo store       store · read · conversations · message-rules · seed
+                                  + demo-backend (the transport `--demo` sends on)
     sqlite/      durable cache    store · read-messages · conversations · message-rules
                                   + hydrate (rows → messages) · schema (runs the migrations)
     signal/      JSON-RPC engine  map-envelope/ · schemas/ · json-rpc-client/ · commands
