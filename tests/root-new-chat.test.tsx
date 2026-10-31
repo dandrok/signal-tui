@@ -5,6 +5,7 @@ import type { Session } from "../src/app/session";
 import type { Contact } from "../src/domain/types";
 import { Root } from "../src/ui/Root";
 import { plain } from "./helpers/frame";
+import { waitFor } from "./helpers/wait";
 
 const tick = (ms = 120): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -177,8 +178,17 @@ describe("starting a conversation from the list", () => {
 		const shown = await frameWith(lastFrame, "1/1");
 		expect(shown).toContain("Zosia");
 
-		// The stale answer lands now and changes nothing: still Zosia, still a list of one.
+		// The stale answer lands now, and it must change nothing. A frame that already said "1/1"
+		// cannot prove that — so the picker is asked to redraw from the contacts it actually holds,
+		// and the filter is what that redraw is checked on: with two stale contacts, "zo" matches
+		// nobody and the row would say so.
 		first.resolve(CONTACTS);
+		let settled = false;
+		void first.promise.then(() => {
+			settled = true;
+		});
+		await waitFor(() => settled, "the stale read to settle");
+		stdin.write("zo");
 		const after = await frameWith(lastFrame, "1/1");
 		expect(after).toContain("Zosia");
 		expect(after).not.toContain("1/2");
