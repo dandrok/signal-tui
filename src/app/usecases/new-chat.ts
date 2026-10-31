@@ -82,7 +82,15 @@ export function newChatRows(contacts: readonly Contact[], draft: string): readon
 					if (byName) {
 						return contact.name.toLowerCase().includes(filter.toLowerCase());
 					}
-					return digits.length > 0 && digitsOf(contact.number ?? contact.id).includes(digits);
+					// Only the number is something a person can type. A contact known by uuid alone
+					// has digits inside that uuid, and matching them would offer a stranger for a
+					// number nobody typed — and, because a row did match, hide the typed-number row
+					// that is the only way to open the number they actually wanted.
+					return (
+						digits.length > 0 &&
+						contact.number !== undefined &&
+						digitsOf(contact.number).includes(digits)
+					);
 				});
 	const rows = [...matched]
 		.sort((left, right) => left.name.localeCompare(right.name))

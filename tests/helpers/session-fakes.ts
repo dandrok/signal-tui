@@ -38,8 +38,14 @@ export class RecordingStore implements MessageStore {
 	readonly ops: string[] = [];
 	failOn: string | null = null;
 
+	/**
+	 * What `listConversations` answers. Empty by default — most tests care about a write, not a
+	 * read — and settable, so a conversation that already exists can be described.
+	 */
+	conversations: Conversation[] = [];
+
 	async listConversations(): Promise<readonly Conversation[]> {
-		return [];
+		return this.conversations;
 	}
 
 	readonly messages = new Map<string, Message[]>();
@@ -69,7 +75,11 @@ export class RecordingStore implements MessageStore {
 
 	async upsertConversation(entry: Conversation): Promise<void> {
 		this.#record(`conversation:${entry.id}`);
+		this.upserted.push(entry);
 	}
+
+	/** Every conversation the session handed the store, so a test can read the dated row. */
+	readonly upserted: Conversation[] = [];
 
 	readonly saved = new Set<string>();
 	/** What the session actually handed the store, in order. */

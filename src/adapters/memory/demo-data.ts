@@ -5,7 +5,7 @@ const minutes = (count: number): number => base + count * 60_000;
 
 export const demoConversations: readonly Conversation[] = [
 	{ id: "c-signal-devs", name: "Signal devs", unreadCount: 2, lastActivityAt: minutes(42) },
-	{ id: "c-alice", name: "Alice", unreadCount: 0, lastActivityAt: minutes(31) },
+	{ id: "uuid-alice", name: "Alice", unreadCount: 0, lastActivityAt: minutes(31) },
 	{ id: "c-family", name: "Family", unreadCount: 7, lastActivityAt: minutes(12) },
 	{ id: "c-note-to-self", name: "Note to self", unreadCount: 0, lastActivityAt: minutes(4) },
 ];
@@ -50,7 +50,7 @@ export const demoMessages: readonly Message[] = [
 	},
 	{
 		id: "m-4",
-		conversationId: "c-alice",
+		conversationId: "uuid-alice",
 		author: "Alice",
 		authorId: "uuid-alice",
 		body: "can we ship before friday?",
@@ -60,7 +60,7 @@ export const demoMessages: readonly Message[] = [
 	},
 	{
 		id: "m-5",
-		conversationId: "c-alice",
+		conversationId: "uuid-alice",
 		author: "You",
 		body: "depends on the audio routing test",
 		sentAt: minutes(6),

@@ -18,13 +18,20 @@ export async function startDirect(
 	name: string,
 ): Promise<void> {
 	await context.enqueue(async () => {
+		// Re-opening a thread must not move it to the top of the list: `upsertConversation` keeps
+		// the later of the two activity times, so writing `now()` here would date an old
+		// conversation as if it had just received a message. Only a row that does not exist yet
+		// is dated now; an existing one keeps the time it already had.
+		const existing = (await context.store.listConversations()).find(
+			(entry) => entry.id === conversationId,
+		);
 		await context.store.upsertConversation({
 			id: conversationId,
 			// An empty name means "unknown" to `mergeConversation`, so a known contact's name would
 			// be kept over it — the number-as-name is only for someone nobody has named.
 			name,
 			unreadCount: 0,
-			lastActivityAt: context.now(),
+			lastActivityAt: existing?.lastActivityAt ?? context.now(),
 		});
 		context.notify();
 	});

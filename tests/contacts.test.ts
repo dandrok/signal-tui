@@ -21,7 +21,7 @@ describe("mapping a contact", () => {
 			},
 		]);
 		expect(contact).toEqual({
-			id: "+48600222333",
+			id: "uuid-marta",
 			name: "Marta (work)",
 			number: "+48600222333",
 			uuid: "uuid-marta",

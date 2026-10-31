@@ -9,8 +9,8 @@ import {
 import type { Contact } from "../src/domain/types";
 
 const CONTACTS: readonly Contact[] = [
-	{ id: "+48600222333", name: "Marta", number: "+48600222333", uuid: "uuid-marta" },
-	{ id: "+48600111222", name: "Adam", number: "+48600111222", uuid: "uuid-adam" },
+	{ id: "uuid-marta", name: "Marta", number: "+48600222333", uuid: "uuid-marta" },
+	{ id: "uuid-adam", name: "Adam", number: "+48600111222", uuid: "uuid-adam" },
 	{
 		id: "9f8a7b6c-1111-4111-8111-111111111111",
 		name: "Zosia",
@@ -47,6 +47,14 @@ describe("what the picker offers", () => {
 	test("digits find a number however it is spaced", () => {
 		expect(newChatRows(CONTACTS, "600 222").map((row) => row.name)).toEqual(["Marta"]);
 		expect(newChatRows(CONTACTS, "+48 600 222 333").map((row) => row.name)).toEqual(["Marta"]);
+	});
+
+	test("a uuid is not something anyone can type at", () => {
+		// Zosia has no number, and the digits inside her uuid are not an address: matching them
+		// would offer a stranger for a number nobody meant — and, because a row matched, hide the
+		// typed-number row that is the only way to reach the number that was actually typed.
+		const rows = newChatRows(CONTACTS, "41118");
+		expect(rows.map((row) => row.kind)).toEqual(["number"]);
 	});
 
 	test("a typed number is a row of its own", () => {
@@ -96,7 +104,7 @@ describe("what ⏎ does", () => {
 	test("opens the picked contact", () => {
 		expect(newChatPlan(CONTACTS, "mar", 0)).toEqual({
 			kind: "open",
-			id: "+48600222333",
+			id: "uuid-marta",
 			name: "Marta",
 		});
 	});

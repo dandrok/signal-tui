@@ -59,11 +59,11 @@ describe("selection follows the conversation, not its row", () => {
 	test("the messages drawn belong to the selected conversation after a reorder", () => {
 		const state = pick(1);
 		const picked = selectedConversation(state);
-		expect(picked?.id).toBe("c-alice");
+		expect(picked?.id).toBe("uuid-alice");
 		const withMessages = reduce(state, {
 			type: "messages-loaded",
-			conversationId: "c-alice",
-			messages: demoMessages.filter((message) => message.conversationId === "c-alice"),
+			conversationId: "uuid-alice",
+			messages: demoMessages.filter((message) => message.conversationId === "uuid-alice"),
 		});
 		const after = reduce(withMessages, {
 			type: "conversations-loaded",

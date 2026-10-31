@@ -42,6 +42,9 @@ export function useRootState(
 	const [state, setState] = useState<AppState>(emptyState);
 	const [version, setVersion] = useState(0);
 	const stateRef = useRef(state);
+	/** Which `new` prompt asked for its contacts: the read outlives the prompt, so a reopened
+	 * picker must not be filled by the answer to the one before it. */
+	const contactRead = useRef(0);
 
 	/**
 	 * Reduce now, and keep the ref exact.
@@ -74,9 +77,13 @@ export function useRootState(
 			// keystroke: a listing read a frame later would send the file the user typed before
 			// the one they are looking at.
 			// Starting a conversation asks the engine who it knows, then writes a local row — no
-			// send, no round-trip beyond the contacts. Both halves live in `new-chat-effect.ts`.
+			// send beyond the contacts read. Both halves live in `new-chat-effect.ts`, and the read
+			// is tagged so a picker reopened while it is in flight is not filled by a stale answer.
 			if (action.type === "prompt-opened" && action.kind === "new") {
-				newChatOpened(apply, session, action, refused);
+				const read = ++contactRead.current;
+				const wanted = (): boolean =>
+					contactRead.current === read && stateRef.current.prompt?.kind === "new";
+				newChatOpened(apply, session, action, refused, wanted);
 				return;
 			}
 			if (action.type === "prompt-opened" && action.kind === "attach") {

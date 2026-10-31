@@ -22,12 +22,17 @@ type Say = (text: string) => void;
  * an empty picker would say the account has no contacts, which is a different fact and usually a
  * false one. A read that fails is still an answer — an empty list plus the reason, so the picker
  * stays usable for a typed number, which needs no contacts at all.
+ *
+ * `stillWanted` is asked before the answer is applied: the read outlives the prompt that asked for
+ * it, and a picker opened, left and opened again must not be filled in — or have its error said
+ * twice — by the first one's answer.
  */
 export function newChatOpened(
 	apply: Apply,
 	session: Session | undefined,
 	action: Extract<Action, { type: "prompt-opened" }>,
 	say: Say,
+	stillWanted: () => boolean = () => true,
 ): void {
 	apply(action);
 	if (session === undefined) {
@@ -38,8 +43,15 @@ export function newChatOpened(
 	}
 	void session
 		.listContacts()
-		.then((contacts) => apply({ type: "prompt-contacts", contacts }))
+		.then((contacts) => {
+			if (stillWanted()) {
+				apply({ type: "prompt-contacts", contacts });
+			}
+		})
 		.catch((error: unknown) => {
+			if (!stillWanted()) {
+				return;
+			}
 			apply({ type: "prompt-contacts", contacts: [] });
 			say(`contacts unavailable: ${error instanceof Error ? error.message : String(error)}`);
 		});
