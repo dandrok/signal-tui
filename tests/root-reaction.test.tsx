@@ -37,6 +37,8 @@ const fakeSession = (): {
 		reactions,
 		session: {
 			start: async () => undefined,
+			startDirect: async () => undefined,
+			listContacts: async () => [],
 			stop: async () => undefined,
 			send: async () => undefined,
 			markRead: async () => undefined,

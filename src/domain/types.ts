@@ -29,6 +29,22 @@ export interface EditAuthor {
 export const SELF_AUTHOR_ID = "self";
 
 /**
+ * Someone the account knows, as the engine lists them.
+ *
+ * `id` is how a conversation with them is addressed: the number when the engine knows one, the
+ * uuid otherwise (Signal addresses a recipient by either). Both fields are kept because the
+ * picker shows them apart — a person with no number on file is chattable, but cannot be found by
+ * typing digits.
+ */
+export interface Contact {
+	readonly id: ConversationId;
+	/** What to call them: their contact name, their profile name, or the number as a last resort. */
+	readonly name: string;
+	readonly number?: string;
+	readonly uuid?: string;
+}
+
+/**
  * One reaction on a message: what was added, and who added it. Signal clients hold a
  * single reaction per person per message, so a new emoji from the same person replaces
  * the previous one and a removal takes it away.

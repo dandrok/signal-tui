@@ -1,5 +1,5 @@
 import type { MessageRef } from "../../../domain/message-ref";
-import type { ConversationId } from "../../../domain/types";
+import type { Contact, ConversationId } from "../../../domain/types";
 import type {
 	BackendEvent,
 	ReceiptType,
@@ -8,6 +8,7 @@ import type {
 	SignalBackend,
 } from "../../../ports/backend";
 import { deleteParams, editParams, reactionParams, receiptParams, sendParams } from "../commands";
+import { readContacts } from "./contacts";
 import { ProtocolErrorLog } from "./error-log";
 import { acceptNotification } from "./events";
 import { DEFAULT_NOTIFICATION_METHOD, type RpcCaller, type SignalCliBackendOptions } from "./types";
@@ -153,6 +154,11 @@ export class SignalCliBackend implements SignalBackend {
 			account: this.#account,
 		});
 		await this.#client.request("sendReaction", params);
+	}
+
+	/** Who the account knows, for the picker that starts a conversation (`contacts.ts`). */
+	async listContacts(): Promise<readonly Contact[]> {
+		return readContacts(this.#client, this.#errors);
 	}
 
 	subscribe(listener: (event: BackendEvent) => void): () => void {

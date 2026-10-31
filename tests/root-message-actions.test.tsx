@@ -32,6 +32,8 @@ const fakeSession = (): { session: Session; calls: Calls } => {
 		calls,
 		session: {
 			start: async () => undefined,
+			startDirect: async () => undefined,
+			listContacts: async () => [],
 			stop: async () => undefined,
 			send: async () => undefined,
 			markRead: async () => undefined,

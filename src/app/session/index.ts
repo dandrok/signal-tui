@@ -2,6 +2,7 @@ import type { MessageRef } from "../../domain/message-ref";
 import type { ConversationId, Message, MessageId } from "../../domain/types";
 import type { ReplyTarget } from "../../ports/backend";
 import { applyEvent } from "./apply";
+import { listContacts, startDirect } from "./direct";
 import { sendEdit } from "./edit";
 import { hideMessage } from "./hide";
 import { markReadConversation } from "./mark-read";
@@ -61,8 +62,13 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 	};
 
 	const enqueue = (work: () => Promise<void>): Promise<void> => {
-		queue = queue.then(work).catch(record);
-		return queue;
+		// Two promises on purpose: the chain has to survive a failed write — one unreadable envelope
+		// cannot stop the next one — while the caller that asked for *this* write has to hear that
+		// it failed. Handing back the caught chain instead made every `… failed:` notice in the UI
+		// dead code, and made a picker that wrote nothing report a conversation it had opened.
+		const run = queue.then(work);
+		queue = run.catch(record);
+		return run;
 	};
 
 	const context: SessionContext = {
@@ -89,7 +95,9 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 			}
 			return;
 		}
-		void enqueue(() => applyEvent(context, event));
+		// `enqueue` hands back the work itself, so its rejection is handled here: nobody is waiting
+		// on an incoming envelope to succeed, and the queue has already recorded the failure.
+		void enqueue(() => applyEvent(context, event)).catch(() => undefined);
 	});
 
 	return {
@@ -106,6 +114,9 @@ export function createSession({ store, backend, clock = Date.now }: SessionDeps)
 		},
 		markRead: (conversationId: ConversationId): Promise<void> =>
 			markReadConversation(context, conversationId),
+		startDirect: (conversationId: ConversationId, name: string): Promise<void> =>
+			startDirect(context, conversationId, name),
+		listContacts: () => listContacts(context),
 		typingIn: (conversationId: ConversationId): string | null => typing.authorIn(conversationId),
 		send: (
 			conversationId: ConversationId,

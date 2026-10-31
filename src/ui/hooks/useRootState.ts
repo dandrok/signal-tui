@@ -10,6 +10,7 @@ import {
 } from "../../app/state";
 import { type AttachContext, attachListing, defaultAttachContext } from "../../app/usecases/attach";
 import { defaultOpenContext, type OpenContext, openFiles, openPlan } from "../../app/usecases/open";
+import { newChatOpened, newChatSubmitted } from "./new-chat-effect";
 import { launchOpen, openEffect } from "./open-effect";
 import { runPromptEffect } from "./prompt-effect";
 
@@ -41,6 +42,9 @@ export function useRootState(
 	const [state, setState] = useState<AppState>(emptyState);
 	const [version, setVersion] = useState(0);
 	const stateRef = useRef(state);
+	/** Which `new` prompt asked for its contacts: the read outlives the prompt, so a reopened
+	 * picker must not be filled by the answer to the one before it. */
+	const contactRead = useRef(0);
 
 	/**
 	 * Reduce now, and keep the ref exact.
@@ -72,6 +76,16 @@ export function useRootState(
 			// The filesystem answers for an attach prompt, and it has to answer *inside* the
 			// keystroke: a listing read a frame later would send the file the user typed before
 			// the one they are looking at.
+			// Starting a conversation asks the engine who it knows, then writes a local row — no
+			// send beyond the contacts read. Both halves live in `new-chat-effect.ts`, and the read
+			// is tagged so a picker reopened while it is in flight is not filled by a stale answer.
+			if (action.type === "prompt-opened" && action.kind === "new") {
+				const read = ++contactRead.current;
+				const wanted = (): boolean =>
+					contactRead.current === read && stateRef.current.prompt?.kind === "new";
+				newChatOpened(apply, session, action, refused, wanted);
+				return;
+			}
 			if (action.type === "prompt-opened" && action.kind === "attach") {
 				apply({ ...action, paths: attachListing("", 0, attachments).candidates });
 				return;
@@ -99,6 +113,11 @@ export function useRootState(
 						);
 					});
 				}
+			}
+
+			if (action.type === "prompt-submitted" && current.prompt?.kind === "new") {
+				newChatSubmitted(apply, session, current.prompt, action, refused, failed);
+				return;
 			}
 
 			if (action.type === "prompt-submitted") {

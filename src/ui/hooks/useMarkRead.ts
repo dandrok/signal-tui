@@ -17,6 +17,8 @@ export function useMarkRead(
 		if (conversationId === undefined || session === undefined) {
 			return;
 		}
-		void session.markRead(conversationId);
+		// A read receipt that cannot be written is not news the user can act on: the store records
+		// it, and the thread they are looking at is unaffected.
+		void session.markRead(conversationId).catch(() => undefined);
 	}, [session, conversationId, version]);
 }

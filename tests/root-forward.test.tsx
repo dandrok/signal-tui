@@ -47,6 +47,8 @@ const fakeSession = (): Harness => {
 		},
 		session: {
 			start: async () => undefined,
+			startDirect: async () => undefined,
+			listContacts: async () => [],
 			stop: async () => undefined,
 			send: async (conversationId, body) => {
 				sent.push({ conversationId, body });

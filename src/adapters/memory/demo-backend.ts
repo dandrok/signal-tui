@@ -1,6 +1,20 @@
-import type { ConversationId, Message } from "../../domain/types";
+import type { Contact, ConversationId, Message } from "../../domain/types";
 import type { BackendEvent, ReplyTarget, SendResult, SignalBackend } from "../../ports/backend";
 import { demoConversations } from "./demo-data";
+
+/**
+ * The people `--demo` knows, so "start a conversation" is demonstrable without an account.
+ *
+ * The id is the uuid — the key a direct conversation is stored under — so picking Alice opens the
+ * thread her seeded messages are already in, instead of an empty second one beside it. The numbers
+ * are fake on purpose: the demo must never look like it could reach a phone.
+ */
+const DEMO_CONTACTS: readonly Contact[] = [
+	{ id: "uuid-adam", name: "Adam", number: "+48600111222", uuid: "uuid-adam" },
+	{ id: "uuid-marta", name: "Marta", number: "+48600222333", uuid: "uuid-marta" },
+	{ id: "uuid-alice", name: "Alice", number: "+48600333444", uuid: "uuid-alice" },
+	{ id: "uuid-mum", name: "Mum", number: "+48600444555", uuid: "uuid-mum" },
+];
 
 /**
  * The transport `--demo` runs on: nothing leaves the process, and the sample thread answers you.
@@ -24,7 +38,9 @@ interface Responder {
 }
 
 const RESPONDERS: Readonly<Record<ConversationId, Responder>> = {
-	"c-alice": {
+	// One per contact in `DEMO_CONTACTS`, keyed by the same uuid the picker would open: a fresh
+	// thread started from the picker is otherwise the one place in the demo that never answers.
+	"uuid-alice": {
 		author: "Alice",
 		authorId: "uuid-alice",
 		lines: [
@@ -32,6 +48,9 @@ const RESPONDERS: Readonly<Record<ConversationId, Responder>> = {
 			"then ship it, I will watch the logs",
 		],
 	},
+	"uuid-adam": { author: "Adam", authorId: "uuid-adam", lines: ["pushed the fix, ptal"] },
+	"uuid-marta": { author: "Marta", authorId: "uuid-marta", lines: ["re-reading the diff now"] },
+	"uuid-mum": { author: "Mum", authorId: "uuid-mum", lines: ["perfect, see you at 7"] },
 	"c-signal-devs": {
 		author: "Marta",
 		authorId: "uuid-marta",
@@ -164,6 +183,7 @@ export function createDemoBackend(options: DemoBackendOptions = {}): SignalBacke
 			answer(conversationId);
 			return { timestamp };
 		},
+		listContacts: async () => DEMO_CONTACTS,
 		subscribe: (listener) => {
 			listeners.add(listener);
 			return () => {

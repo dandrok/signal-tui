@@ -57,29 +57,29 @@ describe("the demo backend", () => {
 	test("a send is echoed into the cache before anything is answered", async () => {
 		const { session, bodies } = await demoSession();
 
-		await session.send("c-alice", "shipping the fix now");
+		await session.send("uuid-alice", "shipping the fix now");
 		await session.flush();
 
 		// The echo is the session's write, not the answer's: it is on screen first, which is
 		// what a live send looks like.
-		expect(await bodies("c-alice")).toContain("shipping the fix now");
-		expect(session.typingIn("c-alice")).toBeNull();
+		expect(await bodies("uuid-alice")).toContain("shipping the fix now");
+		expect(session.typingIn("uuid-alice")).toBeNull();
 		await session.stop();
 	});
 
 	test("the thread types, then answers, and stops typing when it does", async () => {
 		const { clock, session, bodies } = await demoSession();
 
-		await session.send("c-alice", "shipping the fix now");
+		await session.send("uuid-alice", "shipping the fix now");
 		// One entry at a time: the notice has to be visible before the answer lands, and gone
 		// once it has.
 		expect(clock.drain(1)).toEqual([600]);
-		expect(session.typingIn("c-alice")).toBe("Alice");
+		expect(session.typingIn("uuid-alice")).toBe("Alice");
 
 		clock.drain();
 		await session.flush();
-		expect(await bodies("c-alice")).toContain("yep, the audio routing test passed this morning");
-		expect(session.typingIn("c-alice")).toBeNull();
+		expect(await bodies("uuid-alice")).toContain("yep, the audio routing test passed this morning");
+		expect(session.typingIn("uuid-alice")).toBeNull();
 		await session.stop();
 	});
 
@@ -146,7 +146,7 @@ describe("the demo backend", () => {
 		await session.start();
 
 		// Two threads written in a row: the second is on top, and the first is owed an answer.
-		await session.send("c-alice", "shipping the fix now");
+		await session.send("uuid-alice", "shipping the fix now");
 		now = base + 1_000;
 		await session.send("c-family", "on my way");
 		await session.flush();
@@ -159,7 +159,7 @@ describe("the demo backend", () => {
 
 		// The answer is the newest thing in the cache, so its thread belongs above the one that
 		// only looks newer: the seed's own activity time is in the past and cannot say that.
-		expect((await store.listConversations())[0]?.id).toBe("c-alice");
+		expect((await store.listConversations())[0]?.id).toBe("uuid-alice");
 		await session.stop();
 	});
 
@@ -169,7 +169,7 @@ describe("the demo backend", () => {
 		const emitted: string[] = [];
 		const unsubscribe = backend.subscribe((event) => emitted.push(event.kind));
 
-		await backend.sendMessage("c-alice", "hello");
+		await backend.sendMessage("uuid-alice", "hello");
 		await backend.stop();
 		clock.drain();
 

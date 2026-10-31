@@ -1,4 +1,4 @@
-import type { Conversation, ConversationId, Message, MessageId } from "../../domain/types";
+import type { Contact, Conversation, ConversationId, Message, MessageId } from "../../domain/types";
 import type { AttachCandidate } from "../usecases/attach";
 import type { OpenFile } from "../usecases/open";
 import type { PromptKind, PromptState } from "./prompt-types";
@@ -141,6 +141,8 @@ export type Action =
 	  }
 	/** Moves the highlight through what is suggested for the current draft. */
 	| { readonly type: "prompt-moved"; readonly delta: number }
+	/** The list a `new` prompt asked for has arrived; the same prompt, now with something to offer. */
+	| { readonly type: "prompt-contacts"; readonly contacts: readonly Contact[] }
 	/** The prompt was confirmed: whatever can be sent, is sent by the wiring. */
 	| { readonly type: "prompt-submitted" }
 	/** Hides the message the pane points at, in this cache only. Resolved by the wiring. */
@@ -161,4 +163,10 @@ export type Action =
 	| { readonly type: "search-changed"; readonly query: string }
 	| { readonly type: "search-results"; readonly results: readonly Message[] }
 	| { readonly type: "search-moved"; readonly delta: number }
-	| { readonly type: "search-selected" };
+	| { readonly type: "search-selected" }
+	/**
+	 * Selects a conversation by id, for the one case where the list has not caught up yet: a
+	 * thread created from the `new` prompt is written by the session, and the reload that follows
+	 * would otherwise keep whatever was selected before.
+	 */
+	| { readonly type: "conversation-selected"; readonly id: ConversationId };

@@ -36,6 +36,10 @@ export function refusalFor(
 			return forwardRefusal(message, conversationId);
 		case "attach":
 			return null;
+		case "new":
+			// Nothing to refuse: this prompt names no message and no thread — it is how you get a
+			// thread at all, which is why `openPrompt` answers it before asking about either.
+			return null;
 		case "open":
 			// Nothing to refuse here: whether a row's files may be launched is a question about the
 			// filesystem and the engine's directory, and the wiring has already asked it before

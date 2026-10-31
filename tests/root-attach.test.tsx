@@ -37,6 +37,8 @@ const fakeSession = (refuse = false): { session: Session; sent: Send[] } => {
 		sent,
 		session: {
 			start: async () => undefined,
+			startDirect: async () => undefined,
+			listContacts: async () => [],
 			stop: async () => undefined,
 			send: async (conversationId, body, replyTo, file) => {
 				if (refuse) {

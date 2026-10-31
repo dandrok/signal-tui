@@ -177,6 +177,7 @@ Nothing secret belongs in there — the account is a flag, and the cache path is
 | `e` | edit your own message: the prompt opens with its body, `⏎` saves, `Esc` cancels |
 | `d` | delete your own message for everyone — it asks first, `⏎` or `y` confirms |
 | `D` | hide a message on this device only; nothing is sent and nobody else is affected |
+| `n` | start a conversation, from the conversation list: type a name from your contacts or a phone number, `⇥`/`↑↓` to pick, `⏎` opens the thread (creating an empty one when nobody has written in it yet). Signal has no directory, so a name that is not one of your contacts is not findable by searching — a number always works |
 | `o` | open a file on the selected message with your desktop's viewer (`xdg-open`, `open` on macOS). A message with several files opens a picker — `⇥`/`↑↓` to choose, `⏎` opens the highlighted one; a message with one opens it directly, after the first press of the run. Only files `signal-cli` itself downloaded are launched; anything outside its attachments directory is refused by name |
 | `⏎` | send the draft, or send the emoji while reacting |
 | `/` | search cached history — `↑` / `↓` to pick a hit, `⏎` to open it, `Esc` to close |
@@ -266,6 +267,9 @@ the last second of typing.
   without waiting for a transcript Signal never sends back
 - **replies** send the quoted text with them and keep a `▸` on the message being answered; picking
   an older one scrolls the thread down to it
+- **starting a conversation** (`n`): one box over your contacts and a typed number. It is the same
+  gesture whether the thread exists or not — `⏎` opens it, and an empty thread is a local row until
+  the first message makes it real, which is what keeps "start a chat" from needing the network
 - **sending a file** keeps whatever is already in the composer as its message — "here's the CV"
   then `a` is one message, not two — one file per message, up to Signal's 100 MB. The echo keeps
   the path, so the row shows the name and size without waiting for a transcript that never arrives

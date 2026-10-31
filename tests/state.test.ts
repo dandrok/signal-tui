@@ -37,10 +37,10 @@ describe("reduce", () => {
 	});
 
 	test("messages are stored per conversation", () => {
-		const messages = demoMessages.filter((message) => message.conversationId === "c-alice");
+		const messages = demoMessages.filter((message) => message.conversationId === "uuid-alice");
 		const state = reduce(loaded(), {
 			type: "messages-loaded",
-			conversationId: "c-alice",
+			conversationId: "uuid-alice",
 			messages,
 		});
 		expect(selectedMessages(state)).toHaveLength(0);
