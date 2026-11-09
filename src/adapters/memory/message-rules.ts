@@ -1,13 +1,20 @@
-import { strongerReceipt } from "../../domain/receipts";
-import type {
-	ConversationId,
-	EditAuthor,
-	Message,
-	MessageId,
-	Reaction,
-	ReceiptState,
-} from "../../domain/types";
+import type { ConversationId, EditAuthor, Message, MessageId, Reaction } from "../../domain/types";
+import { SELF_AUTHOR_ID } from "../../domain/types";
 import { mergeMessage } from "./merge-message";
+
+/**
+ * Whether this actor wrote the row, which is what allows it to be rewritten or removed.
+ *
+ * Only an id counts: a display label is whatever the sender set it to, so one member naming
+ * themselves after another must not reach that member's message. A row cached before schema v4
+ * kept no id, and the only identity it can still be matched against is ours — `is_outgoing` is
+ * not something a peer can produce, and only this app acts as `SELF_AUTHOR_ID`.
+ */
+function owns(message: Message, actor: EditAuthor): boolean {
+	return message.authorId === undefined
+		? message.isOutgoing && actor.id === SELF_AUTHOR_ID
+		: message.authorId === actor.id;
+}
 
 /**
  * The write half of the in-memory store: every rule the SQLite adapter states as SQL, stated
@@ -45,15 +52,13 @@ export function editIn(
 	editor: EditAuthor,
 	body: string,
 ): { readonly messages: readonly Message[]; readonly changed: boolean } {
-	// A timestamp identifies a message within a conversation, not an author, so the author
-	// has to match too — otherwise one member's edit could rewrite another member's message.
-	// Rows stored before schema v4 have no id: they fall back to the label they were cached
-	// with, exactly as the SQLite adapter does.
+	// A timestamp identifies a message within a conversation, not an author, so the identity has
+	// to match too — otherwise one member's edit could rewrite another member's message.
 	const index = messages.findIndex(
 		(entry) =>
 			entry.conversationId === conversationId &&
 			entry.sentAt === targetSentAt &&
-			(entry.authorId === undefined ? entry.author === editor.label : entry.authorId === editor.id),
+			owns(entry, editor),
 	);
 	const existing = messages[index];
 	// An expired message is gone on purpose, a deleted one is gone for everyone, and a
@@ -143,44 +148,27 @@ export function reactIn(
 
 /**
  * A deleted message keeps its row and its quote marker, drops its text and files, and stops
- * pointing at anything on disk — the same three things the SQLite adapter does in one
- * transaction. `dropped` carries the id whose reactions go with it.
+ * pointing at anything on disk — the same three things the SQLite adapter does in one transaction.
+ * Only the author may do it, by id — `owns` states the single exception for rows cached before
+ * schema v4 — and a refused delete reports no change and clears no reactions.
  */
 export function deleteIn(
 	messages: readonly Message[],
 	conversationId: ConversationId,
 	messageId: MessageId,
-): { readonly messages: readonly Message[]; readonly dropped: readonly MessageId[] } {
+	deleter: EditAuthor,
+): { readonly messages: readonly Message[]; readonly changed: boolean } {
 	const index = messages.findIndex((message) => message.id === messageId);
 	const existing = messages[index];
-	if (existing === undefined || existing.conversationId !== conversationId) {
-		return { messages, dropped: [] };
+	const owned =
+		existing !== undefined &&
+		existing.conversationId === conversationId &&
+		!existing.isDeleted &&
+		owns(existing, deleter);
+	if (!owned) {
+		return { messages, changed: false };
 	}
 	const next = [...messages];
 	next[index] = { ...existing, isDeleted: true, body: "", attachments: [] };
-	return { messages: next, dropped: [messageId] };
-}
-
-export function receiptIn(
-	messages: readonly Message[],
-	timestamps: readonly number[],
-	state: ReceiptState,
-): { readonly messages: readonly Message[]; readonly changed: readonly ConversationId[] } {
-	// Same rules as the SQLite adapter, because this store is what demo mode and half the
-	// tests run against: a receipt may only touch our own messages, and only to strengthen
-	// what is stored.
-	const wanted = new Set(timestamps);
-	const changed = new Set<ConversationId>();
-	const next = messages.map((message) => {
-		if (!message.isOutgoing || !wanted.has(message.sentAt)) {
-			return message;
-		}
-		const receipt = strongerReceipt(message.receipt, state);
-		if (receipt === message.receipt) {
-			return message;
-		}
-		changed.add(message.conversationId);
-		return { ...message, receipt };
-	});
-	return { messages: next, changed: [...changed] };
+	return { messages: next, changed: true };
 }

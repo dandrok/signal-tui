@@ -26,6 +26,7 @@ const message = (overrides: Partial<Message> = {}): Message => ({
 	id: "m1",
 	conversationId: "uuid-alice",
 	author: "Alice",
+	authorId: "uuid-alice",
 	body: "",
 	sentAt: 1_000,
 	isOutgoing: false,
@@ -105,11 +106,43 @@ describe("SqliteMessageStore attachments", () => {
 
 	test("drops them when the message is deleted", async () => {
 		await store.saveMessage(message());
-		await store.markMessageDeleted("uuid-alice", "m1");
+		await store.markMessageDeleted("uuid-alice", "m1", { id: "uuid-alice", label: "Alice" });
 
 		const [stored] = await store.listMessages("uuid-alice");
 
 		expect(stored?.attachments).toEqual([]);
+	});
+
+	test("a delete from somebody else leaves them and the body alone", async () => {
+		await store.saveMessage(message({ body: "the sender's words" }));
+
+		const applied = await store.markMessageDeleted("uuid-alice", "m1", {
+			id: "uuid-mallory",
+			label: "Mallory",
+		});
+
+		const [stored] = await store.listMessages("uuid-alice");
+		expect(applied).toBe(false);
+		expect(stored?.isDeleted).toBe(false);
+		expect(stored?.body).toBe("the sender's words");
+		expect(stored?.attachments).toEqual([attachment()]);
+	});
+
+	test("a payload with another author's id leaves the files alone", async () => {
+		await store.saveMessage(message({ body: "with a photo" }));
+
+		// A payload that shares the id but not the sender is not a replay of this message, so
+		// it must not replace the file rows either — the same damage as a forged delete.
+		const saved = await store.saveMessage({
+			...message({ body: "and now Eve" }),
+			author: "Eve",
+			authorId: "uuid-eve",
+			attachments: [],
+		});
+
+		const [stored] = await store.listMessages("uuid-alice");
+		expect(saved).toEqual({ inserted: false });
+		expect(stored?.attachments).toEqual([attachment()]);
 	});
 
 	test("search results carry their files", async () => {

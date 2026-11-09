@@ -8,6 +8,7 @@ import type {
 	Reaction,
 	ReceiptState,
 } from "../../src/domain/types";
+import { SELF_AUTHOR_ID } from "../../src/domain/types";
 import type { BackendEvent, ReplyTarget, SignalBackend } from "../../src/ports/backend";
 import type { MessageStore } from "../../src/ports/store";
 
@@ -37,6 +38,12 @@ export const message = (id = "m1"): Message => ({
 export class RecordingStore implements MessageStore {
 	readonly ops: string[] = [];
 	failOn: string | null = null;
+
+	/**
+	 * What `markMessageDeleted` answers. False is a row this store does not have — already swept,
+	 * or never cached — and the session must not redraw for a delete that changed nothing.
+	 */
+	deleteResult = true;
 
 	/**
 	 * What `listConversations` answers. Empty by default — most tests care about a write, not a
@@ -117,8 +124,10 @@ export class RecordingStore implements MessageStore {
 		const index = existing.findIndex(
 			(entry) =>
 				entry.sentAt === targetSentAt &&
+				// Identity only, as the real stores do it: a label is peer-controlled, and a row
+				// that kept no id can only be ours.
 				(entry.authorId === undefined
-					? entry.author === editor.label
+					? entry.isOutgoing && editor.id === SELF_AUTHOR_ID
 					: entry.authorId === editor.id),
 		);
 		const found = existing[index];
@@ -180,8 +189,13 @@ export class RecordingStore implements MessageStore {
 		return true;
 	}
 
-	async markMessageDeleted(_conversationId: string, messageId: string): Promise<void> {
-		this.#record(`deleted:${messageId}`);
+	async markMessageDeleted(
+		_conversationId: string,
+		messageId: string,
+		deleter: EditAuthor,
+	): Promise<boolean> {
+		this.#record(`deleted:${messageId}:${deleter.id ?? deleter.label}`);
+		return this.deleteResult;
 	}
 
 	readonly hidden: string[] = [];

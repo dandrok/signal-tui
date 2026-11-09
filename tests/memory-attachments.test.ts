@@ -6,6 +6,7 @@ const withFiles: Message = {
 	id: "m-files",
 	conversationId: "c-signal-devs",
 	author: "Marta",
+	authorId: "uuid-marta",
 	body: "",
 	sentAt: 9_999,
 	isOutgoing: false,
@@ -67,12 +68,52 @@ describe("InMemoryStore attachments", () => {
 	test("drops them when the message is deleted", async () => {
 		const store = new InMemoryStore();
 		await store.saveMessage(withFiles);
-		await store.markMessageDeleted("c-signal-devs", "m-files");
+		await store.markMessageDeleted("c-signal-devs", "m-files", {
+			id: "uuid-marta",
+			label: "Marta",
+		});
 
 		const stored = (await store.listMessages("c-signal-devs")).find(
 			(message) => message.id === "m-files",
 		);
 
 		expect(stored?.attachments).toEqual([]);
+	});
+
+	test("a delete from somebody else leaves them and the body alone", async () => {
+		const store = new InMemoryStore();
+		await store.saveMessage({ ...withFiles, body: "the sender's words" });
+
+		const applied = await store.markMessageDeleted("c-signal-devs", "m-files", {
+			id: "uuid-mallory",
+			label: "Mallory",
+		});
+
+		const stored = (await store.listMessages("c-signal-devs")).find(
+			(message) => message.id === "m-files",
+		);
+		expect(applied).toBe(false);
+		expect(stored?.isDeleted).toBe(false);
+		expect(stored?.body).toBe("the sender's words");
+		expect(stored?.attachments).toEqual(withFiles.attachments);
+	});
+
+	test("a payload with another author's id leaves the files alone", async () => {
+		const store = new InMemoryStore();
+		await store.saveMessage(withFiles);
+
+		const saved = await store.saveMessage({
+			...withFiles,
+			author: "Eve",
+			authorId: "uuid-eve",
+			body: "and now Eve",
+			attachments: [],
+		});
+
+		const stored = (await store.listMessages("c-signal-devs")).find(
+			(message) => message.id === "m-files",
+		);
+		expect(saved).toEqual({ inserted: false });
+		expect(stored?.attachments).toEqual(withFiles.attachments);
 	});
 });

@@ -92,7 +92,7 @@ describe("SqliteMessageStore edits", () => {
 		expect(saved?.isEdited).toBe(false);
 	});
 
-	test("a row cached before schema v4 is matched on its label", async () => {
+	test("a row cached before schema v4 is not matched on its label", async () => {
 		const store = open();
 		await store.upsertConversation(conversation());
 		// No authorId: this is what every row written by an older build looks like.
@@ -106,11 +106,29 @@ describe("SqliteMessageStore edits", () => {
 			isDeleted: false,
 		});
 
-		expect(await store.applyEdit("uuid-alice", 1_000, { id: null, label: "Alice" }, "fixed")).toBe(
-			true,
-		);
-		expect(await store.applyEdit("uuid-alice", 1_000, { id: null, label: "Bob" }, "hijacked")).toBe(
+		// A display label is peer-controlled, so naming yourself "Alice" must not reach a row
+		// that kept no id — and a payload with no identity at all authorises nothing.
+		expect(
+			await store.applyEdit("uuid-alice", 1_000, { id: "uuid-mallory", label: "Alice" }, "x"),
+		).toBe(false);
+		expect(await store.applyEdit("uuid-alice", 1_000, { id: null, label: "Alice" }, "x")).toBe(
 			false,
+		);
+		const [untouched] = await store.listMessages("uuid-alice");
+		expect(untouched?.body).toBe("older row");
+
+		// The only identity such a row still has is ours: an outgoing message, edited by this app.
+		await store.saveMessage({
+			id: "m2",
+			conversationId: "uuid-alice",
+			author: "You",
+			body: "sent long ago",
+			sentAt: 2_000,
+			isOutgoing: true,
+			isDeleted: false,
+		});
+		expect(await store.applyEdit("uuid-alice", 2_000, { id: "self", label: "You" }, "fixed")).toBe(
+			true,
 		);
 	});
 
@@ -155,7 +173,10 @@ describe("SqliteMessageStore edits", () => {
 			],
 		});
 		await store.saveMessage(original);
-		await store.markMessageDeleted("uuid-alice", "uuid-alice:1000");
+		await store.markMessageDeleted("uuid-alice", "uuid-alice:1000", {
+			id: "uuid-alice",
+			label: "Alice",
+		});
 
 		// Signal has no undelete: a redelivered envelope must not revive the row, its
 		// text or its files.
@@ -171,7 +192,7 @@ describe("SqliteMessageStore edits", () => {
 		const store = open();
 		await store.upsertConversation(conversation());
 		await store.saveMessage(message({ body: "gone" }));
-		await store.markMessageDeleted("uuid-alice", "m1");
+		await store.markMessageDeleted("uuid-alice", "m1", { id: "uuid-alice", label: "Alice" });
 
 		expect(
 			await store.applyEdit(

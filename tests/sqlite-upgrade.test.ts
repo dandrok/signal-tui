@@ -78,10 +78,19 @@ describe("upgrading a cache written by an older release", () => {
 		writeOldCache(path);
 
 		const store = new SqliteMessageStore({ path });
-		// A pre-v4 row has no author id, so its edit arrives as a label match.
+		// A pre-v4 row has no author id, and a label is not an identity: a member naming itself
+		// "Alice" cannot rewrite it, and neither can a payload that carries no identity at all.
 		expect(
-			await store.applyEdit("uuid-alice", 1_700_000_000_000, { id: null, label: "Alice" }, "fixed"),
-		).toBe(true);
+			await store.applyEdit(
+				"uuid-alice",
+				1_700_000_000_000,
+				{ id: "uuid-mallory", label: "Alice" },
+				"hijacked",
+			),
+		).toBe(false);
+		expect(
+			await store.applyEdit("uuid-alice", 1_700_000_000_000, { id: null, label: "Alice" }, "x"),
+		).toBe(false);
 
 		// And a message added now can expire while the old one keeps its text.
 		await store.saveMessage({
@@ -97,7 +106,9 @@ describe("upgrading a cache written by an older release", () => {
 		expect(await store.purgeExpired(1_800_000_000_000)).toBe(1);
 
 		const after = await store.listMessages("uuid-alice");
-		expect(after.find((entry) => entry.id === "uuid-alice:1700000000000")?.body).toBe("fixed");
+		expect(after.find((entry) => entry.id === "uuid-alice:1700000000000")?.body).toBe(
+			"written by 0.0.4",
+		);
 		expect(after.find((entry) => entry.id === "uuid-alice:1700000001000")?.body).toBe("");
 		store.close();
 	});

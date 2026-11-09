@@ -1,6 +1,16 @@
+import { SELF_LABEL } from "./format";
 import { isDirectConversationId } from "./ids";
-import type { ConversationId, Message } from "./types";
+import type { ConversationId, EditAuthor, Message } from "./types";
 import { SELF_AUTHOR_ID } from "./types";
+
+/**
+ * The actor our own writes are attributed to: an edit or a delete made by this account.
+ *
+ * Both halves are needed because a row can be cached either way: since schema v4 it carries
+ * `authorId` (ours is `SELF_AUTHOR_ID`), and before it the label `SELF_LABEL` was all there was.
+ * Both stores match on whichever the row has, so identifying ourselves means naming both.
+ */
+export const SELF_ACTOR: EditAuthor = { id: SELF_AUTHOR_ID, label: SELF_LABEL };
 
 /**
  * The identifier a message's author can be reached by, or null when there is none.

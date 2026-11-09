@@ -26,6 +26,7 @@ const message = (overrides: Partial<Message> = {}): Message => ({
 	id: "m1",
 	conversationId: "uuid-alice",
 	author: "Alice",
+	authorId: "uuid-alice",
 	body: "hello",
 	sentAt: 1_000,
 	isOutgoing: false,
@@ -72,6 +73,7 @@ describe("SqliteMessageStore", () => {
 			id: "m1",
 			conversationId: "uuid-alice",
 			author: "Alice",
+			authorId: "uuid-alice",
 			body: "pushed the fix",
 			sentAt: 1_000,
 			// Reads always carry the field, so callers never branch on its presence.
@@ -92,6 +94,27 @@ describe("SqliteMessageStore", () => {
 		const saved = await store.listMessages("uuid-alice");
 		expect(saved).toHaveLength(1);
 		expect(saved[0]?.body).toBe("typo fixed");
+	});
+
+	test("a payload that shares the id but not the author writes nothing", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+		await store.saveMessage(message({ body: "Alice wrote this" }));
+
+		// Same conversation and instant, different sender: the id cannot tell the two apart, so
+		// the stored row keeps its author and its words instead of being handed to Eve.
+		expect(
+			await store.saveMessage({
+				...message({ body: "and now Eve" }),
+				author: "Eve",
+				authorId: "uuid-eve",
+			}),
+		).toEqual({ inserted: false });
+
+		const [row] = await store.listMessages("uuid-alice");
+		expect(row?.author).toBe("Alice");
+		expect(row?.authorId).toBe("uuid-alice");
+		expect(row?.body).toBe("Alice wrote this");
 	});
 
 	test("returns the newest messages in reading order", async () => {
@@ -208,7 +231,7 @@ describe("SqliteMessageStore", () => {
 		await store.upsertConversation(conversation());
 		await store.saveMessage(message({ body: "oops" }));
 
-		await store.markMessageDeleted("uuid-alice", "m1");
+		await store.markMessageDeleted("uuid-alice", "m1", { id: "uuid-alice", label: "Alice" });
 
 		const [saved] = await store.listMessages("uuid-alice");
 		expect(saved?.isDeleted).toBe(true);
@@ -216,11 +239,52 @@ describe("SqliteMessageStore", () => {
 		expect(await store.search("oops")).toEqual([]);
 	});
 
+	test("a second delete of the same message reports no change", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+		await store.saveMessage(message({ body: "oops" }));
+		const deleter = { id: "uuid-alice", label: "Alice" };
+
+		expect(await store.markMessageDeleted("uuid-alice", "m1", deleter)).toBe(true);
+		// A reconnect replays the delete envelope; the pane must not reload for it.
+		expect(await store.markMessageDeleted("uuid-alice", "m1", deleter)).toBe(false);
+	});
+
+	test("a peer cannot delete a row that kept no author id, and we can", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+		// A row cached before schema v4: no author id, only a label any peer can copy.
+		const { authorId: _dropped, ...legacy } = message({ id: "m1", body: "older row" });
+		await store.saveMessage(legacy);
+		// Our own message from the same era: outgoing, which no peer can produce.
+		await store.saveMessage({
+			id: "m2",
+			conversationId: "uuid-alice",
+			author: "You",
+			body: "sent long ago",
+			sentAt: 2_000,
+			isOutgoing: true,
+			isDeleted: false,
+		});
+
+		expect(
+			await store.markMessageDeleted("uuid-alice", "m1", { id: "uuid-mallory", label: "Alice" }),
+		).toBe(false);
+		const [untouched] = await store.listMessages("uuid-alice");
+		expect(untouched?.body).toBe("older row");
+
+		expect(await store.markMessageDeleted("uuid-alice", "m2", { id: "self", label: "You" })).toBe(
+			true,
+		);
+	});
+
 	test("ignores a delete for a message it does not have", async () => {
 		const store = open();
 		await store.upsertConversation(conversation());
 
-		await store.markMessageDeleted("uuid-alice", "missing");
+		expect(
+			await store.markMessageDeleted("uuid-alice", "missing", { id: null, label: "Alice" }),
+		).toBe(false);
 
 		expect(await store.listMessages("uuid-alice")).toEqual([]);
 	});

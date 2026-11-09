@@ -1,4 +1,3 @@
-import { SELF_LABEL } from "../../../domain/format";
 import type {
 	Conversation,
 	ConversationId,
@@ -6,7 +5,6 @@ import type {
 	Message,
 	MessageId,
 } from "../../../domain/types";
-import { SELF_AUTHOR_ID } from "../../../domain/types";
 import type { MappedReaction } from "../map-reaction";
 import type { MappedReceipt } from "../map-receipt";
 import type { ConversationKind } from "../map-target";
@@ -20,17 +18,12 @@ import type { MappedTyping } from "../map-typing";
  * acknowledges by timestamp, and a reaction rides inside a data message without being one.
  */
 
-/**
- * Identity our own actions carry when the engine echoes them back as a transcript: a reaction
- * we added, or an edit we made, on another device. `SELF_AUTHOR_ID` is the marker our own rows
- * store, so an edit resolves to the message it corrects.
- */
-export const SELF_ACTOR: EditAuthor = { id: SELF_AUTHOR_ID, label: SELF_LABEL };
-
-/** Identity of a message that a `remoteDelete` refers to. */
+/** Identity of a message that a `remoteDelete` refers to, and of whoever asked to remove it. */
 export interface DeletedMessage {
 	readonly conversationId: ConversationId;
 	readonly messageId: MessageId;
+	/** Only the author's own message may be removed; the store is where that is checked. */
+	readonly deleter: EditAuthor;
 }
 
 /**

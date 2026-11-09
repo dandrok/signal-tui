@@ -33,6 +33,7 @@ export function eventsFrom(mapped: MappedEnvelope): readonly BackendEvent[] {
 			kind: "message-deleted",
 			conversationId: mapped.deleted.conversationId,
 			messageId: mapped.deleted.messageId,
+			deleter: mapped.deleted.deleter,
 		});
 	}
 	if (mapped.reaction !== null) {

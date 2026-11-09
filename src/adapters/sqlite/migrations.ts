@@ -89,7 +89,8 @@ export const migrations: readonly Migration[] = [
 		// An edit has to be checked against the author of the message it targets,
 		// not just the timestamp: within one group the sent time alone would let a
 		// peer's edit land on somebody else's message. Rows cached before this
-		// column existed stay NULL and fall back to the stored label.
+		// column existed stay NULL: they carry no identity, so only this app's own
+		// actor can match them — a label is not an identity.
 		sql: `
 			ALTER TABLE messages ADD COLUMN author_id TEXT;
 		`,

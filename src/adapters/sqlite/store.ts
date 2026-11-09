@@ -9,12 +9,11 @@ import type {
 	ReceiptState,
 } from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
-import { deleteAttachments } from "./attachments";
 import { addUnread, clearUnread, readExpiresInSeconds, upsertConversation } from "./conversations";
 import { hydrateMessages } from "./hydrate";
-import { applyEditRow, applyReceiptRows, hideMessageRow, purgeExpiredRows } from "./message-rules";
+import { applyDeleteRow, applyEditRow, hideMessageRow, purgeExpiredRows } from "./message-rules";
 import { restrictCachePermissions } from "./private-cache";
-import { applyReactionRow, deleteReactions } from "./reactions";
+import { applyReactionRow } from "./reactions";
 import {
 	readAllMessages,
 	readConversations,
@@ -22,6 +21,7 @@ import {
 	readMessagesBefore,
 	searchMessages,
 } from "./read-messages";
+import { applyReceiptRows } from "./receipts";
 import { toConversation, toMessage } from "./rows";
 import { saveMessageRow } from "./save-message";
 import { migrate, readSchemaVersion } from "./schema";
@@ -161,20 +161,12 @@ export class SqliteMessageStore implements MessageStore {
 		return applyReactionRow(this.#db, conversationId, targetSentAt, reaction, isRemove);
 	}
 
-	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {
-		this.#db.transaction(() => {
-			this.#db
-				.query<null, [string, string]>(
-					`UPDATE messages SET is_deleted = 1, body = ''
-					 WHERE id = ?1 AND conversation_id = ?2`,
-				)
-				.run(messageId, conversationId);
-			// The files on disk are signal-cli's, but the references are ours and a
-			// deleted message should not keep pointing at them — nor keep reactions to
-			// text that is gone.
-			deleteAttachments(this.#db, messageId);
-			deleteReactions(this.#db, messageId);
-		})();
+	async markMessageDeleted(
+		conversationId: ConversationId,
+		messageId: MessageId,
+		deleter: EditAuthor,
+	): Promise<boolean> {
+		return applyDeleteRow(this.#db, conversationId, messageId, deleter);
 	}
 
 	async hideMessage(conversationId: ConversationId, messageId: MessageId): Promise<boolean> {

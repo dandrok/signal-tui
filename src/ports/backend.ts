@@ -25,6 +25,8 @@ export type BackendEvent =
 			readonly kind: "message-deleted";
 			readonly conversationId: ConversationId;
 			readonly messageId: MessageId;
+			/** Who asked for the removal; only that author's own message may be blanked. */
+			readonly deleter: EditAuthor;
 	  }
 	| {
 			/**

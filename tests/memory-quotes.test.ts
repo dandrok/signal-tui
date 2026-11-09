@@ -76,7 +76,10 @@ describe("InMemoryStore quotes", () => {
 	test("a deleted message keeps no quote of its own body but keeps the marker", async () => {
 		const store = await seeded();
 		await store.saveMessage(message({ quote: { sentAt: 500, authorId: null } }));
-		await store.markMessageDeleted("c-quotes", "c-quotes:1000");
+		await store.markMessageDeleted("c-quotes", "c-quotes:1000", {
+			id: "uuid-alice",
+			label: "Alice",
+		});
 
 		const stored = await byId(store, "c-quotes:1000");
 		expect(stored?.isDeleted).toBe(true);

@@ -169,6 +169,7 @@ describe("mapEnvelope", () => {
 		expect(mapped.deleted).toEqual({
 			conversationId: "b5b0c3d2-0000-4000-8000-000000000000",
 			messageId: "b5b0c3d2-0000-4000-8000-000000000000:1000",
+			deleter: { id: "b5b0c3d2-0000-4000-8000-000000000000", label: "Alice" },
 		});
 	});
 

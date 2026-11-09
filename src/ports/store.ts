@@ -76,8 +76,20 @@ export interface MessageWriter {
 	 * that survives in the cache is text that can be read out of the file.
 	 */
 	purgeExpired(now: number): Promise<number>;
-	/** Marks a message as deleted; a no-op when the message is not cached. */
-	markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void>;
+	/**
+	 * Marks a message as deleted, when the deleter is its author.
+	 *
+	 * A delete names the message by a timestamp, and a timestamp identifies a message within a
+	 * conversation rather than an author — so without this check any member of a group could
+	 * blank another member's message, its files and its reactions by guessing an instant.
+	 * Resolves false when the row is missing, already deleted, or written by somebody else, so
+	 * a refused or replayed delete redraws nothing.
+	 */
+	markMessageDeleted(
+		conversationId: ConversationId,
+		messageId: MessageId,
+		deleter: EditAuthor,
+	): Promise<boolean>;
 	/**
 	 * Hides a message from this cache's reads, leaving the row in place.
 	 *

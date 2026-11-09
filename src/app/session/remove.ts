@@ -1,3 +1,4 @@
+import { SELF_ACTOR } from "../../domain/message-author";
 import type { MessageRef } from "../../domain/message-ref";
 import type { ConversationId } from "../../domain/types";
 import type { SessionContext } from "./types";
@@ -17,8 +18,18 @@ export async function removeMessage(
 	await context.backend.deleteForEveryone(conversationId, target);
 
 	const written = context.enqueue(async () => {
-		await context.store.markMessageDeleted(conversationId, `${conversationId}:${target.sentAt}`);
-		context.notify();
+		// Ours to remove: the target was checked when the key was pressed, and the store needs
+		// an author to match the row against — the same identity our own messages are stored with.
+		const changed = await context.store.markMessageDeleted(
+			conversationId,
+			`${conversationId}:${target.sentAt}`,
+			SELF_ACTOR,
+		);
+		// A row the store does not have — swept while the prompt was open, or already gone — is
+		// not a change, and redrawing for it would be a reload that shows the same frames.
+		if (changed) {
+			context.notify();
+		}
 	});
 
 	await written;

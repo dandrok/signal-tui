@@ -9,6 +9,13 @@ import type { Message } from "../../domain/types";
  * that only one adapter has is a rule half the app can break.
  */
 export function mergeMessage(existing: Message, incoming: Message): Message {
+	// The id is (conversation, instant), so a payload carrying it is a replay of *this*
+	// message only when it also names the same author. Otherwise it is a different message
+	// the id cannot tell apart — and merging it would hand the stored author and body to
+	// whoever wrote it. Keep what is stored instead of overwriting it.
+	if (!sameAuthor(existing, incoming)) {
+		return existing;
+	}
 	// An absent `attachments` field means "this update says nothing about files", not "this
 	// message has none" — otherwise a partial update silently drops the files the store had.
 	const attachments = incoming.attachments ?? existing.attachments;
@@ -30,7 +37,7 @@ export function mergeMessage(existing: Message, incoming: Message): Message {
 	// one: extending it would outlive what the sender promised.
 	const expiresAt = existing.expiresAt ?? incoming.expiresAt;
 	// A replay that carries no author id says nothing about the sender, not that there is
-	// none: dropping the stored one would silently downgrade the row to label matching,
+	// none: dropping the stored one would silently leave the row with no identity to match,
 	// which the SQLite adapter avoids with COALESCE.
 	const authorId = incoming.authorId ?? existing.authorId;
 	// Same shape, and the fourth field to fail this way: a payload never carries a receipt,
@@ -55,4 +62,18 @@ export function mergeMessage(existing: Message, incoming: Message): Message {
 	// Files go with the text: a tombstone, an expired row and a view-once message keep none.
 	const kept = viewOnce || deleted || existing.isExpired === true ? [] : attachments;
 	return kept === undefined ? merged : { ...merged, attachments: kept };
+}
+
+/**
+ * Whether the payload is a replay of this row in the only sense the id allows.
+ *
+ * Both sides have to name an identity, and the same one: a display label is peer-controlled,
+ * and a payload that carries no identity at all proves nothing about authorship.
+ */
+function sameAuthor(existing: Message, incoming: Message): boolean {
+	return (
+		existing.authorId !== undefined &&
+		incoming.authorId !== undefined &&
+		existing.authorId === incoming.authorId
+	);
 }

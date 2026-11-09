@@ -91,10 +91,27 @@ describe("InMemoryStore reactions", () => {
 		await seed(store);
 		await store.applyReaction("uuid-carol", 1_000, reaction(), false);
 
-		await store.markMessageDeleted("uuid-carol", "uuid-carol:1000");
+		await store.markMessageDeleted("uuid-carol", "uuid-carol:1000", {
+			id: "self",
+			label: "You",
+		});
 
 		expect((await only(store))?.reactions).toBeUndefined();
 		expect(await store.applyReaction("uuid-carol", 1_000, reaction(), false)).toBe(false);
+	});
+
+	test("a delete from somebody else takes no reactions with it", async () => {
+		const store = new InMemoryStore();
+		await seed(store);
+		await store.applyReaction("uuid-carol", 1_000, reaction(), false);
+
+		const applied = await store.markMessageDeleted("uuid-carol", "uuid-carol:1000", {
+			id: "uuid-mallory",
+			label: "Mallory",
+		});
+
+		expect(applied).toBe(false);
+		expect((await only(store))?.reactions).toHaveLength(1);
 	});
 
 	test("a swept message drops the reactions it carried", async () => {

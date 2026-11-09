@@ -1,17 +1,18 @@
 import type { Database } from "bun:sqlite";
-import { receiptRank } from "../../domain/receipts";
-import type { ConversationId, EditAuthor, MessageId, ReceiptState } from "../../domain/types";
+import type { ConversationId, EditAuthor, MessageId } from "../../domain/types";
+import { SELF_AUTHOR_ID } from "../../domain/types";
+import { deleteAttachments } from "./attachments";
+import { deleteReactions } from "./reactions";
 
 /**
- * The two rules that decide when a cached message stops showing its text. Both live
- * here rather than inline in the store because each one carries a decision that is
- * easy to lose in a long file: who may replace a body, and what "gone" means.
+ * The rules that decide when a cached message stops showing its text. They live here rather
+ * than inline in the store because each one carries a decision that is easy to lose in a long
+ * file: who may replace a body, who may remove a message, and what "gone" means.
  *
- * Both statements end in `RETURNING id` on purpose. The driver's change counter is
- * not portable — one build reports the rows a statement changed, another reports the
- * running total for the connection — and an off-by-five there would rewrite the wrong
- * message or report the wrong purge count. The rows a statement returns mean the same
- * thing everywhere.
+ * The author-checking statements end in `RETURNING id` on purpose. The driver's change counter is
+ * not portable — one build reports the rows a statement changed, another reports the running
+ * total for the connection — and an off-by-five there would rewrite the wrong message or report
+ * the wrong purge count. The rows a statement returns mean the same thing everywhere.
  */
 export function applyEditRow(
 	db: Database,
@@ -23,74 +24,72 @@ export function applyEditRow(
 	// The FTS triggers on `messages` re-index the new body, so search follows the
 	// edit without a second write. A deleted message keeps its blank body.
 	//
-	// The author check is the point of this query: a timestamp identifies a message
-	// within a conversation, not an author, so without it an edit from one member
-	// of a group could rewrite another member's message. Rows cached before schema
-	// v4 have no author_id and are matched on the label they were stored with.
+	// The identity check is the point of this query: a timestamp identifies a message
+	// within a conversation, not an author, so without it an edit from one member of a
+	// group could rewrite another member's message. Identity means an id — a display label
+	// is whatever the sender set it to, so it never authorises a write. The one row that
+	// kept no id (cached before schema v4) is ours to edit and nobody else's: `is_outgoing`
+	// is not something a peer can produce, and only this app acts as `SELF_AUTHOR_ID`.
 	const updated = db
-		.query<{ id: string }, [string, number, string | null, string, string]>(
+		.query<{ id: string }, [string, number, string | null, number, string]>(
 			`UPDATE messages SET body = ?5, is_edited = 1
 			 WHERE conversation_id = ?1 AND sent_at = ?2
 			   AND is_deleted = 0 AND is_expired = 0 AND is_view_once = 0
-			   AND (author_id = ?3 OR (author_id IS NULL AND author = ?4))
+			   AND (author_id = ?3 OR (author_id IS NULL AND is_outgoing = 1 AND ?4 = 1))
 			 RETURNING id`,
 		)
-		.all(conversationId, targetSentAt, editor.id, editor.label, body);
+		.all(conversationId, targetSentAt, editor.id, isSelf(editor) ? 1 : 0, body);
 	return updated.length > 0;
+}
+
+/** Whether this actor is the account itself, whose identity no peer can claim. */
+function isSelf(actor: EditAuthor): boolean {
+	return actor.id === SELF_AUTHOR_ID;
+}
+
+/**
+ * Marks a message deleted, when the deleter is its author, and drops what hung off it.
+ *
+ * The identity check is the point of the statement, for the same reason `applyEditRow` has one:
+ * a delete names a message by its instant, and an instant identifies a message within a
+ * conversation, not its author. Identity means an id — a display label is peer-controlled, so
+ * one member naming themselves after another must not reach that member's row — and a row whose
+ * id was never stored is only ours, matched by `is_outgoing` and this app's own actor. An admin's
+ * removal of somebody else's message arrives as a separate payload (`adminDelete`), so
+ * `remoteDelete` is only ever legitimate from the author.
+ *
+ * `is_deleted = 0` makes the answer honest: a replay, or a refused delete, reports no change and
+ * the session skips the redraw. The files and reactions go **only** when the row actually
+ * changed — clearing them for a refused delete would be the damage the guard exists to prevent.
+ */
+export function applyDeleteRow(
+	db: Database,
+	conversationId: ConversationId,
+	messageId: MessageId,
+	deleter: EditAuthor,
+): boolean {
+	return db.transaction(() => {
+		const updated = db
+			.query<{ id: string }, [string, string, string | null, number]>(
+				`UPDATE messages SET is_deleted = 1, body = ''
+				 WHERE id = ?1 AND conversation_id = ?2 AND is_deleted = 0
+				   AND (author_id = ?3 OR (author_id IS NULL AND is_outgoing = 1 AND ?4 = 1))
+				 RETURNING id`,
+			)
+			.all(messageId, conversationId, deleter.id, isSelf(deleter) ? 1 : 0);
+		if (updated.length === 0) {
+			return false;
+		}
+		// The files on disk are signal-cli's, but the references are ours and a deleted message
+		// should not keep pointing at them — nor keep reactions to text that is gone.
+		deleteAttachments(db, messageId);
+		deleteReactions(db, messageId);
+		return true;
+	})();
 }
 
 /** Rows per statement. Small enough to bound memory, large enough to stay cheap. */
 const PURGE_BATCH = 500;
-
-/** Timestamps per statement: one bind parameter each, so well under the 999 ceiling. */
-const RECEIPT_CHUNK = 500;
-
-/**
- * Records a receipt for messages we sent and reports the conversations it moved.
- *
- * Three rules, and each one is a way this goes wrong if it is left out:
- *
- *  - `is_outgoing = 1`: a receipt acknowledges something we wrote. Without it a peer
- *    could mark its own message as read by us by echoing our cache's timestamps back.
- *  - `receipt_rank < ?1`: receipts arrive out of order, so this is the direction rule,
- *    not an optimisation. A delivery that lands after a read must leave the read
- *    alone, or the tick on screen goes backwards.
- *  - `RETURNING conversation_id`: the driver's change counter is not portable and
- *    would also be wrong to report here — a receipt for five messages in one thread
- *    should name that thread once.
- *
- * The timestamps are chunked because a receipt can name a whole conversation, and
- * one bind parameter per timestamp hits SQLite's variable ceiling on older builds.
- */
-export function applyReceiptRows(
-	db: Database,
-	timestamps: readonly number[],
-	state: ReceiptState,
-	chunkSize = RECEIPT_CHUNK,
-): ConversationId[] {
-	const rank = receiptRank(state);
-	const changed = new Set<ConversationId>();
-
-	db.transaction(() => {
-		for (let start = 0; start < timestamps.length; start += chunkSize) {
-			const chunk = timestamps.slice(start, start + chunkSize);
-			const placeholders = chunk.map((_, index) => `?${index + 2}`).join(", ");
-			const rows = db
-				.query<{ conversation_id: string }, [number, ...number[]]>(
-					`UPDATE messages SET receipt_rank = ?1
-					 WHERE is_outgoing = 1 AND receipt_rank < ?1
-					   AND sent_at IN (${placeholders})
-					 RETURNING conversation_id`,
-				)
-				.all(rank, ...chunk);
-			for (const row of rows) {
-				changed.add(row.conversation_id);
-			}
-		}
-	})();
-
-	return [...changed];
-}
 
 export function purgeExpiredRows(db: Database, now: number, batch = PURGE_BATCH): number {
 	// One transaction for the whole sweep, but each statement handles at most `batch`

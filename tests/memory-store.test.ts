@@ -33,6 +33,7 @@ describe("InMemoryStore", () => {
 			id: "m1",
 			conversationId: "uuid-x",
 			author: "Alice",
+			authorId: "uuid-alice",
 			body: "typo here",
 			sentAt: 1_000,
 			isOutgoing: false,
@@ -57,6 +58,7 @@ describe("InMemoryStore", () => {
 			id: "m1",
 			conversationId: "uuid-x",
 			author: "Alice",
+			authorId: "uuid-alice",
 			body: "original",
 			sentAt: 1_000,
 			isOutgoing: false,
@@ -80,6 +82,7 @@ describe("InMemoryStore", () => {
 			id: "m1",
 			conversationId: "uuid-x",
 			author: "Alice",
+			authorId: "uuid-alice",
 			body: "say that again",
 			sentAt: 1_000,
 			isOutgoing: false,
@@ -96,7 +99,7 @@ describe("InMemoryStore", () => {
 			],
 		};
 		await store.saveMessage(original);
-		await store.markMessageDeleted("uuid-x", "m1");
+		await store.markMessageDeleted("uuid-x", "m1", { id: "uuid-alice", label: "Alice" });
 
 		// Signal has no undelete, so the redelivered envelope changes nothing.
 		await store.saveMessage(original);
@@ -105,6 +108,89 @@ describe("InMemoryStore", () => {
 		expect(saved?.isDeleted).toBe(true);
 		expect(saved?.body).toBe("");
 		expect(saved?.attachments).toEqual([]);
+	});
+
+	test("a second delete of the same message reports no change", async () => {
+		const store = new InMemoryStore();
+		await store.upsertConversation(conversation());
+		await store.saveMessage({
+			id: "m1",
+			conversationId: "uuid-x",
+			author: "Alice",
+			authorId: "uuid-alice",
+			body: "oops",
+			sentAt: 1_000,
+			isOutgoing: false,
+			isDeleted: false,
+		});
+		const deleter = { id: "uuid-alice", label: "Alice" };
+
+		expect(await store.markMessageDeleted("uuid-x", "m1", deleter)).toBe(true);
+		// A reconnect replays the delete envelope; the pane must not reload for it.
+		expect(await store.markMessageDeleted("uuid-x", "m1", deleter)).toBe(false);
+	});
+
+	test("a peer cannot delete a row that kept no author id, and we can", async () => {
+		const store = new InMemoryStore();
+		await store.upsertConversation(conversation());
+		// A row cached before schema v4: no author id, only a label any peer can copy.
+		await store.saveMessage({
+			id: "m1",
+			conversationId: "uuid-x",
+			author: "Alice",
+			body: "older row",
+			sentAt: 1_000,
+			isOutgoing: false,
+			isDeleted: false,
+		});
+		// Our own message from the same era: outgoing, which no peer can produce.
+		await store.saveMessage({
+			id: "m2",
+			conversationId: "uuid-x",
+			author: "You",
+			body: "sent long ago",
+			sentAt: 2_000,
+			isOutgoing: true,
+			isDeleted: false,
+		});
+
+		expect(
+			await store.markMessageDeleted("uuid-x", "m1", { id: "uuid-mallory", label: "Alice" }),
+		).toBe(false);
+		const [untouched] = await store.listMessages("uuid-x");
+		expect(untouched?.body).toBe("older row");
+
+		expect(await store.markMessageDeleted("uuid-x", "m2", { id: "self", label: "You" })).toBe(true);
+	});
+
+	test("a payload that shares the id but not the author writes nothing", async () => {
+		const store = new InMemoryStore();
+		await store.upsertConversation(conversation());
+		const mine = {
+			id: "m1",
+			conversationId: "uuid-x",
+			author: "Alice",
+			authorId: "uuid-alice",
+			body: "Alice wrote this",
+			sentAt: 1_000,
+			isOutgoing: false,
+			isDeleted: false,
+		};
+		await store.saveMessage(mine);
+
+		expect(
+			await store.saveMessage({
+				...mine,
+				author: "Eve",
+				authorId: "uuid-eve",
+				body: "and now Eve",
+			}),
+		).toEqual({ inserted: false });
+
+		const [row] = await store.listMessages("uuid-x");
+		expect(row?.author).toBe("Alice");
+		expect(row?.authorId).toBe("uuid-alice");
+		expect(row?.body).toBe("Alice wrote this");
 	});
 
 	test("an edit from another author does not land", async () => {
@@ -155,7 +241,7 @@ describe("InMemoryStore", () => {
 		);
 	});
 
-	test("a row without an author id is matched on its label", async () => {
+	test("a row without an author id is not matched on its label", async () => {
 		const store = new InMemoryStore();
 		await store.upsertConversation(conversation());
 		await store.saveMessage({
@@ -168,11 +254,26 @@ describe("InMemoryStore", () => {
 			isDeleted: false,
 		});
 
-		expect(await store.applyEdit("uuid-x", 1_000, { id: null, label: "Alice" }, "fixed")).toBe(
+		// A display label is whatever the sender set it to, so naming yourself "Alice" must not
+		// reach a row that kept no id — and an id-less payload establishes nothing either.
+		expect(
+			await store.applyEdit("uuid-x", 1_000, { id: "uuid-mallory", label: "Alice" }, "x"),
+		).toBe(false);
+		expect(await store.applyEdit("uuid-x", 1_000, { id: null, label: "Alice" }, "x")).toBe(false);
+		expect((await store.listMessages("uuid-x"))[0]?.body).toBe("older row");
+
+		// The only identity such a row still has is ours: an outgoing message, edited by this app.
+		await store.saveMessage({
+			id: "m2",
+			conversationId: "uuid-x",
+			author: "You",
+			body: "sent long ago",
+			sentAt: 2_000,
+			isOutgoing: true,
+			isDeleted: false,
+		});
+		expect(await store.applyEdit("uuid-x", 2_000, { id: "self", label: "You" }, "fixed")).toBe(
 			true,
-		);
-		expect(await store.applyEdit("uuid-x", 1_000, { id: null, label: "Bob" }, "hijacked")).toBe(
-			false,
 		);
 	});
 

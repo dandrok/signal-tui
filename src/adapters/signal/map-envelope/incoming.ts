@@ -31,7 +31,9 @@ export function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelo
 		return reaction === null ? EMPTY : { ...EMPTY, conversationKind: target.kind, reaction };
 	}
 
-	// A delete-for-everyone names the message it removes; it is not a new message.
+	// A delete-for-everyone names the message it removes; it is not a new message. The deleter
+	// travels with it because Signal lets only the author remove their own message — an admin
+	// delete is a different payload (`adminDelete`), which this map does not treat as one.
 	if (data.remoteDelete !== undefined) {
 		return {
 			...EMPTY,
@@ -39,6 +41,7 @@ export function mapIncoming(envelope: Envelope, data: DataMessage): MappedEnvelo
 			deleted: {
 				conversationId: target.id,
 				messageId: `${target.id}:${data.remoteDelete.timestamp}`,
+				deleter: { id: peer, label: peerName(envelope) },
 			},
 		};
 	}

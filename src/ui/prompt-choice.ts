@@ -72,7 +72,9 @@ export function choiceLine(prompt: PromptState, newChat: NewChatMatches | null):
 			: {
 					// The number rides along with the name: two people can share a first name, and the
 					// row this picker is choosing between is addressed by the number, not by the word.
-					destination: `${truncate(chosen.name, NAME_CELLS)} ${truncate(chosen.detail, NUMBER_CELLS)} ${picked + 1}/${rows.length}`,
+					// Both are remote text — a contact's profile name and its number come from the
+					// engine — so they are sanitised here like every other string that reaches `<Text>`.
+					destination: `${truncate(displayLine(chosen.name), NAME_CELLS)} ${truncate(displayLine(chosen.detail), NUMBER_CELLS)} ${picked + 1}/${rows.length}`,
 					picked: true,
 				};
 	}
