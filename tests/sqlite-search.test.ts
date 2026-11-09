@@ -14,6 +14,7 @@ const message = (id: string, body: string, overrides: Partial<Message> = {}): Me
 	id,
 	conversationId: "alice",
 	author: "Alice",
+	authorId: "uuid-alice",
 	body,
 	sentAt: 1,
 	isOutgoing: false,

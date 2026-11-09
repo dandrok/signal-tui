@@ -128,6 +128,23 @@ describe("SqliteMessageStore attachments", () => {
 		expect(stored?.attachments).toEqual([attachment()]);
 	});
 
+	test("a payload with another author's id leaves the files alone", async () => {
+		await store.saveMessage(message({ body: "with a photo" }));
+
+		// A payload that shares the id but not the sender is not a replay of this message, so
+		// it must not replace the file rows either — the same damage as a forged delete.
+		const saved = await store.saveMessage({
+			...message({ body: "and now Eve" }),
+			author: "Eve",
+			authorId: "uuid-eve",
+			attachments: [],
+		});
+
+		const [stored] = await store.listMessages("uuid-alice");
+		expect(saved).toEqual({ inserted: false });
+		expect(stored?.attachments).toEqual([attachment()]);
+	});
+
 	test("search results carry their files", async () => {
 		await store.saveMessage(message({ body: "see attached" }));
 

@@ -119,6 +119,7 @@ describe("InMemoryStore deadline on replay", () => {
 		id: "m1",
 		conversationId: "uuid-x",
 		author: "Alice",
+		authorId: "uuid-alice",
 		body: "gone at 2s",
 		sentAt: 1_000,
 		isOutgoing: false,

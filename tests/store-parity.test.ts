@@ -125,6 +125,25 @@ const steps: readonly Step[] = [
 		"the same envelope replays with a different body, and is not a second row",
 		(store) => store.saveMessage(incoming({ body: "hello again" })),
 	],
+	[
+		"a payload with another author's id at the same instant writes nothing",
+		async (store) => {
+			await store.saveMessage(
+				incoming({ id: `${DIRECT}:6000`, sentAt: 6000, body: "Amber's words" }),
+			);
+			const refused = await store.saveMessage(
+				incoming({
+					id: `${DIRECT}:6000`,
+					sentAt: 6000,
+					body: "Bo's words",
+					author: "Bo",
+					authorId: "uuid-bo",
+				}),
+			);
+			const row = (await store.listMessages(DIRECT)).find((entry) => entry.sentAt === 6000);
+			return { refused, author: row?.author, body: row?.body };
+		},
+	],
 	["our own message is saved", (store) => store.saveMessage(saved())],
 	[
 		"an older message arrives after a newer one, which is how a sync transcript replays",

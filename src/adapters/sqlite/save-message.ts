@@ -60,15 +60,21 @@ export function saveMessageRow(db: Database, message: Message): { readonly inser
 				 RETURNING id`,
 			)
 			.all(...params);
-		const changes = insertedRows.length;
+		const isNew = insertedRows.length === 1;
 
-		if (changes === 0) {
-			db.query<null, SaveParams>(
-				// One rule with three faces: once a message is gone or corrected,
-				// a redelivered envelope must not put the old text back. Deletion
-				// (Signal has no undelete), expiry (the timer already ran), and an
-				// edit (a correction outranks the original) all freeze the body.
-				`UPDATE messages SET author = ?3,
+		if (!isNew) {
+			// The id is (conversation, instant), so a payload carrying it is a replay of this
+			// message only when it names the same author. A payload that shares the id with
+			// somebody else's row is a different message the id cannot tell apart: merging it
+			// would hand the stored author and body to whoever wrote it, so nothing is written.
+			// `RETURNING id` is how that is known — the change counter is not portable.
+			const updated = db
+				.query<{ id: string }, SaveParams>(
+					// One rule with three faces: once a message is gone or corrected,
+					// a redelivered envelope must not put the old text back. Deletion
+					// (Signal has no undelete), expiry (the timer already ran), and an
+					// edit (a correction outranks the original) all freeze the body.
+					`UPDATE messages SET author = ?3,
 					        author_id = COALESCE(?4, author_id),
 					        body = CASE
 					                 WHEN is_deleted = 1 THEN body
@@ -82,19 +88,25 @@ export function saveMessageRow(db: Database, message: Message): { readonly inser
 					        -- rows cached by an older release that did keep the text are
 					        -- scrubbed by the body branch above on the replay that names it.
 					        is_view_once = is_view_once | ?10,
-				        -- The deadline is the promise made when the message was stored.
-				        -- A replay may supply one where none was known (NULL), and may
-				        -- never push out one that exists: that would extend the lifetime
-				        -- of a message the sender already expected to be gone.
-				        expires_at = COALESCE(expires_at, ?9),
-				        -- A quote names an earlier message, so a payload that carries none
-				        -- says nothing about it: COALESCE keeps the one already stored.
-				        -- Nothing of the quoted text is kept either way, so a replay cannot
-				        -- restore words that a delete or a timer took away.
-				        quote_sent_at = COALESCE(quote_sent_at, ?11),
-				        quote_author_id = COALESCE(quote_author_id, ?12)
-					WHERE id = ?1 AND conversation_id = ?2`,
-			).run(...params);
+					        -- The deadline is the promise made when the message was stored.
+					        -- A replay may supply one where none was known (NULL), and may
+					        -- never push out one that exists: that would extend the lifetime
+					        -- of a message the sender already expected to be gone.
+					        expires_at = COALESCE(expires_at, ?9),
+					        -- A quote names an earlier message, so a payload that carries none
+					        -- says nothing about it: COALESCE keeps the one already stored.
+					        -- Nothing of the quoted text is kept either way, so a replay cannot
+					        -- restore words that a delete or a timer took away.
+					        quote_sent_at = COALESCE(quote_sent_at, ?11),
+					        quote_author_id = COALESCE(quote_author_id, ?12)
+					 WHERE id = ?1 AND conversation_id = ?2
+					   AND author_id IS NOT NULL AND author_id = ?4
+					 RETURNING id`,
+				)
+				.all(...params);
+			if (updated.length === 0) {
+				return false;
+			}
 		}
 
 		// Files follow the same rule: a tombstone keeps none, whether it was deleted or
@@ -111,8 +123,8 @@ export function saveMessageRow(db: Database, message: Message): { readonly inser
 		} else if (row === null || (row.is_deleted !== 1 && row.is_expired !== 1)) {
 			replaceAttachments(db, message);
 		}
-		return changes;
+		return isNew;
 	})();
 
-	return { inserted: inserted > 0 };
+	return { inserted };
 }

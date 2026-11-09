@@ -163,6 +163,36 @@ describe("InMemoryStore", () => {
 		expect(await store.markMessageDeleted("uuid-x", "m2", { id: "self", label: "You" })).toBe(true);
 	});
 
+	test("a payload that shares the id but not the author writes nothing", async () => {
+		const store = new InMemoryStore();
+		await store.upsertConversation(conversation());
+		const mine = {
+			id: "m1",
+			conversationId: "uuid-x",
+			author: "Alice",
+			authorId: "uuid-alice",
+			body: "Alice wrote this",
+			sentAt: 1_000,
+			isOutgoing: false,
+			isDeleted: false,
+		};
+		await store.saveMessage(mine);
+
+		expect(
+			await store.saveMessage({
+				...mine,
+				author: "Eve",
+				authorId: "uuid-eve",
+				body: "and now Eve",
+			}),
+		).toEqual({ inserted: false });
+
+		const [row] = await store.listMessages("uuid-x");
+		expect(row?.author).toBe("Alice");
+		expect(row?.authorId).toBe("uuid-alice");
+		expect(row?.body).toBe("Alice wrote this");
+	});
+
 	test("an edit from another author does not land", async () => {
 		const store = new InMemoryStore();
 		await store.upsertConversation(conversation());

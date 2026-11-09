@@ -97,4 +97,23 @@ describe("InMemoryStore attachments", () => {
 		expect(stored?.body).toBe("the sender's words");
 		expect(stored?.attachments).toEqual(withFiles.attachments);
 	});
+
+	test("a payload with another author's id leaves the files alone", async () => {
+		const store = new InMemoryStore();
+		await store.saveMessage(withFiles);
+
+		const saved = await store.saveMessage({
+			...withFiles,
+			author: "Eve",
+			authorId: "uuid-eve",
+			body: "and now Eve",
+			attachments: [],
+		});
+
+		const stored = (await store.listMessages("c-signal-devs")).find(
+			(message) => message.id === "m-files",
+		);
+		expect(saved).toEqual({ inserted: false });
+		expect(stored?.attachments).toEqual(withFiles.attachments);
+	});
 });

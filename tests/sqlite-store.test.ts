@@ -96,6 +96,27 @@ describe("SqliteMessageStore", () => {
 		expect(saved[0]?.body).toBe("typo fixed");
 	});
 
+	test("a payload that shares the id but not the author writes nothing", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+		await store.saveMessage(message({ body: "Alice wrote this" }));
+
+		// Same conversation and instant, different sender: the id cannot tell the two apart, so
+		// the stored row keeps its author and its words instead of being handed to Eve.
+		expect(
+			await store.saveMessage({
+				...message({ body: "and now Eve" }),
+				author: "Eve",
+				authorId: "uuid-eve",
+			}),
+		).toEqual({ inserted: false });
+
+		const [row] = await store.listMessages("uuid-alice");
+		expect(row?.author).toBe("Alice");
+		expect(row?.authorId).toBe("uuid-alice");
+		expect(row?.body).toBe("Alice wrote this");
+	});
+
 	test("returns the newest messages in reading order", async () => {
 		const store = open();
 		await store.upsertConversation(conversation());
