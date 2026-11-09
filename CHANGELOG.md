@@ -6,6 +6,18 @@ Notable changes, newest first. This file starts at 0.1.0 — earlier versions ar
 `0.6.0` is the release where the terminal becomes the app's: it takes the screen over the way
 lazygit does, and the thread starts looking like a conversation rather than a log.
 
+## [0.7.1](https://github.com/dandrok/signal-tui/compare/v0.7.0...v0.7.1) (2026-11-09)
+
+
+### Fixed
+
+* **security:** a replay may only merge into a row by the same author ([469d802](https://github.com/dandrok/signal-tui/commit/469d802b807f8e23aaa0255eff28e4153d399231))
+* **security:** bind a delete-for-everyone to the message's author ([b755435](https://github.com/dandrok/signal-tui/commit/b7554357cd9367ff521eda4be559b6dbbf6eaa4e))
+* **security:** close the 2026-10-31 audit findings ([0cd16c4](https://github.com/dandrok/signal-tui/commit/0cd16c42e62167b8bed5fd86e56d9d4b66158a82))
+* **security:** match a message's author by id, never by display label ([651bad3](https://github.com/dandrok/signal-tui/commit/651bad3b028f80aeddf5ff9bfddfadba77161aaf))
+* **security:** sanitise the new-chat picker's choice line ([c95eb84](https://github.com/dandrok/signal-tui/commit/c95eb84cd64c717278a8e8ad692a3617da415850))
+* **session:** notify only when a delete changed the store ([d57e9c5](https://github.com/dandrok/signal-tui/commit/d57e9c59a01f836455e21c4cd505e5e92a5a67c0))
+
 ## [0.7.0](https://github.com/dandrok/signal-tui/compare/v0.6.1...v0.7.0) (2026-11-09)
 
 
