@@ -9,6 +9,7 @@ import { clockFor, localTimeZone } from "./clock";
 import { hintsFor } from "./hints";
 import { useTerminalSize } from "./hooks/useTerminalSize";
 import { keyAction } from "./keys";
+import { frameLayout } from "./layout";
 import { MessagePane } from "./message-pane";
 import { PromptBar } from "./PromptBar";
 import { SearchPane } from "./SearchPane";
@@ -64,31 +65,34 @@ export function App({ state, dispatch, typing = null, openRoot }: AppProps) {
 	// The domain never reads the host timezone nor holds a formatter cache: the UI
 	// builds one cached clock here and hands it to the pane.
 	const clock = useMemo(() => clockFor(localTimeZone()), []);
-	const listWidth = Math.max(22, Math.min(32, Math.floor(columns * 0.3)));
-	const bodyHeight = Math.max(8, rows - 1);
+	const hints = hintsFor(state, replyTo !== undefined, openRoot);
+	const notice = state.notice === null ? null : displayLine(state.notice.text);
+	// Composed before the split because the status line's own height is part of the budget:
+	// a hint line longer than the terminal is wide wraps, and a frame that grew a row is a
+	// frame ink redraws one row off — the pane's rows then overlap.
+	const statusText = notice === null ? hints : `${notice} · ${hints}`;
 	const composerHeight = replyTo === undefined ? COMPOSER_HEIGHT : REPLYING_COMPOSER_HEIGHT;
-	const messageHeight = Math.max(5, bodyHeight - composerHeight);
-	const messageWidth = Math.max(20, columns - listWidth);
+	const layout = frameLayout(columns, rows, statusText, composerHeight);
 
 	return (
 		<Box flexDirection="column" width={columns} height={rows}>
 			{isSearching && state.search !== null ? (
-				<SearchPane search={state.search} width={columns} height={bodyHeight} />
+				<SearchPane search={state.search} width={columns} height={layout.bodyHeight} />
 			) : (
-				<Box flexDirection="row" height={bodyHeight}>
+				<Box flexDirection="row" height={layout.bodyHeight}>
 					<ConversationList
 						conversations={state.conversations}
 						selectedIndex={selectedRow}
-						width={listWidth}
-						height={bodyHeight}
+						width={layout.listWidth}
+						height={layout.bodyHeight}
 						isFocused={state.focus === "conversations"}
 					/>
 					<Box flexDirection="column" flexGrow={1}>
 						<MessagePane
 							conversation={conversation}
 							messages={messages}
-							width={messageWidth}
-							height={messageHeight}
+							width={layout.messageWidth}
+							height={layout.messageHeight}
 							scroll={state.scroll}
 							cursorId={pointedMessage(state)?.id}
 							isFocused={state.focus === "messages"}
@@ -98,30 +102,31 @@ export function App({ state, dispatch, typing = null, openRoot }: AppProps) {
 							<Composer
 								draft={state.draft}
 								isFocused={isComposing}
-								width={messageWidth}
+								width={layout.messageWidth}
 								replyTo={replyTo}
 								clock={clock}
 								typing={typing}
 							/>
 						) : (
-							<PromptBar prompt={state.prompt} width={messageWidth} />
+							<PromptBar prompt={state.prompt} width={layout.messageWidth} />
 						)}
 					</Box>
 				</Box>
 			)}
 
-			<Box paddingX={1}>
+			{/* Clipped rather than allowed to grow: this box holds a fixed number of rows in the
+			    frame's budget, so text past them is cut, never drawn over the composer. */}
+			<Box paddingX={1} height={layout.statusRows} overflow="hidden" flexShrink={0}>
 				{/* The notice goes first because the row is one line and Ink truncates its tail:
 				    feedback about what just happened outranks a list of keys the user can look
 				    up, and a notice that is the reason nothing happened must not be the part
 				    that gets cut. */}
-				{state.notice ? (
-					<Text color="green">
-						{displayLine(state.notice.text)} ·{" "}
-						<Text dimColor>{hintsFor(state, replyTo !== undefined, openRoot)}</Text>
-					</Text>
+				{notice === null ? (
+					<Text dimColor>{hints}</Text>
 				) : (
-					<Text dimColor>{hintsFor(state, replyTo !== undefined, openRoot)}</Text>
+					<Text color="green">
+						{notice} · <Text dimColor>{hints}</Text>
+					</Text>
 				)}
 			</Box>
 		</Box>
