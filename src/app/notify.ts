@@ -26,10 +26,14 @@ const MAX_BODY = 120;
  * Remote text, made safe for a sequence that ends at BEL.
  *
  * The body is a peer's words. `displayLine` removes control characters and line breaks
- * already, and this adds the two things a notification's own syntax cares about: a `;`
- * (which separates the fields of the sequence) and a leading `-`, which some `notify-send`
- * style front ends would read as a flag. The length cap keeps a paste from becoming the
- * whole screen.
+ * already, and this adds the one thing a notification's own syntax cares about: a `;`, which
+ * separates the fields of the sequence. The length cap keeps a paste from becoming the whole
+ * screen.
+ *
+ * There is deliberately no option-injection guard for a leading `-`. This text only ever travels
+ * inside `OSC 9;…BEL` on our own stdout, which the terminal renders as a toast: nothing here is
+ * handed to a subprocess as arguments, so a message beginning with a dash is a message beginning
+ * with a dash.
  */
 export function notificationText(text: string, max = MAX_BODY): string {
 	const line = displayLine(text).replaceAll(";", ",");
