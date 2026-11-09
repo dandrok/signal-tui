@@ -89,7 +89,8 @@ deleting a tag puts that number back in play — the next proposal will be the f
 
 | What is wrong | What to do |
 |---|---|
-| the tag is right, `npm publish` never ran | re-run the failed job: Actions → the failed **release** run → *Re-run failed jobs*. It runs again on the same tag. (Creating a second release on a tag that already has one only adds a duplicate — delete the old release first, keeping its tag, if a `release: published` event is really what you need.) |
+| the tag is right, `npm publish` never ran | re-run the failed job: Actions → the failed **release** run → *Re-run failed jobs*. It runs again on the same tag, and needs nothing else. |
+| the bot made the tag and the release, then the run died | there is no failed publish job to re-run, so copy the release notes somewhere, delete the GitHub release **keeping its tag**, and create it again on that same tag (Releases → *Draft a new release* → pick `vX.Y.Z` from the list, paste the notes). The new release fires `release: published` and the publish job runs on the tag. This path needs the `npm-publish` environment to allow `v*` tags — see *Two one-time clicks*. |
 | the tagged commit is wrong | delete the release and the tag (`git push origin :vX.Y.Z`). The number in the manifest is spent: bump it back in a PR of its own, or accept the next number, and let the bot propose again. |
 | `npm publish` succeeded and the code is wrong | the table under *If a release is wrong* below — the number is spent for good. |
 
