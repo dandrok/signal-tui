@@ -59,6 +59,9 @@ describe("MessagePane quotes", () => {
 		// The pane is 60 columns, so the quoted line is cut at the edge rather than wrapped:
 		// it is one row, and one row is all the window budgeted for it.
 		expect(frame).toContain("┃ 10:00 Marta: attachments path also needs the 4 MiB");
+		// And the row says it was cut. Without the marker the quote ended mid-word, so the
+		// reply's own body — the row directly below — read as a continuation of the quote.
+		expect(frame).toContain("4 MiB …");
 		// The reply's own row is untouched: the quote is an extra line, not a rewrite.
 		expect(frame).toContain("10:00 Adam");
 		expect(frame).toContain("agreed");
