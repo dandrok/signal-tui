@@ -1,30 +1,28 @@
 name: release
 
-# Three ways in, one publish path.
+# One workflow, three ways in — and the same file npm trusts.
 #
-# `workflow_call` is the normal one: `release-please.yml` tags the merge commit it just
-# released and calls this in the same run. A release created with the repository's
-# `GITHUB_TOKEN` cannot trigger a workflow of its own, so this is a call and not an
-# event — no personal token is stored to make writing a release work.
+# `push` to main is the normal path. The `release-please` job reads the conventional
+# commits and keeps one release PR open; the run that merges that PR tags the merge
+# commit, opens the GitHub release, and the `publish` job below publishes in the same
+# run. Same run on purpose: a release created with the repository's `GITHUB_TOKEN` does
+# not start a workflow of its own, so a `release: published` trigger would never fire for
+# the bot's release.
 #
-# `release: published` stays for a release made by hand: re-release a tag, or publish one
-# whose publish failed. `workflow_dispatch` stays for the dry run — install, verify and
-# pack without publishing — so the environment can be proved before a number is spent.
+# `release: published` stays for a release made by hand, and `workflow_dispatch` for the
+# dry run.
+#
+# Both jobs live in this one file because npm checks the *entry point* workflow's
+# filename in the OIDC claim, not the file that runs `npm publish` ([npm's own note on
+# `workflow_call`][1]) — splitting the publish into a reusable workflow would make npm
+# validate the caller's name against the trusted publisher and fail to authenticate.
+# Keeping the trusted publisher pointed at `release.yml` is also why the npmjs.com
+# registration does not have to change.
+#
+# [1]: https://docs.npmjs.com/trusted-publishers/#troubleshooting
 on:
-  workflow_call:
-    inputs:
-      tag_name:
-        description: "The tag to publish; also what the tarball is built from"
-        type: string
-        required: true
-      dry_run:
-        description: "Install, verify and pack without publishing"
-        type: boolean
-        required: false
-        default: false
-    secrets:
-      NPM_TOKEN:
-        required: false
+  push:
+    branches: [main]
   release:
     types: [published]
   workflow_dispatch:
@@ -34,13 +32,49 @@ on:
         type: boolean
         default: true
 
+# The bot job needs to write; the publish job narrows this to `contents: read` below,
+# because a job's own `permissions` replace these for that job.
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  # Unlike CI this is not cancelled by the next push: a run can be the one that tags a
+  # commit, and stopping halfway is not a state worth landing in.
+  cancel-in-progress: false
+
 jobs:
+  release-please:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      # Opens or updates the release PR; on the run after that PR merges, it tags and
+      # releases. Nothing is published from here.
+      #
+      # Pinned to the v5.0.0 commit rather than the `v5` tag: this is the one action in
+      # the repo that runs with `contents: write` and `pull-requests: write`, so a
+      # re-pointed tag would be able to write to the repository.
+      - id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
   publish:
-    # A dispatch lets anyone with write access pick a branch, so it is honoured only from
-    # main; a release event is already a tag, and a call comes from this repo's own
-    # release run. The environment adds the second lock: deployment rules can restrict
-    # it, and the npm trusted publisher is bound to this environment name.
-    if: github.event_name == 'release' || github.event_name == 'workflow_call' || github.ref == 'refs/heads/main'
+    needs: release-please
+    # `always()` because the job above is skipped on a release event and on a dispatch;
+    # the condition then decides which of the three paths actually publishes.
+    if: >
+      always() && (
+        needs.release-please.outputs.release_created == 'true' ||
+        github.event_name == 'release' ||
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+      )
     environment: npm-publish
     # Pinned rather than `ubuntu-latest`: that label moves to Ubuntu 26.04 and the
     # publish path should not change underneath a release. Must stay GitHub-hosted
@@ -54,7 +88,7 @@ jobs:
         with:
           # The tag being released, so what is verified and packed is what was released —
           # not whatever `main` happens to be when the job starts.
-          ref: ${{ inputs.tag_name || github.event.release.tag_name || github.ref }}
+          ref: ${{ needs.release-please.outputs.tag_name || github.event.release.tag_name || github.ref }}
           # The ancestry check below needs the history the tag was cut from.
           fetch-depth: 0
           # Auth to npm comes from OIDC, never from Git credentials.
@@ -98,8 +132,8 @@ jobs:
           npm --version
 
       - name: Publish
-        # A call or a release publishes unless the caller asked for a dry run; a dispatch
-        # publishes only when the dry run was turned off.
+        # The bot path and a hand-made release publish; a dispatch publishes only when
+        # the dry run was turned off.
         if: inputs.dry_run != true
         run: npm publish --access public --provenance
         env:

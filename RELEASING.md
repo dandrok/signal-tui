@@ -28,7 +28,12 @@ Then, on npmjs.com → `signal-tui` → **Settings → Trusted Publisher**:
 
 The environment field matters: the workflow publishes inside the `npm-publish`
 environment, and binding it here is what stops an edited branch workflow from
-publishing under the same identity. In GitHub → Settings → **Environments**,
+publishing under the same identity.
+
+The workflow filename is the **entry point**, not whichever file runs `npm publish`:
+npm matches the caller's name in the OIDC claim, which is why the bot and the publish
+job live in the same `release.yml`. Splitting the publish into a reusable workflow would
+make npm check the caller and refuse the publish (`ENEEDAUTH`). In GitHub → Settings → **Environments**,
 create `npm-publish` and add a deployment branch rule allowing only `main`.
 
 Finally delete the `NPM_TOKEN` repository secret if one was created — from here on
@@ -58,7 +63,7 @@ Two rules that keep this honest:
 
 ## Every release after that
 
-Nobody types the version. `release-please.yml` reads the conventional commits on `main` and
+Nobody types the version. `release.yml` reads the conventional commits on `main` and
 keeps one PR open holding the next number in `package.json` plus a first draft of the CHANGELOG
 section.
 
@@ -70,8 +75,8 @@ section.
    the release note this project writes. Rewrite it in the PR — the prose above each `## [x.y.z]`
    header says more than the bullets do, and the PR is where that happens.
 3. **Merge it.** That is the release decision: the bot tags the merge commit `vX.Y.Z`, opens the
-   GitHub release, and calls the publish workflow in the same run (called rather than triggered —
-   a release made with `GITHUB_TOKEN` cannot start a workflow of its own).
+   GitHub release, and publishes in the same run — not on the release event, because a release
+   made with `GITHUB_TOKEN` cannot start a workflow of its own.
 4. **The workflow publishes**: `bun run verify`, `bun pm pack --dry-run`, then
    `npm publish --provenance`. It checks out the tag rather than `main`, so the tarball is the
    tagged commit and `npm view signal-tui@<version> gitHead` equals `v<version>` — the tag cannot
@@ -84,7 +89,7 @@ deleting a tag puts that number back in play — the next proposal will be the f
 
 | What is wrong | What to do |
 |---|---|
-| the tag is right, `npm publish` never ran | re-create the release on the same existing tag (GitHub → Releases → *Draft a new release* → pick `vX.Y.Z` from the tag list). That fires `release: published` and publishes the tag that is already there. |
+| the tag is right, `npm publish` never ran | re-run the failed job: Actions → the failed **release** run → *Re-run failed jobs*. It runs again on the same tag. (Creating a second release on a tag that already has one only adds a duplicate — delete the old release first, keeping its tag, if a `release: published` event is really what you need.) |
 | the tagged commit is wrong | delete the release and the tag (`git push origin :vX.Y.Z`). The number in the manifest is spent: bump it back in a PR of its own, or accept the next number, and let the bot propose again. |
 | `npm publish` succeeded and the code is wrong | the table under *If a release is wrong* below — the number is spent for good. |
 
