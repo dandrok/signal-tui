@@ -134,10 +134,14 @@ jobs:
           node --version
           npm --version
 
-      - name: The tag and package.json must name the same version
-        # npm reads the version from package.json, not from the tag — so a checkout that
-        # landed on the wrong ref would publish a number the release page never named.
-        # A dispatch has no tag and publishes whatever `main` is; that is its own path.
+      - name: The checkout is the tag, and the tag is the version
+        # Two names can resolve to one string — a branch called `v0.7.0` and the tag
+        # `v0.7.0` — and a checkout given a bare name prefers whichever git finds first,
+        # so HEAD is compared to the tag object itself rather than to the name.
+        #
+        # Then the version: npm reads it from package.json, not from the tag, so a
+        # checkout that landed on the wrong commit would publish a number the release
+        # page never named. A dispatch has no tag and publishes whatever `main` is.
         env:
           TAG: ${{ needs.release-please.outputs.tag_name || github.event.release.tag_name }}
         run: |
@@ -145,12 +149,18 @@ jobs:
             echo "no tag on this run: a dispatch publishes main"
             exit 0
           fi
+          head_commit=$(git rev-parse HEAD)
+          tag_commit=$(git rev-parse "refs/tags/$TAG^{commit}")
+          if [ "$head_commit" != "$tag_commit" ]; then
+            echo "refusing: HEAD is $head_commit but $TAG is $tag_commit" >&2
+            exit 1
+          fi
           version=$(node -p "require('./package.json').version")
           if [ "v$version" != "$TAG" ]; then
             echo "refusing: tag $TAG does not name package.json's version $version" >&2
             exit 1
           fi
-          echo "tag $TAG and package.json agree on $version"
+          echo "$TAG names $head_commit, and package.json agrees on $version"
 
       - name: Publish
         # The bot path and a hand-made release publish; a dispatch publishes only when
