@@ -30,7 +30,7 @@ export function mergeMessage(existing: Message, incoming: Message): Message {
 	// one: extending it would outlive what the sender promised.
 	const expiresAt = existing.expiresAt ?? incoming.expiresAt;
 	// A replay that carries no author id says nothing about the sender, not that there is
-	// none: dropping the stored one would silently downgrade the row to label matching,
+	// none: dropping the stored one would silently leave the row with no identity to match,
 	// which the SQLite adapter avoids with COALESCE.
 	const authorId = incoming.authorId ?? existing.authorId;
 	// Same shape, and the fourth field to fail this way: a payload never carries a receipt,

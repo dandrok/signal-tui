@@ -149,8 +149,8 @@ export function reactIn(
 /**
  * A deleted message keeps its row and its quote marker, drops its text and files, and stops
  * pointing at anything on disk — the same three things the SQLite adapter does in one transaction.
- * Only the author may do it; rows cached before schema v4 have no id and fall back to their label,
- * as `editIn` does, and a refused delete reports no change and clears no reactions.
+ * Only the author may do it, by id — `owns` states the single exception for rows cached before
+ * schema v4 — and a refused delete reports no change and clears no reactions.
  */
 export function deleteIn(
 	messages: readonly Message[],

@@ -113,8 +113,9 @@ export interface Message {
 	 * label and can be changed by the peer at any time, so it must never be the key
 	 * an edit is matched on.
 	 *
-	 * Absent on rows cached before schema v4; `applyEdit` falls back to the label
-	 * for those and to nothing else.
+	 * Absent on rows cached before schema v4. Such a row carries no identity at all, so an
+	 * edit or a delete can only reach it as ours: the row is outgoing and the actor is
+	 * `SELF_AUTHOR_ID`. A label never authorises either one.
 	 */
 	readonly authorId?: string;
 	readonly body: string;
