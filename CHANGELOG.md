@@ -6,6 +6,29 @@ Notable changes, newest first. This file starts at 0.1.0 — earlier versions ar
 `0.6.0` is the release where the terminal becomes the app's: it takes the screen over the way
 lazygit does, and the thread starts looking like a conversation rather than a log.
 
+## [0.7.0](https://github.com/dandrok/signal-tui/compare/v0.6.1...v0.7.0) (2026-11-09)
+
+
+### Added
+
+* **new-chat:** `n` starts a conversation with a contact or a number ([c7a9039](https://github.com/dandrok/signal-tui/commit/c7a9039d3ca63e70ab4dc5c177452e7603e86056))
+* **new-chat:** `n` starts a conversation with a contact or a number ([0dc5336](https://github.com/dandrok/signal-tui/commit/0dc533625f4afed932e32a2229e1b8bc2077724b))
+
+
+### Fixed
+
+* **new-chat:** key a contact the way an incoming message is keyed ([c648d7e](https://github.com/dandrok/signal-tui/commit/c648d7e51ab260c73d7f34bd674ae6852e6ac29a))
+* **release:** call the publish instead of expecting an event, and pin the tag ([16e4e31](https://github.com/dandrok/signal-tui/commit/16e4e313cf9d31172531f0b1cd275d2daf865273))
+* **release:** compare the checkout to the tag, not to the tag's name ([c256c56](https://github.com/dandrok/signal-tui/commit/c256c56dc1fd98e118a194c3fc0e99c07a01507f))
+* **release:** one entry point, because npm checks the caller's filename ([363c0aa](https://github.com/dandrok/signal-tui/commit/363c0aa5466c1a03f02151f970ede48c21a18871))
+* **release:** pin the bot's action to the v5.0.0 commit ([57053ba](https://github.com/dandrok/signal-tui/commit/57053ba4eff077954606019f2c9a287c33edd28c))
+* **release:** refuse a prerelease, and a tag that names another version ([1943646](https://github.com/dandrok/signal-tui/commit/1943646d5c5a05e4949d862d23b522f4df846bbf))
+* **release:** refuse a tag that is not an ancestor of main ([b3f7c13](https://github.com/dandrok/signal-tui/commit/b3f7c13bfc5edd4f05e0881ac1594f1865b0481f))
+* **session:** a failed write now reaches the caller that asked for it ([f1fcaa6](https://github.com/dandrok/signal-tui/commit/f1fcaa68b3c4e3c82e1d65d7628fa98b2da4b4c9))
+* **thread:** a one-row cut says it was cut ([8c915fa](https://github.com/dandrok/signal-tui/commit/8c915fafc0c4e7e85493d8a24953bdf884aadd44))
+* **ui:** the frame fits the terminal, and a one-row cut says it was cut ([3ec9b8c](https://github.com/dandrok/signal-tui/commit/3ec9b8c80955eca378d260e8f8bd9a6b0282d3c1))
+* **ui:** the frame is exactly as tall as the terminal ([e018049](https://github.com/dandrok/signal-tui/commit/e018049ff2f82aa05ff46b8511fcfab72ac165ce))
+
 ## [0.6.0] — 2026-10-30
 
 ### Added
