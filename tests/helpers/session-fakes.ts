@@ -39,6 +39,12 @@ export class RecordingStore implements MessageStore {
 	failOn: string | null = null;
 
 	/**
+	 * What `markMessageDeleted` answers. False is a row this store does not have — already swept,
+	 * or never cached — and the session must not redraw for a delete that changed nothing.
+	 */
+	deleteResult = true;
+
+	/**
 	 * What `listConversations` answers. Empty by default — most tests care about a write, not a
 	 * read — and settable, so a conversation that already exists can be described.
 	 */
@@ -186,7 +192,7 @@ export class RecordingStore implements MessageStore {
 		deleter: EditAuthor,
 	): Promise<boolean> {
 		this.#record(`deleted:${messageId}:${deleter.id ?? deleter.label}`);
-		return true;
+		return this.deleteResult;
 	}
 
 	readonly hidden: string[] = [];

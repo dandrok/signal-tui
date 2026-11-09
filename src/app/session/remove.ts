@@ -20,12 +20,16 @@ export async function removeMessage(
 	const written = context.enqueue(async () => {
 		// Ours to remove: the target was checked when the key was pressed, and the store needs
 		// an author to match the row against — the same identity our own messages are stored with.
-		await context.store.markMessageDeleted(
+		const changed = await context.store.markMessageDeleted(
 			conversationId,
 			`${conversationId}:${target.sentAt}`,
 			SELF_ACTOR,
 		);
-		context.notify();
+		// A row the store does not have — swept while the prompt was open, or already gone — is
+		// not a change, and redrawing for it would be a reload that shows the same frames.
+		if (changed) {
+			context.notify();
+		}
 	});
 
 	await written;

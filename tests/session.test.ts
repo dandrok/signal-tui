@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createSession } from "../src/app/session";
+import { SELF_AUTHOR_ID } from "../src/domain/types";
 import {
 	conversation,
 	DIRECT_ID,
@@ -42,6 +43,10 @@ describe("createSession", () => {
 		const store = new RecordingStore();
 		const backend = new FakeBackend();
 		const session = createSession({ store, backend });
+		let changes = 0;
+		session.onChange(() => {
+			changes++;
+		});
 
 		backend.emit({
 			kind: "message-deleted",
@@ -52,6 +57,64 @@ describe("createSession", () => {
 		await session.flush();
 
 		expect(store.ops).toEqual(["deleted:uuid-alice:10:uuid-alice"]);
+		expect(changes).toBe(1);
+	});
+
+	test("a delete the store refused redraws nothing", async () => {
+		const store = new RecordingStore();
+		// A row this store does not have: the peer's delete named a message never cached, or one
+		// a sweep already took. The write reports that, and a reload would show the same frames.
+		store.deleteResult = false;
+		const backend = new FakeBackend();
+		const session = createSession({ store, backend });
+		let changes = 0;
+		session.onChange(() => {
+			changes++;
+		});
+
+		backend.emit({
+			kind: "message-deleted",
+			conversationId: "uuid-alice",
+			messageId: "uuid-alice:10",
+			deleter: { id: "uuid-alice", label: "Alice" },
+		});
+		await session.flush();
+
+		expect(store.ops).toEqual(["deleted:uuid-alice:10:uuid-alice"]);
+		expect(changes).toBe(0);
+	});
+
+	test("our own delete still reaches the wire when the cache has no such row", async () => {
+		const store = new RecordingStore();
+		store.deleteResult = false;
+		const backend = new FakeBackend();
+		const session = createSession({ store, backend });
+		let changes = 0;
+		session.onChange(() => {
+			changes++;
+		});
+		const target = { sentAt: 10, authorId: SELF_AUTHOR_ID };
+
+		await session.remove("uuid-alice", target);
+
+		// The envelope still goes out — the other devices have the message even when this cache
+		// does not — and the pane is not redrawn for a write that changed nothing.
+		expect(backend.deletions).toEqual([{ conversationId: "uuid-alice", target }]);
+		expect(changes).toBe(0);
+	});
+
+	test("our own delete notifies when the row was there", async () => {
+		const store = new RecordingStore();
+		const backend = new FakeBackend();
+		const session = createSession({ store, backend });
+		let changes = 0;
+		session.onChange(() => {
+			changes++;
+		});
+
+		await session.remove("uuid-alice", { sentAt: 10, authorId: SELF_AUTHOR_ID });
+
+		expect(changes).toBe(1);
 	});
 
 	test("records a store failure instead of rejecting", async () => {
