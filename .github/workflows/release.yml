@@ -1,17 +1,30 @@
 name: release
 
-# Two ways in, one publish path.
+# Three ways in, one publish path.
 #
-# `release: published` is the normal one: `release-please.yml` merged its release PR,
-# tagged the commit it published and opened the GitHub release, and the tarball npm
-# builds here is therefore the tagged commit — the tag and npm's `gitHead` cannot
-# disagree, which is what a hand-made tag after the fact used to risk.
+# `workflow_call` is the normal one: `release-please.yml` tags the merge commit it just
+# released and calls this in the same run. A release created with the repository's
+# `GITHUB_TOKEN` cannot trigger a workflow of its own, so this is a call and not an
+# event — no personal token is stored to make writing a release work.
 #
-# `workflow_dispatch` stays for the dry run: install, verify and pack without
-# publishing, so the environment and the OIDC binding can be proved before a number
-# is spent. It also covers the one published version that predates trusted
-# publishing, and any recovery where the release event never fired.
+# `release: published` stays for a release made by hand: re-release a tag, or publish one
+# whose publish failed. `workflow_dispatch` stays for the dry run — install, verify and
+# pack without publishing — so the environment can be proved before a number is spent.
 on:
+  workflow_call:
+    inputs:
+      tag_name:
+        description: "The tag to publish; also what the tarball is built from"
+        type: string
+        required: true
+      dry_run:
+        description: "Install, verify and pack without publishing"
+        type: boolean
+        required: false
+        default: false
+    secrets:
+      NPM_TOKEN:
+        required: false
   release:
     types: [published]
   workflow_dispatch:
@@ -23,11 +36,11 @@ on:
 
 jobs:
   publish:
-    # `workflow_dispatch` lets anyone with write access pick a branch, so a dispatch
-    # is only honoured from main; a release event is already a tag on a commit that
-    # came through main. The environment adds the second lock: deployment rules can
-    # restrict it, and the npm trusted publisher is bound to this environment name.
-    if: github.event_name == 'release' || github.ref == 'refs/heads/main'
+    # A dispatch lets anyone with write access pick a branch, so it is honoured only from
+    # main; a release event is already a tag, and a call comes from this repo's own
+    # release run. The environment adds the second lock: deployment rules can restrict
+    # it, and the npm trusted publisher is bound to this environment name.
+    if: github.event_name == 'release' || github.event_name == 'workflow_call' || github.ref == 'refs/heads/main'
     environment: npm-publish
     # Pinned rather than `ubuntu-latest`: that label moves to Ubuntu 26.04 and the
     # publish path should not change underneath a release. Must stay GitHub-hosted
@@ -39,9 +52,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # The tag the release names, so what is verified and packed is what was
-          # released — not whatever `main` happens to be when the job starts.
-          ref: ${{ github.event.release.tag_name || github.ref }}
+          # The tag being released, so what is verified and packed is what was released —
+          # not whatever `main` happens to be when the job starts.
+          ref: ${{ inputs.tag_name || github.event.release.tag_name || github.ref }}
           # The ancestry check below needs the history the tag was cut from.
           fetch-depth: 0
           # Auth to npm comes from OIDC, never from Git credentials.
@@ -51,7 +64,7 @@ jobs:
         # OIDC publishes whatever the job checked out, and a tag can be made to point at
         # any commit — so the ref alone is not proof that the code was reviewed on main.
         # A dispatch from main used to give this for free; this is what keeps it true now
-        # that the trigger is a release event.
+        # that the trigger can be a tag.
         run: |
           git fetch --no-tags origin main
           git merge-base --is-ancestor "$(git rev-parse HEAD)" FETCH_HEAD
@@ -85,9 +98,9 @@ jobs:
           npm --version
 
       - name: Publish
-        # A release event publishes unconditionally — the merged release PR was the
-        # decision. A dispatch publishes only when the dry run was turned off.
-        if: github.event_name == 'release' || inputs.dry_run == false
+        # A call or a release publishes unless the caller asked for a dry run; a dispatch
+        # publishes only when the dry run was turned off.
+        if: inputs.dry_run != true
         run: npm publish --access public --provenance
         env:
           # Deliberately allowed to be empty: npm prefers OIDC when the workflow is a

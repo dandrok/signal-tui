@@ -6,9 +6,14 @@ name: release-please
 #
 # The bot keeps one PR open against main holding the bump and a first draft of the
 # CHANGELOG section, written from the commit subjects. Merging that PR is the release
-# decision: it tags the merge commit `vX.Y.Z` and publishes the GitHub release, which is
-# the event `release.yml` listens for — so the tarball npm builds is the tagged commit,
-# and the tag can no longer drift from the `gitHead` npm records.
+# decision: this workflow then tags the merge commit `vX.Y.Z`, opens the GitHub release,
+# and calls the publish workflow in the same run.
+#
+# Called, not triggered. A release created with the repository's `GITHUB_TOKEN` does not
+# start a new workflow run — GitHub suppresses the events that token causes, so a
+# `release: published` trigger would never fire for the bot's own release. Calling
+# `release.yml` as a reusable workflow is the same run, so nothing is suppressed and no
+# personal token has to be stored to make writing a release work.
 on:
   push:
     branches: [main]
@@ -28,6 +33,9 @@ concurrency:
 jobs:
   release-please:
     runs-on: ubuntu-24.04
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       # Opens or updates the release PR; on the run after that PR merges, it tags and
       # releases. Nothing is published from here — publishing needs OIDC and the
@@ -36,7 +44,22 @@ jobs:
       # Pinned to the v5.0.0 commit rather than the `v5` tag: this is the one action in
       # the repo that runs with `contents: write` and `pull-requests: write`, so a
       # re-pointed tag would be able to write to the repository.
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+      - id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  publish:
+    needs: release-please
+    # Only on the run that actually made a release: every other push to main stops at
+    # the PR the job above opened or updated.
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: read
+      id-token: write # granted to the called workflow for OIDC
+    uses: ./.github/workflows/release.yml
+    secrets: inherit
+    with:
+      tag_name: ${{ needs.release-please.outputs.tag_name }}
+      dry_run: false
