@@ -23,7 +23,6 @@ export {
 	type EditedMessage,
 	EMPTY,
 	type MappedEnvelope,
-	SELF_ACTOR,
 } from "./types";
 
 export function mapEnvelope(envelope: Envelope): MappedEnvelope {

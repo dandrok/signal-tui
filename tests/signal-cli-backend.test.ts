@@ -189,7 +189,12 @@ describe("SignalCliBackend", () => {
 		});
 
 		expect(events).toEqual([
-			{ kind: "message-deleted", conversationId: "uuid-alice", messageId: "uuid-alice:1000" },
+			{
+				kind: "message-deleted",
+				conversationId: "uuid-alice",
+				messageId: "uuid-alice:1000",
+				deleter: { id: "uuid-alice", label: "Alice" },
+			},
 		]);
 	});
 

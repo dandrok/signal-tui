@@ -38,7 +38,13 @@ export async function applyEvent(context: SessionContext, event: BackendEvent): 
 			await store.applyEdit(event.conversationId, event.targetSentAt, event.editor, event.body);
 			break;
 		case "message-deleted":
-			await store.markMessageDeleted(event.conversationId, event.messageId);
+			// A delete is honoured only from the message's author; the store refuses anything
+			// else, and a refusal is not a change worth redrawing for.
+			changed = await store.markMessageDeleted(
+				event.conversationId,
+				event.messageId,
+				event.deleter,
+			);
 			break;
 		case "reaction":
 			// A reaction is about a message the cache already has; when it is not there,

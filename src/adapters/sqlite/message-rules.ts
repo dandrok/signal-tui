@@ -1,17 +1,18 @@
 import type { Database } from "bun:sqlite";
 import { receiptRank } from "../../domain/receipts";
 import type { ConversationId, EditAuthor, MessageId, ReceiptState } from "../../domain/types";
+import { deleteAttachments } from "./attachments";
+import { deleteReactions } from "./reactions";
 
 /**
- * The two rules that decide when a cached message stops showing its text. Both live
- * here rather than inline in the store because each one carries a decision that is
- * easy to lose in a long file: who may replace a body, and what "gone" means.
+ * The rules that decide when a cached message stops showing its text. They live here rather
+ * than inline in the store because each one carries a decision that is easy to lose in a long
+ * file: who may replace a body, who may remove a message, and what "gone" means.
  *
- * Both statements end in `RETURNING id` on purpose. The driver's change counter is
- * not portable — one build reports the rows a statement changed, another reports the
- * running total for the connection — and an off-by-five there would rewrite the wrong
- * message or report the wrong purge count. The rows a statement returns mean the same
- * thing everywhere.
+ * The author-checking statements end in `RETURNING id` on purpose. The driver's change counter is
+ * not portable — one build reports the rows a statement changed, another reports the running
+ * total for the connection — and an off-by-five there would rewrite the wrong message or report
+ * the wrong purge count. The rows a statement returns mean the same thing everywhere.
  */
 export function applyEditRow(
 	db: Database,
@@ -37,6 +38,46 @@ export function applyEditRow(
 		)
 		.all(conversationId, targetSentAt, editor.id, editor.label, body);
 	return updated.length > 0;
+}
+
+/**
+ * Marks a message deleted, when the deleter is its author, and drops what hung off it.
+ *
+ * The author check is the point of the statement, for the same reason `applyEditRow` has one: a
+ * delete names a message by its instant, and an instant identifies a message within a
+ * conversation, not its author — so without the check a member of a group could blank another
+ * member's message by guessing a timestamp. An admin's removal of somebody else's message arrives
+ * as a different payload (`adminDelete`), so `remoteDelete` is only ever legitimate from the
+ * author. Rows cached before schema v4 have no `author_id` and are matched on their label.
+ *
+ * `is_deleted = 0` makes the answer honest: a replay, or a refused delete, reports no change and
+ * the session skips the redraw. The files and reactions go **only** when the row actually
+ * changed — clearing them for a refused delete would be the damage the guard exists to prevent.
+ */
+export function applyDeleteRow(
+	db: Database,
+	conversationId: ConversationId,
+	messageId: MessageId,
+	deleter: EditAuthor,
+): boolean {
+	return db.transaction(() => {
+		const updated = db
+			.query<{ id: string }, [string, string, string | null, string]>(
+				`UPDATE messages SET is_deleted = 1, body = ''
+				 WHERE id = ?1 AND conversation_id = ?2 AND is_deleted = 0
+				   AND (author_id = ?3 OR (author_id IS NULL AND author = ?4))
+				 RETURNING id`,
+			)
+			.all(messageId, conversationId, deleter.id, deleter.label);
+		if (updated.length === 0) {
+			return false;
+		}
+		// The files on disk are signal-cli's, but the references are ours and a deleted message
+		// should not keep pointing at them — nor keep reactions to text that is gone.
+		deleteAttachments(db, messageId);
+		deleteReactions(db, messageId);
+		return true;
+	})();
 }
 
 /** Rows per statement. Small enough to bound memory, large enough to stay cheap. */

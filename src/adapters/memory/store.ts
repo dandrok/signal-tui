@@ -145,12 +145,22 @@ export class InMemoryStore implements MessageStore {
 		return changed;
 	}
 
-	async markMessageDeleted(conversationId: ConversationId, messageId: MessageId): Promise<void> {
-		const { messages, dropped } = deleteIn(this.#messages, conversationId, messageId);
-		this.#messages = [...messages];
-		for (const id of dropped) {
-			this.#reactions.delete(id);
+	async markMessageDeleted(
+		conversationId: ConversationId,
+		messageId: MessageId,
+		deleter: EditAuthor,
+	): Promise<boolean> {
+		const { messages, changed } = deleteIn(this.#messages, conversationId, messageId, deleter);
+		if (!changed) {
+			// Missing, already deleted, or written by somebody else: nothing moved, so the
+			// session has no reason to redraw — and the reactions stay where they were.
+			return false;
 		}
+		this.#messages = [...messages];
+		// Reactions go with the text: a 👍 on a message nobody can read is noise. SQLite gets
+		// the same result from its foreign key.
+		this.#reactions.delete(messageId);
+		return true;
 	}
 
 	async hideMessage(conversationId: ConversationId, messageId: MessageId): Promise<boolean> {

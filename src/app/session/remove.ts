@@ -1,3 +1,4 @@
+import { SELF_ACTOR } from "../../domain/message-author";
 import type { MessageRef } from "../../domain/message-ref";
 import type { ConversationId } from "../../domain/types";
 import type { SessionContext } from "./types";
@@ -17,7 +18,13 @@ export async function removeMessage(
 	await context.backend.deleteForEveryone(conversationId, target);
 
 	const written = context.enqueue(async () => {
-		await context.store.markMessageDeleted(conversationId, `${conversationId}:${target.sentAt}`);
+		// Ours to remove: the target was checked when the key was pressed, and the store needs
+		// an author to match the row against — the same identity our own messages are stored with.
+		await context.store.markMessageDeleted(
+			conversationId,
+			`${conversationId}:${target.sentAt}`,
+			SELF_ACTOR,
+		);
 		context.notify();
 	});
 

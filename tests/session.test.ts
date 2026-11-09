@@ -47,10 +47,11 @@ describe("createSession", () => {
 			kind: "message-deleted",
 			conversationId: "uuid-alice",
 			messageId: "uuid-alice:10",
+			deleter: { id: "uuid-alice", label: "Alice" },
 		});
 		await session.flush();
 
-		expect(store.ops).toEqual(["deleted:uuid-alice:10"]);
+		expect(store.ops).toEqual(["deleted:uuid-alice:10:uuid-alice"]);
 	});
 
 	test("records a store failure instead of rejecting", async () => {

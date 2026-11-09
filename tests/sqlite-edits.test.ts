@@ -155,7 +155,10 @@ describe("SqliteMessageStore edits", () => {
 			],
 		});
 		await store.saveMessage(original);
-		await store.markMessageDeleted("uuid-alice", "uuid-alice:1000");
+		await store.markMessageDeleted("uuid-alice", "uuid-alice:1000", {
+			id: "uuid-alice",
+			label: "Alice",
+		});
 
 		// Signal has no undelete: a redelivered envelope must not revive the row, its
 		// text or its files.
@@ -171,7 +174,7 @@ describe("SqliteMessageStore edits", () => {
 		const store = open();
 		await store.upsertConversation(conversation());
 		await store.saveMessage(message({ body: "gone" }));
-		await store.markMessageDeleted("uuid-alice", "m1");
+		await store.markMessageDeleted("uuid-alice", "m1", { id: "uuid-alice", label: "Alice" });
 
 		expect(
 			await store.applyEdit(

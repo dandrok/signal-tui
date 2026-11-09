@@ -1,4 +1,5 @@
 import { SELF_LABEL } from "../../../domain/format";
+import { SELF_ACTOR } from "../../../domain/message-author";
 import { SELF_AUTHOR_ID } from "../../../domain/types";
 import { mapReaction } from "../map-reaction";
 import { groupTarget } from "../map-target";
@@ -6,7 +7,7 @@ import type { SentMessage } from "../schemas";
 import { contentOf, expiresAtOf } from "../text";
 import { carriesContent } from "./content";
 import { editEnvelope } from "./edit";
-import { EMPTY, type MappedEnvelope, SELF_ACTOR } from "./types";
+import { EMPTY, type MappedEnvelope } from "./types";
 
 /**
  * One of your own messages, echoed to this device as a sync transcript.
@@ -46,6 +47,8 @@ export function mapSent(sent: SentMessage): MappedEnvelope {
 			deleted: {
 				conversationId: target.id,
 				messageId: `${target.id}:${sent.remoteDelete.timestamp}`,
+				// Our own delete, made on another device.
+				deleter: SELF_ACTOR,
 			},
 		};
 	}

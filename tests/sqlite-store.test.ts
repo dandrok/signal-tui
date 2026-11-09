@@ -208,7 +208,7 @@ describe("SqliteMessageStore", () => {
 		await store.upsertConversation(conversation());
 		await store.saveMessage(message({ body: "oops" }));
 
-		await store.markMessageDeleted("uuid-alice", "m1");
+		await store.markMessageDeleted("uuid-alice", "m1", { id: null, label: "Alice" });
 
 		const [saved] = await store.listMessages("uuid-alice");
 		expect(saved?.isDeleted).toBe(true);
@@ -216,11 +216,24 @@ describe("SqliteMessageStore", () => {
 		expect(await store.search("oops")).toEqual([]);
 	});
 
+	test("a second delete of the same message reports no change", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+		await store.saveMessage(message({ body: "oops" }));
+		const deleter = { id: null, label: "Alice" };
+
+		expect(await store.markMessageDeleted("uuid-alice", "m1", deleter)).toBe(true);
+		// A reconnect replays the delete envelope; the pane must not reload for it.
+		expect(await store.markMessageDeleted("uuid-alice", "m1", deleter)).toBe(false);
+	});
+
 	test("ignores a delete for a message it does not have", async () => {
 		const store = open();
 		await store.upsertConversation(conversation());
 
-		await store.markMessageDeleted("uuid-alice", "missing");
+		expect(
+			await store.markMessageDeleted("uuid-alice", "missing", { id: null, label: "Alice" }),
+		).toBe(false);
 
 		expect(await store.listMessages("uuid-alice")).toEqual([]);
 	});

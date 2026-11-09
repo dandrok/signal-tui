@@ -105,11 +105,26 @@ describe("SqliteMessageStore attachments", () => {
 
 	test("drops them when the message is deleted", async () => {
 		await store.saveMessage(message());
-		await store.markMessageDeleted("uuid-alice", "m1");
+		await store.markMessageDeleted("uuid-alice", "m1", { id: null, label: "Alice" });
 
 		const [stored] = await store.listMessages("uuid-alice");
 
 		expect(stored?.attachments).toEqual([]);
+	});
+
+	test("a delete from somebody else leaves them and the body alone", async () => {
+		await store.saveMessage(message({ body: "the sender's words" }));
+
+		const applied = await store.markMessageDeleted("uuid-alice", "m1", {
+			id: "uuid-mallory",
+			label: "Mallory",
+		});
+
+		const [stored] = await store.listMessages("uuid-alice");
+		expect(applied).toBe(false);
+		expect(stored?.isDeleted).toBe(false);
+		expect(stored?.body).toBe("the sender's words");
+		expect(stored?.attachments).toEqual([attachment()]);
 	});
 
 	test("search results carry their files", async () => {

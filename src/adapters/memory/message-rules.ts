@@ -143,22 +143,31 @@ export function reactIn(
 
 /**
  * A deleted message keeps its row and its quote marker, drops its text and files, and stops
- * pointing at anything on disk — the same three things the SQLite adapter does in one
- * transaction. `dropped` carries the id whose reactions go with it.
+ * pointing at anything on disk — the same three things the SQLite adapter does in one transaction.
+ * Only the author may do it; rows cached before schema v4 have no id and fall back to their label,
+ * as `editIn` does, and a refused delete reports no change and clears no reactions.
  */
 export function deleteIn(
 	messages: readonly Message[],
 	conversationId: ConversationId,
 	messageId: MessageId,
-): { readonly messages: readonly Message[]; readonly dropped: readonly MessageId[] } {
+	deleter: EditAuthor,
+): { readonly messages: readonly Message[]; readonly changed: boolean } {
 	const index = messages.findIndex((message) => message.id === messageId);
 	const existing = messages[index];
-	if (existing === undefined || existing.conversationId !== conversationId) {
-		return { messages, dropped: [] };
+	const owned =
+		existing !== undefined &&
+		existing.conversationId === conversationId &&
+		!existing.isDeleted &&
+		(existing.authorId === undefined
+			? existing.author === deleter.label
+			: existing.authorId === deleter.id);
+	if (!owned) {
+		return { messages, changed: false };
 	}
 	const next = [...messages];
 	next[index] = { ...existing, isDeleted: true, body: "", attachments: [] };
-	return { messages: next, dropped: [messageId] };
+	return { messages: next, changed: true };
 }
 
 export function receiptIn(

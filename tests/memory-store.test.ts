@@ -96,7 +96,7 @@ describe("InMemoryStore", () => {
 			],
 		};
 		await store.saveMessage(original);
-		await store.markMessageDeleted("uuid-x", "m1");
+		await store.markMessageDeleted("uuid-x", "m1", { id: null, label: "Alice" });
 
 		// Signal has no undelete, so the redelivered envelope changes nothing.
 		await store.saveMessage(original);
@@ -105,6 +105,25 @@ describe("InMemoryStore", () => {
 		expect(saved?.isDeleted).toBe(true);
 		expect(saved?.body).toBe("");
 		expect(saved?.attachments).toEqual([]);
+	});
+
+	test("a second delete of the same message reports no change", async () => {
+		const store = new InMemoryStore();
+		await store.upsertConversation(conversation());
+		await store.saveMessage({
+			id: "m1",
+			conversationId: "uuid-x",
+			author: "Alice",
+			body: "oops",
+			sentAt: 1_000,
+			isOutgoing: false,
+			isDeleted: false,
+		});
+		const deleter = { id: null, label: "Alice" };
+
+		expect(await store.markMessageDeleted("uuid-x", "m1", deleter)).toBe(true);
+		// A reconnect replays the delete envelope; the pane must not reload for it.
+		expect(await store.markMessageDeleted("uuid-x", "m1", deleter)).toBe(false);
 	});
 
 	test("an edit from another author does not land", async () => {

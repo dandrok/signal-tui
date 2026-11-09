@@ -67,12 +67,30 @@ describe("InMemoryStore attachments", () => {
 	test("drops them when the message is deleted", async () => {
 		const store = new InMemoryStore();
 		await store.saveMessage(withFiles);
-		await store.markMessageDeleted("c-signal-devs", "m-files");
+		await store.markMessageDeleted("c-signal-devs", "m-files", { id: null, label: "Marta" });
 
 		const stored = (await store.listMessages("c-signal-devs")).find(
 			(message) => message.id === "m-files",
 		);
 
 		expect(stored?.attachments).toEqual([]);
+	});
+
+	test("a delete from somebody else leaves them and the body alone", async () => {
+		const store = new InMemoryStore();
+		await store.saveMessage({ ...withFiles, body: "the sender's words" });
+
+		const applied = await store.markMessageDeleted("c-signal-devs", "m-files", {
+			id: "uuid-mallory",
+			label: "Mallory",
+		});
+
+		const stored = (await store.listMessages("c-signal-devs")).find(
+			(message) => message.id === "m-files",
+		);
+		expect(applied).toBe(false);
+		expect(stored?.isDeleted).toBe(false);
+		expect(stored?.body).toBe("the sender's words");
+		expect(stored?.attachments).toEqual(withFiles.attachments);
 	});
 });

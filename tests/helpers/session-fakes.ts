@@ -180,8 +180,13 @@ export class RecordingStore implements MessageStore {
 		return true;
 	}
 
-	async markMessageDeleted(_conversationId: string, messageId: string): Promise<void> {
-		this.#record(`deleted:${messageId}`);
+	async markMessageDeleted(
+		_conversationId: string,
+		messageId: string,
+		deleter: EditAuthor,
+	): Promise<boolean> {
+		this.#record(`deleted:${messageId}:${deleter.id ?? deleter.label}`);
+		return true;
 	}
 
 	readonly hidden: string[] = [];

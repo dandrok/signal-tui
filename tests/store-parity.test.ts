@@ -22,6 +22,8 @@ import type { MessageStore } from "../src/ports/store";
 
 const DIRECT: ConversationId = "+48123456789";
 const AMBER = { id: "uuid-amber", label: "Amber" };
+/** A group member who is not the author of the rows the steps write. */
+const BO = { id: "uuid-bo", label: "Bo" };
 const NOW = 10_000;
 
 const adapters = [
@@ -278,7 +280,18 @@ const steps: readonly Step[] = [
 				{ emoji: "👍", author: "Amber", authorId: "uuid-amber" },
 				false,
 			);
-			await store.markMessageDeleted(DIRECT, `${DIRECT}:4000`);
+			await store.markMessageDeleted(DIRECT, `${DIRECT}:4000`, AMBER);
+		},
+	],
+	[
+		"a delete from somebody else leaves the message, its text and its files alone",
+		async (store) => {
+			await store.saveMessage(
+				incoming({ id: `${DIRECT}:5000`, sentAt: 5000, body: "Amber's words" }),
+			);
+			const applied = await store.markMessageDeleted(DIRECT, `${DIRECT}:5000`, BO);
+			const row = (await store.listMessages(DIRECT)).find((entry) => entry.sentAt === 5000);
+			return { applied, deleted: row?.isDeleted, body: row?.body };
 		},
 	],
 	[
