@@ -24,4 +24,4 @@ export {
 	separatorFor,
 	separatorRows,
 } from "./separator";
-export { type DisplayBody, textForDisplay, wrapToWidth } from "./text";
+export { type DisplayBody, textForDisplay, wrappedRows, wrapToWidth } from "./text";

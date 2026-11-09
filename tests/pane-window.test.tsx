@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { Clock } from "../src/domain/format";
-import { attachmentsForDisplay, bodyForDisplay, messageRowCount } from "../src/domain/rows";
+import {
+	attachmentsForDisplay,
+	bodyForDisplay,
+	messageRowCount,
+	wrapToWidth,
+} from "../src/domain/rows";
 import type { Conversation, Message } from "../src/domain/types";
 import { ConversationList, listWindowStart } from "../src/ui/ConversationList";
 import { visibleWindow } from "../src/ui/message-pane";
@@ -206,6 +211,32 @@ describe("bodyForDisplay", () => {
 		expect(shown.text.split("\n")).toHaveLength(3);
 		expect(shown.text.endsWith("…")).toBe(true);
 		expect(shown.truncated).toBe(true);
+	});
+
+	test("a one-row budget keeps the marker that says it was cut", () => {
+		// A reply's quote is exactly one row, and a body can be handed one row too. The cut
+		// used to lose its marker there, so a quote ending mid-word read as though it ran on
+		// into the reply's own first line — the row directly below it.
+		const shown = bodyForDisplay(message(0, { body: "x".repeat(200) }), 1, 20);
+
+		expect(shown.rows).toBe(1);
+		expect(shown.truncated).toBe(true);
+		expect(shown.text.endsWith("…")).toBe(true);
+		// Still one row at that width: the marker costs a cell of the text, it does not
+		// become the twenty-first cell and wrap.
+		expect(wrapToWidth(shown.text, 20)).toHaveLength(1);
+	});
+
+	test("a one-row cut counts a wide character as the cells it takes", () => {
+		// `x` then double-width characters: the first wrapped row is twenty-one cells wide but
+		// only eleven code units long, so a cut measured in code units keeps the whole row and
+		// then adds the marker — twenty-two cells, one row more than the window budgeted for.
+		const shown = bodyForDisplay(message(0, { body: `x${"日".repeat(20)}` }), 1, 21);
+
+		expect(shown.rows).toBe(1);
+		expect(shown.truncated).toBe(true);
+		expect(shown.text.endsWith("…")).toBe(true);
+		expect(wrapToWidth(shown.text, 21)).toHaveLength(1);
 	});
 
 	test("counts newlines as rows, not as characters", () => {

@@ -37,6 +37,24 @@ export interface DisplayBody {
 }
 
 /**
+ * A line with the last cell spent on the marker that says it was cut.
+ *
+ * Wrapping at `width - 1` rather than slicing the string: the answer has to be one row
+ * printed into `width` cells, and a CJK character or an emoji costs two of them, so a
+ * `slice` can hand back a line that wraps behind the caller's back — which is the one
+ * thing a row-measured renderer must never do.
+ */
+function ellipsised(line: string, width: number): string {
+	if (width <= 1) {
+		return "…";
+	}
+	// `wordWrap: false` because this is a cut, not a layout: a word that does not fit the
+	// remaining cells has to lose its tail here, not move whole to a line that is discarded.
+	const [head] = wrapAnsi(line, width - 1, { ...WRAP, wordWrap: false }).split("\n");
+	return `${head ?? ""}…`;
+}
+
+/**
  * Row-bounded rendering of any single text block: a body, a header, a caption.
  *
  * Counting characters is not enough: a body of nothing but newlines fits any character
@@ -44,9 +62,12 @@ export interface DisplayBody {
  * text is bounded before wrapping — only the first `rows * width` characters can fill
  * `rows` rows at one cell each — so the work stays proportional to what is drawn.
  *
- * The cut is shown rather than hidden, and the marker takes the last row of the budget; a
- * single-row budget has no room for it. The rest of a very long message is not reachable
- * until the pane can scroll by line instead of by message.
+ * The cut is shown rather than hidden, and the marker takes the last cell of the last row
+ * it is given — including a single-row budget, where it used to be dropped: a reply's
+ * quote is exactly one row, and a quote cut mid-word with nothing to say so reads as
+ * though it ran on into the reply's own first line, which is the row directly below it.
+ * The rest of a very long message is not reachable until the pane can scroll by line
+ * instead of by message.
  */
 export function textForDisplay(text: string, maxRows: number, innerWidth: number): DisplayBody {
 	const width = Math.max(1, innerWidth);
@@ -60,6 +81,7 @@ export function textForDisplay(text: string, maxRows: number, innerWidth: number
 	if (bounded.length === full.length && lines.length <= rows) {
 		return { text: lines.join("\n"), truncated: false, rows: lines.length };
 	}
-	const kept = rows === 1 ? [lines[0] ?? "…"] : [...lines.slice(0, rows - 1), "…"];
+	const kept =
+		rows === 1 ? [ellipsised(lines[0] ?? "", width)] : [...lines.slice(0, rows - 1), "…"];
 	return { text: kept.join("\n"), truncated: true, rows: kept.length };
 }
