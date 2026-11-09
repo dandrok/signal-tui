@@ -28,7 +28,12 @@ Then, on npmjs.com → `signal-tui` → **Settings → Trusted Publisher**:
 
 The environment field matters: the workflow publishes inside the `npm-publish`
 environment, and binding it here is what stops an edited branch workflow from
-publishing under the same identity. In GitHub → Settings → **Environments**,
+publishing under the same identity.
+
+The workflow filename is the **entry point**, not whichever file runs `npm publish`:
+npm matches the caller's name in the OIDC claim, which is why the bot and the publish
+job live in the same `release.yml`. Splitting the publish into a reusable workflow would
+make npm check the caller and refuse the publish (`ENEEDAUTH`). In GitHub → Settings → **Environments**,
 create `npm-publish` and add a deployment branch rule allowing only `main`.
 
 Finally delete the `NPM_TOKEN` repository secret if one was created — from here on
@@ -49,33 +54,64 @@ Two rules that keep this honest:
 
 - **Nothing breaks inside `0.x`.** Strict semver allows a breaking change in a `0.x` minor; we are
   stricter than the spec here, so the only way to break a user is to say `1.0.0` — deliberately.
+  The release bot is configured to match: a `!` or `BREAKING CHANGE:` commit bumps the minor while
+  the major is 0. To spend `1.0.0`, push an empty commit to `main` with `Release-As: 1.0.0` in its
+  body — the bot reads that footer and opens the PR for exactly that number. Editing the version
+  in the release PR does not survive: the bot rewrites its own branch on the next push.
 - **`1.0.0` is a promise, not a feature count.** It means flags, keys and the cache schema are
   stable, and breaking them costs a `2.0.0`. Not "we ran out of features".
 
 ## Every release after that
 
-1. Bump `version` in `package.json` (the binary reads it, so they cannot drift).
-2. Open a PR, merge it.
-3. Actions → **release** → *Run workflow* with `dry_run` set to **true** — install, `bun run verify`
-   and `bun pm pack --dry-run`, without publishing. It proves the environment and OIDC still
-   work *before* the version number is spent, and a number cannot be reused.
-4. Run it again with `dry_run: false`.
+Nobody types the version. `release.yml` reads the conventional commits on `main` and
+keeps one PR open holding the next number in `package.json` plus a first draft of the CHANGELOG
+section.
 
-The workflow runs `bun run verify`, checks the packed contents, then
-`npm publish --provenance`. Provenance links the published tarball to this commit
-and workflow run.
+1. **A release PR appears** once a `feat` or `fix` has landed since the last tag. Commits that
+   ship nothing — `chore`, `docs`, `test`, `ci` — never spend a number, so a docs pass opens no PR.
+   It carries no CI checks, because a PR opened with the repository's `GITHUB_TOKEN` does not
+   start workflows; the gate that matters runs in the publish job, on the tag, before `npm publish`.
+2. **Read the draft.** The section is generated from commit subjects, one line each: a draft, not
+   the release note this project writes. Rewrite it in the PR — the prose above each `## [x.y.z]`
+   header says more than the bullets do, and the PR is where that happens.
+3. **Merge it.** That is the release decision: the bot tags the merge commit `vX.Y.Z`, opens the
+   GitHub release, and publishes in the same run — not on the release event, because a release
+   made with `GITHUB_TOKEN` cannot start a workflow of its own.
+4. **The workflow publishes**: `bun run verify`, `bun pm pack --dry-run`, then
+   `npm publish --provenance`. It checks out the tag rather than `main`, so the tarball is the
+   tagged commit and `npm view signal-tui@<version> gitHead` equals `v<version>` — the tag cannot
+   drift from what was published, which is what tagging by hand after the fact used to risk.
 
-5. **Tag the published commit, not `main`.** By the time you tag, `main` may have moved; the
-   authority is `gitHead` on the published version:
+### When a release fails after the merge
 
-   ```sh
-   npm view signal-tui@<version> gitHead     # the commit npm built the tarball from
-   git tag -a v<version> <that-sha> -m "<version>"
-   git push origin v<version>
-   ```
+The merge has already moved `.release-please-manifest.json` to the new number, so nothing about
+deleting a tag puts that number back in play — the next proposal will be the following one.
 
-   A tag on a later commit claims something npm did not publish, and the release notes and
-   provenance both hang off this tag.
+| What is wrong | What to do |
+|---|---|
+| the tag is right, `npm publish` never ran | re-run the failed job: Actions → the failed **release** run → *Re-run failed jobs*. It runs again on the same tag, and needs nothing else. |
+| the bot made the tag and the release, then the run died | there is no failed publish job to re-run, so copy the release notes somewhere, delete the GitHub release **keeping its tag**, and create it again on that same tag (Releases → *Draft a new release* → pick `vX.Y.Z` from the list, paste the notes). The new release fires `release: published` and the publish job runs on the tag. This path needs the `npm-publish` environment to allow `v*` tags — see *Two one-time clicks*. Then, once the release is correct, swap the release PR's label from `autorelease: pending` to `autorelease: tagged`: the bot tracks an in-flight release by that label, and one left pending holds up the next proposal. |
+| the tagged commit is wrong | delete the release and the tag (`git push origin :vX.Y.Z`). The number in the manifest is spent: bump it back in a PR of its own, or accept the next number, and let the bot propose again. |
+| `npm publish` succeeded and the code is wrong | the table under *If a release is wrong* below — the number is spent for good. |
+
+### Two one-time clicks
+
+- GitHub → Settings → **Actions** → *General* → **Workflow permissions**: tick **Allow GitHub
+  Actions to create and approve pull requests**. Without it the bot cannot open its PR and the
+  run fails with `Resource not accessible by integration`, which reads like a broken workflow
+  rather than a missing setting.
+- A **tag** rule matching `v*` on the `npm-publish` environment is needed only for the by-hand
+  path (a release created in the UI publishes on a tag ref); the normal path calls the workflow
+  from `main` and is judged as a branch deployment. Add the rule if a manual release stops on the
+  environment.
+
+### Proving the publish path without spending a number
+
+Actions → **release** → *Run workflow* on `main` with `dry_run: true`: install, `bun run verify`,
+`bun pm pack --dry-run`, and stop before `npm publish`. It proves the dependency install, the
+gate, the tarball contents, and that the environment admits a run from `main`. It does **not**
+exercise a tag rule, and it does not exercise trusted publishing — no `npm publish` happens, so
+OIDC is never asked for a credential. Those two are proved by the first real release.
 
 ## If a release is wrong
 
