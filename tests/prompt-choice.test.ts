@@ -27,8 +27,8 @@ const prompt = (contacts: readonly Contact[]): PromptState => ({
 	contacts,
 });
 
-const matches = (name: string): NewChatMatches => ({
-	rows: [{ kind: "contact", id: "uuid-marta", name, detail: "+481****2333" }],
+const matches = (name: string, detail = "+481****2333"): NewChatMatches => ({
+	rows: [{ kind: "contact", id: "uuid-marta", name, detail }],
 	picked: 0,
 });
 
@@ -49,5 +49,17 @@ describe("the new-chat choice line", () => {
 
 		expect(choice.destination).not.toContain("\u001b");
 		expect(choice.destination).toContain("Marta");
+	});
+
+	test("strips one out of the detail too", () => {
+		// The detail is the same remote text on the same row — a reverse-video sequence here
+		// would invert the line and hide what the picker is pointing at.
+		const choice = choiceLine(
+			prompt([CONTACT]),
+			matches("Marta", "\u001b[7m+48600111222\u001b[0m"),
+		);
+
+		expect(choice.destination).not.toContain("\u001b");
+		expect(choice.destination).toContain("+48600111222");
 	});
 });
