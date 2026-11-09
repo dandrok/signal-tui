@@ -11,13 +11,7 @@ import type {
 import type { MessageStore } from "../../ports/store";
 import { addUnread, clearUnread, readExpiresInSeconds, upsertConversation } from "./conversations";
 import { hydrateMessages } from "./hydrate";
-import {
-	applyDeleteRow,
-	applyEditRow,
-	applyReceiptRows,
-	hideMessageRow,
-	purgeExpiredRows,
-} from "./message-rules";
+import { applyDeleteRow, applyEditRow, hideMessageRow, purgeExpiredRows } from "./message-rules";
 import { restrictCachePermissions } from "./private-cache";
 import { applyReactionRow } from "./reactions";
 import {
@@ -27,6 +21,7 @@ import {
 	readMessagesBefore,
 	searchMessages,
 } from "./read-messages";
+import { applyReceiptRows } from "./receipts";
 import { toConversation, toMessage } from "./rows";
 import { saveMessageRow } from "./save-message";
 import { migrate, readSchemaVersion } from "./schema";

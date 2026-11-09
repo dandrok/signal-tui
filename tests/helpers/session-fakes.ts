@@ -8,6 +8,7 @@ import type {
 	Reaction,
 	ReceiptState,
 } from "../../src/domain/types";
+import { SELF_AUTHOR_ID } from "../../src/domain/types";
 import type { BackendEvent, ReplyTarget, SignalBackend } from "../../src/ports/backend";
 import type { MessageStore } from "../../src/ports/store";
 
@@ -123,8 +124,10 @@ export class RecordingStore implements MessageStore {
 		const index = existing.findIndex(
 			(entry) =>
 				entry.sentAt === targetSentAt &&
+				// Identity only, as the real stores do it: a label is peer-controlled, and a row
+				// that kept no id can only be ours.
 				(entry.authorId === undefined
-					? entry.author === editor.label
+					? entry.isOutgoing && editor.id === SELF_AUTHOR_ID
 					: entry.authorId === editor.id),
 		);
 		const found = existing[index];

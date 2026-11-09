@@ -26,6 +26,7 @@ const message = (overrides: Partial<Message> = {}): Message => ({
 	id: "m1",
 	conversationId: "uuid-alice",
 	author: "Alice",
+	authorId: "uuid-alice",
 	body: "hello",
 	sentAt: 1_000,
 	isOutgoing: false,
@@ -72,6 +73,7 @@ describe("SqliteMessageStore", () => {
 			id: "m1",
 			conversationId: "uuid-alice",
 			author: "Alice",
+			authorId: "uuid-alice",
 			body: "pushed the fix",
 			sentAt: 1_000,
 			// Reads always carry the field, so callers never branch on its presence.
@@ -208,7 +210,7 @@ describe("SqliteMessageStore", () => {
 		await store.upsertConversation(conversation());
 		await store.saveMessage(message({ body: "oops" }));
 
-		await store.markMessageDeleted("uuid-alice", "m1", { id: null, label: "Alice" });
+		await store.markMessageDeleted("uuid-alice", "m1", { id: "uuid-alice", label: "Alice" });
 
 		const [saved] = await store.listMessages("uuid-alice");
 		expect(saved?.isDeleted).toBe(true);
@@ -220,11 +222,39 @@ describe("SqliteMessageStore", () => {
 		const store = open();
 		await store.upsertConversation(conversation());
 		await store.saveMessage(message({ body: "oops" }));
-		const deleter = { id: null, label: "Alice" };
+		const deleter = { id: "uuid-alice", label: "Alice" };
 
 		expect(await store.markMessageDeleted("uuid-alice", "m1", deleter)).toBe(true);
 		// A reconnect replays the delete envelope; the pane must not reload for it.
 		expect(await store.markMessageDeleted("uuid-alice", "m1", deleter)).toBe(false);
+	});
+
+	test("a peer cannot delete a row that kept no author id, and we can", async () => {
+		const store = open();
+		await store.upsertConversation(conversation());
+		// A row cached before schema v4: no author id, only a label any peer can copy.
+		const { authorId: _dropped, ...legacy } = message({ id: "m1", body: "older row" });
+		await store.saveMessage(legacy);
+		// Our own message from the same era: outgoing, which no peer can produce.
+		await store.saveMessage({
+			id: "m2",
+			conversationId: "uuid-alice",
+			author: "You",
+			body: "sent long ago",
+			sentAt: 2_000,
+			isOutgoing: true,
+			isDeleted: false,
+		});
+
+		expect(
+			await store.markMessageDeleted("uuid-alice", "m1", { id: "uuid-mallory", label: "Alice" }),
+		).toBe(false);
+		const [untouched] = await store.listMessages("uuid-alice");
+		expect(untouched?.body).toBe("older row");
+
+		expect(await store.markMessageDeleted("uuid-alice", "m2", { id: "self", label: "You" })).toBe(
+			true,
+		);
 	});
 
 	test("ignores a delete for a message it does not have", async () => {

@@ -9,7 +9,7 @@ import type {
 } from "../../domain/types";
 import type { MessageStore } from "../../ports/store";
 import { addUnread, clearUnread, mergeConversation, readExpiresInSeconds } from "./conversations";
-import { deleteIn, editIn, purgeIn, reactIn, receiptIn, saveInto } from "./message-rules";
+import { deleteIn, editIn, purgeIn, reactIn, saveInto } from "./message-rules";
 import {
 	DEFAULT_LIMIT,
 	readAllMessages,
@@ -18,6 +18,7 @@ import {
 	readMessagesBefore,
 	searchMessages,
 } from "./read";
+import { receiptIn } from "./receipts";
 import { type InMemoryStoreOptions, initialContent } from "./seed";
 
 /**

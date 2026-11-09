@@ -26,6 +26,7 @@ const message = (overrides: Partial<Message> = {}): Message => ({
 	id: "m1",
 	conversationId: "uuid-alice",
 	author: "Alice",
+	authorId: "uuid-alice",
 	body: "",
 	sentAt: 1_000,
 	isOutgoing: false,
@@ -105,7 +106,7 @@ describe("SqliteMessageStore attachments", () => {
 
 	test("drops them when the message is deleted", async () => {
 		await store.saveMessage(message());
-		await store.markMessageDeleted("uuid-alice", "m1", { id: null, label: "Alice" });
+		await store.markMessageDeleted("uuid-alice", "m1", { id: "uuid-alice", label: "Alice" });
 
 		const [stored] = await store.listMessages("uuid-alice");
 

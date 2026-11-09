@@ -12,8 +12,8 @@ describe("createSession edits", () => {
 		const session = createSession({ store, backend });
 		// Two messages in the same conversation: only the one the edit targets changes.
 		store.messages.set(DIRECT_ID, [
-			{ ...message(), id: "m1", sentAt: 100, body: "typo here" },
-			{ ...message(), id: "m2", sentAt: 200, body: "untouched" },
+			{ ...message(), id: "m1", sentAt: 100, authorId: EDITOR.id, body: "typo here" },
+			{ ...message(), id: "m2", sentAt: 200, authorId: EDITOR.id, body: "untouched" },
 		]);
 
 		let changes = 0;

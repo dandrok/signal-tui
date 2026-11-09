@@ -6,6 +6,7 @@ const withFiles: Message = {
 	id: "m-files",
 	conversationId: "c-signal-devs",
 	author: "Marta",
+	authorId: "uuid-marta",
 	body: "",
 	sentAt: 9_999,
 	isOutgoing: false,
@@ -67,7 +68,10 @@ describe("InMemoryStore attachments", () => {
 	test("drops them when the message is deleted", async () => {
 		const store = new InMemoryStore();
 		await store.saveMessage(withFiles);
-		await store.markMessageDeleted("c-signal-devs", "m-files", { id: null, label: "Marta" });
+		await store.markMessageDeleted("c-signal-devs", "m-files", {
+			id: "uuid-marta",
+			label: "Marta",
+		});
 
 		const stored = (await store.listMessages("c-signal-devs")).find(
 			(message) => message.id === "m-files",
