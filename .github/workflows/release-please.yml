@@ -32,7 +32,11 @@ jobs:
       # Opens or updates the release PR; on the run after that PR merges, it tags and
       # releases. Nothing is published from here — publishing needs OIDC and the
       # `npm-publish` environment, which `release.yml` owns.
-      - uses: googleapis/release-please-action@v5
+      #
+      # Pinned to the v5.0.0 commit rather than the `v5` tag: this is the one action in
+      # the repo that runs with `contents: write` and `pull-requests: write`, so a
+      # re-pointed tag would be able to write to the repository.
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
