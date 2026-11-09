@@ -42,8 +42,20 @@ jobs:
           # The tag the release names, so what is verified and packed is what was
           # released — not whatever `main` happens to be when the job starts.
           ref: ${{ github.event.release.tag_name || github.ref }}
+          # The ancestry check below needs the history the tag was cut from.
+          fetch-depth: 0
           # Auth to npm comes from OIDC, never from Git credentials.
           persist-credentials: false
+
+      - name: Refuse to publish a commit that is not on main
+        # OIDC publishes whatever the job checked out, and a tag can be made to point at
+        # any commit — so the ref alone is not proof that the code was reviewed on main.
+        # A dispatch from main used to give this for free; this is what keeps it true now
+        # that the trigger is a release event.
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$(git rev-parse HEAD)" FETCH_HEAD
+          echo "publishing $(git rev-parse --short HEAD), an ancestor of origin/main"
 
       - uses: oven-sh/setup-bun@v2
         with:
