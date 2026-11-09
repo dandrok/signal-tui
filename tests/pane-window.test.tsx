@@ -227,6 +227,18 @@ describe("bodyForDisplay", () => {
 		expect(wrapToWidth(shown.text, 20)).toHaveLength(1);
 	});
 
+	test("a one-row cut counts a wide character as the cells it takes", () => {
+		// `x` then double-width characters: the first wrapped row is twenty-one cells wide but
+		// only eleven code units long, so a cut measured in code units keeps the whole row and
+		// then adds the marker — twenty-two cells, one row more than the window budgeted for.
+		const shown = bodyForDisplay(message(0, { body: `x${"日".repeat(20)}` }), 1, 21);
+
+		expect(shown.rows).toBe(1);
+		expect(shown.truncated).toBe(true);
+		expect(shown.text.endsWith("…")).toBe(true);
+		expect(wrapToWidth(shown.text, 21)).toHaveLength(1);
+	});
+
 	test("counts newlines as rows, not as characters", () => {
 		// Forty characters of "x\n" is well under any character budget, but it draws
 		// twenty rows: only a row budget keeps it inside a four-row window.
