@@ -1,0 +1,38 @@
+name: release-please
+
+# The version comes from the commits, not from a person typing a number: `feat` bumps
+# the minor, `fix` the patch, and a `feat!` bumps the minor too while this is 0.x —
+# 1.0.0 stays a deliberate human decision (see RELEASING.md).
+#
+# The bot keeps one PR open against main holding the bump and a first draft of the
+# CHANGELOG section, written from the commit subjects. Merging that PR is the release
+# decision: it tags the merge commit `vX.Y.Z` and publishes the GitHub release, which is
+# the event `release.yml` listens for — so the tarball npm builds is the tagged commit,
+# and the tag can no longer drift from the `gitHead` npm records.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  # Unlike CI this is not cancelled by the next push: a run can be the one that tags a
+  # commit, and stopping halfway is not a state worth landing in — the next run would
+  # have to read the tag it may have half-made.
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-24.04
+    steps:
+      # Opens or updates the release PR; on the run after that PR merges, it tags and
+      # releases. Nothing is published from here — publishing needs OIDC and the
+      # `npm-publish` environment, which `release.yml` owns.
+      - uses: googleapis/release-please-action@v5
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

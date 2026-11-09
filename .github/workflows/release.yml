@@ -1,7 +1,19 @@
 name: release
 
-# Manual only: publishing is a decision, not a side effect of merging.
+# Two ways in, one publish path.
+#
+# `release: published` is the normal one: `release-please.yml` merged its release PR,
+# tagged the commit it published and opened the GitHub release, and the tarball npm
+# builds here is therefore the tagged commit — the tag and npm's `gitHead` cannot
+# disagree, which is what a hand-made tag after the fact used to risk.
+#
+# `workflow_dispatch` stays for the dry run: install, verify and pack without
+# publishing, so the environment and the OIDC binding can be proved before a number
+# is spent. It also covers the one published version that predates trusted
+# publishing, and any recovery where the release event never fired.
 on:
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -11,11 +23,11 @@ on:
 
 jobs:
   publish:
-    # `workflow_dispatch` lets anyone with write access pick a branch, so the job
-    # itself refuses anything that is not main. The environment adds the second
-    # lock: deployment rules can restrict it to main, and the npm trusted
-    # publisher is bound to this environment name.
-    if: github.ref == 'refs/heads/main'
+    # `workflow_dispatch` lets anyone with write access pick a branch, so a dispatch
+    # is only honoured from main; a release event is already a tag on a commit that
+    # came through main. The environment adds the second lock: deployment rules can
+    # restrict it, and the npm trusted publisher is bound to this environment name.
+    if: github.event_name == 'release' || github.ref == 'refs/heads/main'
     environment: npm-publish
     # Pinned rather than `ubuntu-latest`: that label moves to Ubuntu 26.04 and the
     # publish path should not change underneath a release. Must stay GitHub-hosted
@@ -27,6 +39,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          # The tag the release names, so what is verified and packed is what was
+          # released — not whatever `main` happens to be when the job starts.
+          ref: ${{ github.event.release.tag_name || github.ref }}
           # Auth to npm comes from OIDC, never from Git credentials.
           persist-credentials: false
 
@@ -58,7 +73,9 @@ jobs:
           npm --version
 
       - name: Publish
-        if: inputs.dry_run == false
+        # A release event publishes unconditionally — the merged release PR was the
+        # decision. A dispatch publishes only when the dry run was turned off.
+        if: github.event_name == 'release' || inputs.dry_run == false
         run: npm publish --access public --provenance
         env:
           # Deliberately allowed to be empty: npm prefers OIDC when the workflow is a
