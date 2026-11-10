@@ -9,15 +9,15 @@ const PAGES = ["README.md", "SETUP.md"];
 
 /**
  * Report every line that states a version as a status, in any shape prose wears it:
- * `Status: 1.2.3`, `Status: **1.2.3**`, `**Status:** 1.2.3`. Emphasis between the label and
- * the number is allowed for, because bolding the label is the form that slips past a
- * whitespace-only gap.
+ * `Status: 1.2.3`, `Status: **1.2.3**`, `**Status:** 1.2.3`, `Status: v1.2.3`. Emphasis between
+ * the label and the number is allowed for, because bolding the label is the form that slips past a
+ * whitespace-only gap; the `v` is the shape the tag itself wears, which is how a release is named.
  */
 function statusVersionsIn(text: string): string[] {
 	return text
 		.split("\n")
 		.map((line, index) => ({ line, number: index + 1 }))
-		.filter(({ line }) => /status:\s*(?:[*_~`]{1,3}\s*)*\d+\.\d+\.\d+/i.test(line))
+		.filter(({ line }) => /status:\s*(?:[*_~`]{1,3}\s*)*v?\d+\.\d+\.\d+/i.test(line))
 		.map(({ line, number }) => `${number}: ${line.trim()}`);
 }
 
@@ -37,6 +37,8 @@ test("the ban sees through the emphasis a status label can wear", () => {
 		"Status: **0.8.0**",
 		"**Status:** 0.8.0",
 		"**Status:** `0.8.0` — a full-screen client",
+		"Status: v0.8.0",
+		"**Status:** v0.8.0 — the tag's own shape",
 	];
 	for (const line of banned) expect(statusVersionsIn(line)).toHaveLength(1);
 
